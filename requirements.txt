@@ -1,0 +1,12 @@
+asgiref @ file:///Users/builder/cbouss/perseverance-python-buildout/croot/asgiref_1728596011874/work
+Django @ file:///home/conda/feedstock_root/build_artifacts/django_1733376776721/work
+django-cors-headers @ file:///home/conda/feedstock_root/build_artifacts/django-cors-headers_1730245487567/work
+django-solo @ file:///home/conda/feedstock_root/build_artifacts/django-solo_1719891472254/work
+django-tinymce @ file:///home/conda/feedstock_root/build_artifacts/django-tinymce_1718969080981/work
+django-unfold==0.43.0
+djangorestframework @ file:///home/conda/feedstock_root/build_artifacts/djangorestframework_1733236662144/work
+pillow @ file:///Users/runner/miniforge3/conda-bld/pillow_1729065667685/work
+setuptools==75.1.0
+sqlparse @ file:///Users/builder/cbouss/perseverance-python-buildout/croot/sqlparse_1728600862264/work
+typing_extensions @ file:///Users/builder/cbouss/perseverance-python-buildout/croot/typing_extensions_1728587346793/work
+wheel==0.44.0
