@@ -31,10 +31,20 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         order_products_data = validated_data.pop('order_products')
+        total_amount = 0  # Initialize total_amount
         order = Order.objects.create(**validated_data)
+
         for order_product_data in order_products_data:
+            # Ensure get_total_price is called correctly
+            product = OrderProduct(**order_product_data)  # Create an instance
+            total_amount += product.get_total_price()  # Call the method
+
             OrderProduct.objects.create(order=order, **order_product_data)
+
+        order.total_amount = total_amount  # Set the total_amount
+        order.save()  # Save the order with the updated total_amount
         return order
+
 
     def update(self, instance, validated_data):
         order_products_data = validated_data.pop('order_products', None)
