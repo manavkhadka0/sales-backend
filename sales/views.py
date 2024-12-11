@@ -40,7 +40,22 @@ class OrderListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         salesperson = self.request.user
         distributor = salesperson.distributor
-        serializer.save(sales_person=salesperson, distributor=distributor)
+        order = serializer.save(sales_person=salesperson, distributor=distributor)
+
+        # Reduce the quantity in the Inventory model
+        order_products_data = self.request.data.get('order_products', [])
+        for order_product_data in order_products_data:
+            product_id = order_product_data['product_id']
+            quantity = order_product_data['quantity']
+
+            # Get the corresponding Inventory item
+            try:
+                inventory_item = Inventory.objects.get(distributor=distributor, product_id=product_id)
+                inventory_item.quantity -= quantity
+                inventory_item.save()  # Save the updated inventory item
+            except Inventory.DoesNotExist:
+                # Handle the case where the inventory item does not exist
+                raise Exception(f"Inventory item for product ID {product_id} not found for distributor {distributor.id}.")
 
 class OrderUpdateView(generics.UpdateAPIView):
     queryset = Order.objects.all()
