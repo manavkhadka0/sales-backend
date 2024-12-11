@@ -1,8 +1,8 @@
 from django.shortcuts import render
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-from .models import Inventory, Order,Commission
-from .serializers import InventorySerializer, OrderSerializer
+from .models import Inventory, Order,Commission,Product
+from .serializers import InventorySerializer, OrderSerializer,ProductSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
@@ -103,3 +103,12 @@ class CommissionPaymentView(generics.UpdateAPIView):
             return Response({"detail": "Commission not found for this salesperson."}, status=status.HTTP_404_NOT_FOUND)
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        if order.salesperson != request.user:
+            return Response({"detail": "You do not have permission to update this order."}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+    
+class ProductListView(generics.ListAPIView):
+    serializer_class = ProductSerializer
+    queryset = Product.objects.all()
+
+            

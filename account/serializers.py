@@ -3,9 +3,17 @@ from .models import CustomUser,Distributor
 
 
 class CustomUserSerializer(serializers.ModelSerializer):
+    distributor = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomUser
-        fields = '__all__'
+        fields = ('id', 'username', 'first_name', 'last_name', 'email', 
+                  'phone_number', 'address', 'role', 'is_active', 'distributor')
+
+    def get_distributor(self, obj):
+        if obj.distributor:
+            return obj.distributor.name
+        return None
 
 class DistributorSerializer(serializers.ModelSerializer):
     class Meta:

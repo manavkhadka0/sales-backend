@@ -56,3 +56,9 @@ class OrderSerializer(serializers.ModelSerializer):
                 OrderProduct.objects.create(order=instance, **order_product_data)
 
         return instance
+    
+
+class ProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ['id', 'name', 'price', 'description']
