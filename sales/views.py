@@ -79,8 +79,8 @@ class OrderUpdateView(generics.UpdateAPIView):
                     distributor=order.distributor,
                     sales_person=order.sales_person
                 )
-                print(f"Commission Amount: {distributor_commission.amount}")
-                order.commission_amount = distributor_commission.amount
+                print(f"Commission Rate: {distributor_commission.rate}")  # Changed from amount to rate
+                order.commission_amount = (distributor_commission.rate / 100) * order.total_amount  # Calculate commission based on rate
                 order.save()  # Save the order with the updated commission amount
 
                 # Update the salesperson's total commission amount
@@ -88,9 +88,9 @@ class OrderUpdateView(generics.UpdateAPIView):
                 salesperson.commission_amount += order.commission_amount
                 salesperson.save()  # Save the updated salesperson
 
-                # Optionally, create a commission record
-                commission = Commission(sales_person=order.sales_person, distributor=order.distributor, amount=order.commission_amount)
-                commission.save()  # Save the commission record
+                # # Optionally, create a commission record
+                # commission = Commission(sales_person=order.sales_person, distributor=order.distributor, rate=order.commission_amount)
+                # commission.save()  # Save the commission record
             except Commission.DoesNotExist:
                 return Response({"detail": "Commission not set for this salesperson."}, status=status.HTTP_400_BAD_REQUEST)
         

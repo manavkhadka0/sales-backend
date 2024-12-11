@@ -85,12 +85,12 @@ class Order(models.Model):
 class Commission(models.Model):
     sales_person = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE, related_name='commissions')
     distributor = models.ForeignKey('account.Distributor', on_delete=models.CASCADE, related_name='commissions')
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    rate = models.DecimalField(max_digits=10, decimal_places=2)
     paid=models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.sales_person} - {self.distributor} - ₹{self.amount}"
+        return f"{self.sales_person} - {self.distributor} - ₹{self.rate}"
     
 
