@@ -63,6 +63,7 @@ class Order(models.Model):
     payment_method = models.CharField(max_length=255, choices=PAYMENT_CHOICES)
     payment_screenshot = models.ImageField(upload_to='payment_screenshots/', blank=True, null=True)
     order_status = models.CharField(max_length=255, choices=ORDER_STATUS_CHOICES, default='Pending')
+    commission_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -80,4 +81,16 @@ class Order(models.Model):
             self.total_amount = sum(op.get_total_price() for op in self.order_products.all()) + self.delivery_charge
         if is_new:
             super().save(update_fields=['total_amount'])
+
+class Commission(models.Model):
+    sales_person = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE, related_name='commissions')
+    distributor = models.ForeignKey('account.Distributor', on_delete=models.CASCADE, related_name='commissions')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    paid=models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.sales_person} - {self.distributor} - ₹{self.amount}"
+    
 
