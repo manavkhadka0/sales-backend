@@ -17,10 +17,25 @@ class InventoryListView(generics.ListAPIView):
         user = self.request.user
         return Inventory.objects.filter(distributor=user.distributor)
 
-class OrderCreateView(generics.CreateAPIView):
+class OrderListCreateView(generics.ListCreateAPIView):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user  
+        if user.role == 'Distributor':  
+            queryset = Order.objects.filter(distributor=user.distributor)  
+            return queryset 
+        elif user.role == 'SalesPerson': 
+            queryset = Order.objects.filter(sales_person=user)  
+            return queryset  
+        return Order.objects.none()  
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()  
+        serializer = self.get_serializer(queryset, many=True)  
+        return Response(serializer.data)  
 
     def perform_create(self, serializer):
         salesperson = self.request.user
@@ -36,16 +51,12 @@ class OrderUpdateView(generics.UpdateAPIView):
         order = self.get_object()
         print(f"Order ID: {order.id}")
         
-        # Store the previous status
         previous_status = order.order_status  
         
-        # Call the super method to perform the update
         response = super().update(request, *args, **kwargs)
 
-        # Refresh the order instance to get the updated status
         order.refresh_from_db()
 
-        # Check if the order status is updated to "Delivered"
         if order.order_status == "Delivered" and previous_status != "Delivered":
             
             try:
