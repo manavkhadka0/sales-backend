@@ -80,7 +80,11 @@ class OrderUpdateView(generics.UpdateAPIView):
                     sales_person=order.sales_person
                 )
                 print(f"Commission Rate: {distributor_commission.rate}")  # Changed from amount to rate
-                order.commission_amount = (distributor_commission.rate / 100) * order.total_amount  # Calculate commission based on rate
+                
+                # Calculate total amount from order products
+                total_amount = sum(order_product.get_total_price() for order_product in order.order_products.all())  # Assuming order_products is a related name
+
+                order.commission_amount = (distributor_commission.rate / 100) * total_amount  # Calculate commission based on total amount
                 order.save()  # Save the order with the updated commission amount
 
                 # Update the salesperson's total commission amount
