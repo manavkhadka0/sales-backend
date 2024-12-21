@@ -33,7 +33,7 @@ class OrderProduct(models.Model):
     discount = models.DecimalField(max_digits=5, decimal_places=2, default=0)
 
     def get_total_price(self):
-        return (self.product.price * self.quantity) * (1 - self.discount / 100)
+        return (self.product.price * self.quantity) - self.discount
 
     def __str__(self):
         return f"{self.product.name} - {self.quantity}"

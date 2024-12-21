@@ -25,5 +25,8 @@ class CustomUser(AbstractUser):
     def soft_delete(self):
         self.is_active = False
         self.save()
+    
+    def __str__(self):
+        return f"{self.distributor.short_form} - {self.username}"
 
 
