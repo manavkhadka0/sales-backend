@@ -27,6 +27,6 @@ class CustomUser(AbstractUser):
         self.save()
     
     def __str__(self):
-        return f"{self.distributor.short_form} - {self.username}"
+        return f"{self.distributor.name} - {self.username}"
 
 
