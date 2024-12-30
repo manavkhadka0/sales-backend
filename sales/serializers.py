@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Inventory, Order, OrderProduct, Product
-
+from account.models import CustomUser
 class InventorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Inventory
@@ -62,3 +62,16 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = ['id', 'name', 'price', 'description']
+
+class SalesPersonSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'username', 'email']  # Add more fields as needed
+
+class OrderDetailSerializer(serializers.ModelSerializer):
+    sales_person = SalesPersonSerializer()
+    order_products = OrderProductSerializer(many=True)  # Include order products
+
+    class Meta:
+        model = Order
+        fields = ['id', 'order_status', 'total_amount', 'created_at', 'sales_person', 'order_products']  # Add more fields as needed

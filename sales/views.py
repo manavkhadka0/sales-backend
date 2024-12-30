@@ -2,7 +2,7 @@ from django.shortcuts import render
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from .models import Inventory, Order,Commission,Product
-from .serializers import InventorySerializer, OrderSerializer,ProductSerializer
+from .serializers import InventorySerializer, OrderSerializer,ProductSerializer, OrderDetailSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
@@ -40,6 +40,19 @@ class OrderListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         salesperson = self.request.user
         distributor = salesperson.distributor
+        
+        # Check if the phone number already exists in any order
+        phone_number = self.request.data.get('phone_number')
+        existing_order = Order.objects.filter(phone_number=phone_number).first()
+        
+        if existing_order:
+            # If an existing order is found, return a message with details
+            order_detail_serializer = OrderDetailSerializer(existing_order)
+            return Response({
+                "detail": "This phone number is already associated with an existing order.",
+                "order": order_detail_serializer.data
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         order = serializer.save(sales_person=salesperson, distributor=distributor)
 
         # Reduce the quantity in the Inventory model
