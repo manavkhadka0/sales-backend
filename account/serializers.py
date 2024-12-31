@@ -8,12 +8,19 @@ class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ('id', 'username', 'first_name', 'last_name', 'email', 
-                  'phone_number', 'address', 'role', 'is_active', 'distributor')
+                  'phone_number', 'address', 'role', 'is_active', 'distributor','password')
 
     def get_distributor(self, obj):
         if obj.distributor:
             return obj.distributor.name
         return None
+
+    def create(self, validated_data):
+        password = validated_data.pop('password')  # Remove password from validated data
+        user = CustomUser(**validated_data)  # Create user instance
+        user.set_password(password)  # Hash the password
+        user.save()  # Save the user instance
+        return user
 
 class DistributorSerializer(serializers.ModelSerializer):
     class Meta:
