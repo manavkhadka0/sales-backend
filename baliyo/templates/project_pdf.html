@@ -9,7 +9,7 @@
             font-family: Arial, sans-serif;
             margin: 20px;
             color: #333;
-            background-color: #f4f4f4;
+            background-color: #fff;
         }
         h1 {
             text-align: center;
@@ -21,66 +21,79 @@
             border-bottom: 2px solid #0056b3;
             padding-bottom: 5px;
             margin-top: 20px;
+            font-size: 1.5em;  /* Increased font size */
+            font-weight: bold;  /* Made bold */
         }
-        .project-details {
-            margin-top: 20px;
-            border: 1px solid #ccc;
-            padding: 15px;
-            border-radius: 5px;
+        .table-of-contents {
+            margin-top: 10px;  /* Decreased margin */
+            padding: 5px;      /* Decreased padding */
             background-color: #fff;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            border-radius: 5px;
+            /* border: 1px solid #ccc; */  /* Removed border */
         }
-        .project-details p {
-            line-height: 1.6;
-            margin: 10px 0;
+        .table-of-contents a {
+            font-weight: bold;  /* Made links bold */
+            font-size: 1.1em;   /* Increased font size */
+            color: #0056b3;     /* Link color */
+            text-decoration: none; /* Remove underline */
+            display: block;     /* Make each link a block element for better spacing control */
+            margin: 2px 0;     /* Added margin to reduce gaps between items */
         }
-        .team-members, .file-links {
-            margin-top: 20px;
-            padding: 10px;
-            border-top: 1px solid #ccc;
-            background-color: #f9f9f9;
-        }
-        .team-members h3, .file-links h3 {
-            margin-bottom: 10px;
-            color: #0056b3;
-        }
-        .team-member {
-            margin-bottom: 5px;
-        }
-        .file-links a {
-            color: #0056b3;
-            text-decoration: none;
-        }
-        .file-links a:hover {
-            text-decoration: underline;
+        .table-of-contents a:hover {
+            text-decoration: underline; /* Underline on hover */
         }
         .section-title {
-            font-weight: bold;
-            margin-top: 15px;
+            font-weight: bold;  /* Make titles bold */
+            font-size: 1.2em;   /* Increase font size */
         }
+        /* ... existing styles ... */
     </style>
 </head>
 <body>
     <h1>Project Details</h1>
+    
+    <div class="table-of-contents">
+        <h2>Table of Contents</h2>
+        <ol>
+            <li><a href="#project-name">Project Name</a></li>
+            <li><a href="#document-no">Document No</a></li>
+            <li><a href="#department">Department</a></li>
+            <li><a href="#date">Date</a></li>
+            <li><a href="#version">Version</a></li>
+            <li><a href="#description">Description</a></li>
+            <li><a href="#objective">Objective</a></li>
+            <li><a href="#technical-requirements">Technical Requirements</a></li>
+            <li><a href="#project-plan">Project Plan</a></li>
+            <li><a href="#timeline">Timeline</a></li>
+            <li><a href="#budget-breakdown">Budget Breakdown</a></li>
+            <li><a href="#quality-assurance">Quality Assurance</a></li>
+            <li><a href="#progress-report">Progress Report</a></li>
+            <li><a href="#issues-and-resolution">Issues and Resolution</a></li>
+            <li><a href="#final-deliverables">Final Deliverables</a></li>
+            <li><a href="#team-members">Team Members</a></li>
+            <li><a href="#supporting-documents">Supporting Documents</a></li>
+        </ol>
+    </div>
+
     <div class="project-details">
-        <h2>{{ project.project_name }}</h2>
-        <p><span class="section-title">Document No:</span> {{ project.document_no }}</p>
-        <p><span class="section-title">Department:</span> {{ project.department }}</p>
-        <p><span class="section-title">Date:</span> {{ project.date }}</p>
-        <p><span class="section-title">Version:</span> {{ project.version }}</p>
-        <p><span class="section-title">Description:</span> {{ project_description|safe }}</p>
-        <p><span class="section-title">Objective:</span> {{ project_objective|safe }}</p>
-        <p><span class="section-title">Technical Requirements:</span> {{ technical_requirements|safe }}</p>
-        <p><span class="section-title">Project Plan:</span> {{ project_plan|safe }}</p>
-        <p><span class="section-title">Timeline:</span> {{ timeline }}</p>
-        <p><span class="section-title">Budget Breakdown:</span> {{ budget_breakdown }}</p>
-        <p><span class="section-title">Quality Assurance:</span> {{ quality_assurance }}</p>
-        <p><span class="section-title">Progress Report:</span> {{ progess_report }}</p>
-        <p><span class="section-title">Issues and Resolution:</span> {{ issues_and_resolution }}</p>
-        <p><span class="section-title">Final Deliverables:</span> {{ final_deliverables }}</p>
+        <h2 id="project-name">{{ project.project_name }}</h2>
+        <p id="document-no"><span class="section-title">Document No:</span> {{ project.document_no }}</p>
+        <p id="department"><span class="section-title">Department:</span> {{ project.department }}</p>
+        <p id="date"><span class="section-title">Date:</span> {{ project.date }}</p>
+        <p id="version"><span class="section-title">Version:</span> {{ project.version }}</p>
+        <p id="description"><span class="section-title">Description:</span> {{ project_description|safe }}</p>
+        <p id="objective"><span class="section-title">Objective:</span> {{ project_objective|safe }}</p>
+        <p id="technical-requirements"><span class="section-title">Technical Requirements:</span> {{ technical_requirements|safe }}</p>
+        <p id="project-plan"><span class="section-title">Project Plan:</span> {{ project_plan|safe }}</p>
+        <p id="timeline"><span class="section-title">Timeline:</span> {{ timeline }}</p>
+        <p id="budget-breakdown"><span class="section-title">Budget Breakdown:</span> {{ budget_breakdown }}</p>
+        <p id="quality-assurance"><span class="section-title">Quality Assurance:</span> {{ quality_assurance }}</p>
+        <p id="progress-report"><span class="section-title">Progress Report:</span> {{ progess_report }}</p>
+        <p id="issues-and-resolution"><span class="section-title">Issues and Resolution:</span> {{ issues_and_resolution }}</p>
+        <p id="final-deliverables"><span class="section-title">Final Deliverables:</span> {{ final_deliverables }}</p>
         
-        <div class="team-members">
-            <h3>Team Members:</h3>
+        <div class="team-members" id="team-members">
+            <h3 style="font-weight: bold; font-size: 1.2em;">Team Members:</h3>  <!-- Made bold and increased font size -->
             {% for member in project.team.all %}
                 <div class="team-member">{{ member.username }}</div>
             {% empty %}
@@ -88,8 +101,8 @@
             {% endfor %}
         </div>
 
-        <div class="file-links">
-            <h3>Supporting Documents:</h3>
+        <div class="file-links" id="supporting-documents">
+            <h3 style="font-weight: bold; font-size: 1.2em;">Supporting Documents:</h3>  <!-- Made bold and increased font size -->
             {% if concept_design_url %}
                 <p><a href="{{ concept_design_url }}">Concept Design</a></p>
                 <img src="{{ concept_design_url }}" alt="Concept Design" style="max-width: 100%; height: auto;">
@@ -109,4 +122,4 @@
         </div>
     </div>
 </body>
-</html> 
+</html>
