@@ -14,8 +14,8 @@ class ProjectListCreateView(generics.ListCreateAPIView):
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
 
-def download_project_pdf(request, project_id):
-    project = get_object_or_404(Project, id=project_id)  # Fetch the project by ID
+def download_project_pdf(request, project_slug):
+    project = get_object_or_404(Project, slug=project_slug)  # Fetch the project by slug
     
     # Prepare the context for rendering
     context = {
