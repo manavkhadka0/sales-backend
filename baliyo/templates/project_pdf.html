@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ project.project_name }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            color: #333;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            text-align: center;
+            color: #0056b3;
+            margin-bottom: 20px;
+        }
+        h2 {
+            color: #0056b3;
+            border-bottom: 2px solid #0056b3;
+            padding-bottom: 5px;
+            margin-top: 20px;
+        }
+        .project-details {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #fff;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .project-details p {
+            line-height: 1.6;
+            margin: 10px 0;
+        }
+        .team-members, .file-links {
+            margin-top: 20px;
+            padding: 10px;
+            border-top: 1px solid #ccc;
+            background-color: #f9f9f9;
+        }
+        .team-members h3, .file-links h3 {
+            margin-bottom: 10px;
+            color: #0056b3;
+        }
+        .team-member {
+            margin-bottom: 5px;
+        }
+        .file-links a {
+            color: #0056b3;
+            text-decoration: none;
+        }
+        .file-links a:hover {
+            text-decoration: underline;
+        }
+        .section-title {
+            font-weight: bold;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Project Details</h1>
+    <div class="project-details">
+        <h2>{{ project.project_name }}</h2>
+        <p><span class="section-title">Document No:</span> {{ project.document_no }}</p>
+        <p><span class="section-title">Department:</span> {{ project.department }}</p>
+        <p><span class="section-title">Date:</span> {{ project.date }}</p>
+        <p><span class="section-title">Version:</span> {{ project.version }}</p>
+        <p><span class="section-title">Description:</span> {{ project_description|safe }}</p>
+        <p><span class="section-title">Objective:</span> {{ project_objective|safe }}</p>
+        <p><span class="section-title">Technical Requirements:</span> {{ technical_requirements|safe }}</p>
+        <p><span class="section-title">Project Plan:</span> {{ project_plan|safe }}</p>
+        <p><span class="section-title">Timeline:</span> {{ timeline }}</p>
+        <p><span class="section-title">Budget Breakdown:</span> {{ budget_breakdown }}</p>
+        <p><span class="section-title">Quality Assurance:</span> {{ quality_assurance }}</p>
+        <p><span class="section-title">Progress Report:</span> {{ progess_report }}</p>
+        <p><span class="section-title">Issues and Resolution:</span> {{ issues_and_resolution }}</p>
+        <p><span class="section-title">Final Deliverables:</span> {{ final_deliverables }}</p>
+        
+        <div class="team-members">
+            <h3>Team Members:</h3>
+            {% for member in project.team.all %}
+                <div class="team-member">{{ member.username }}</div>
+            {% empty %}
+                <div>No team members assigned.</div>
+            {% endfor %}
+        </div>
+
+        <div class="file-links">
+            <h3>Supporting Documents:</h3>
+            {% if concept_design_url %}
+                <p><a href="{{ concept_design_url }}">Concept Design</a></p>
+                <img src="{{ concept_design_url }}" alt="Concept Design" style="max-width: 100%; height: auto;">
+            {% endif %}
+            {% if technical_drawing_url %}
+                <p><a href="{{ technical_drawing_url }}">Technical Drawing</a></p>
+                <img src="{{ technical_drawing_url }}" alt="Technical Drawing" style="max-width: 100%; height: auto;">
+            {% endif %}
+            {% if model_3d_url %}
+                <p><a href="{{ model_3d_url }}">3D Model</a></p>
+                <img src="{{ model_3d_url }}" alt="3D Model" style="max-width: 100%; height: auto;">
+            {% endif %}
+            {% if supportive_documents_url %}
+                <p><a href="{{ supportive_documents_url }}">Supportive Documents</a></p>
+                <img src="{{ supportive_documents_url }}" alt="Supportive Documents" style="max-width: 100%; height: auto;">
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html> 
