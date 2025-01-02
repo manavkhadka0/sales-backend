@@ -11,6 +11,7 @@ from rest_framework_simplejwt.tokens import RefreshToken  # Import JWT token uti
 from rest_framework.permissions import AllowAny  # Import permission class
 
 class UserListView(APIView):
+    serializer_class = CustomUserSerializer
     def get(self, request):
         users = CustomUser.objects.all()
         serializer = CustomUserSerializer(users, many=True)
