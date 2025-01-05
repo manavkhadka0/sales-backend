@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,6 +11,7 @@
             margin: 20px;
             color: #333;
             background-color: #fff;
+            position: relative;
         }
         h1 {
             text-align: center;
@@ -46,11 +48,82 @@
             font-weight: bold;  /* Make titles bold */
             font-size: 1.2em;   /* Increase font size */
         }
+        .project-details p {
+            margin: 2px 0;  /* Reduced margin between paragraphs */
+            line-height: 1.2;  /* Reduced line height */
+        }
+        .team-member {
+            margin: 2px 0;  /* Reduced margin for team members */
+            line-height: 1.2;
+        }
+        .file-links p {
+            margin: 2px 0;  /* Reduced margin for file links */
+            line-height: 1.2;
+        }
         /* ... existing styles ... */
+        .phase-content {
+            margin: 0;  /* Remove default margins */
+            line-height: 1.2;  /* Reduce line height */
+        }
+        .phase-content ul {
+            margin: 5px 0;  /* Reduce margin between lists */
+            padding-left: 20px;  /* Adjust bullet point indentation */
+        }
+        .phase-content li {
+            margin: 2px 0;  /* Minimal spacing between list items */
+            line-height: 1.2;  /* Consistent line height for list items */
+        }
+        .phase-content p {
+            margin: 2px 0;
+            line-height: 1.2;
+        }
+
+        /* Styles for TinyMCE content */
+        .tox-tinymce-aux {
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Target TinyMCE generated content */
+        [data-mce-selected], .mce-content-body {
+            line-height: 1.2 !important;
+            margin: 0 !important;
+        }
+
+        /* Target lists and paragraphs within TinyMCE content */
+        .project-details ul,
+        .project-details ol {
+            margin: 2px 0 !important;
+            padding-left: 20px !important;
+        }
+
+        .project-details li {
+            margin: 0 !important;
+            line-height: 1.2 !important;
+        }
+
+        /* Override any TinyMCE default spacing */
+        .project-details p {
+            margin: 2px 0 !important;
+            line-height: 1.2 !important;
+        }
+
+        /* Add these new styles */
+        .table-of-contents ol {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+
+        .table-of-contents li {
+            margin: 2px 0;
+            line-height: 1.2;
+        }
+
+
     </style>
 </head>
 <body>
-    <h1>Project Details</h1>
+    <h1>{{ project.project_name }}</h1>
     
     <div class="table-of-contents">
         <h2>Table of Contents</h2>

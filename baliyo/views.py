@@ -1,6 +1,6 @@
 from django.shortcuts import render, get_object_or_404
 from rest_framework import generics
-from django.utils.html import strip_tags, format_html
+from django.utils.html import  format_html
 from .models import Project
 from .serializers import ProjectSerializer
 from django.template.loader import render_to_string
@@ -13,10 +13,12 @@ from django.utils.text import slugify  # Import slugify to create a safe filenam
 class ProjectListCreateView(generics.ListCreateAPIView):
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
+from django.conf import settings
 
 def download_project_pdf(request, project_slug):
-    project = get_object_or_404(Project, slug=project_slug)  # Fetch the project by slug
-    
+    project = get_object_or_404(Project, slug=project_slug)
+
+
     # Prepare the context for rendering
     context = {
         'project': project,
@@ -37,17 +39,18 @@ def download_project_pdf(request, project_slug):
         'supportive_documents_url': request.build_absolute_uri(project.supportive_documents.url) if project.supportive_documents else None,
     }
 
-    html_string = render_to_string('project_pdf.html', context)  # Use the cleaned context
-    
+    # Render the HTML template with context
+    html_string = render_to_string('project_pdf.html', context)
+
     # Create a safe filename based on the project name
     safe_project_name = slugify(project.project_name)
     response = HttpResponse(content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="{safe_project_name}_project.pdf"'  # Dynamic filename
+    response['Content-Disposition'] = f'attachment; filename="{safe_project_name}_project.pdf"'
 
     # Convert HTML to PDF using xhtml2pdf
-    pisa_status = pisa.CreatePDF(html_string, dest=response)  # Generate PDF
+    pisa_status = pisa.CreatePDF(html_string, dest=response)
 
     if pisa_status.err:
-        return HttpResponse('We had some errors <pre>' + html_string + '</pre>')  # Handle errors
+        return HttpResponse('We had some errors <pre>' + html_string + '</pre>')
 
     return response
