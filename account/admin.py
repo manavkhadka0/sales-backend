@@ -11,7 +11,12 @@ admin.site.register(Distributor,ModelAdmin)
 
 class CustomUserAdmin(ModelAdmin):
     model = CustomUser
-    
+    list_display = ('distributor__name','username','role', 'total_orders')  # Add other fields as necessary
+    list_filter = ('role','distributor__name')
+    def total_orders(self, obj):
+        return obj.orders.count()  # Count the related orders for the user
+    total_orders.short_description = 'Total Orders'  # Optional: Set a short description for the column
+
     def save_model(self, request, obj, form, change):
         if obj.password and not obj.password.startswith(('pbkdf2_sha256$', 'bcrypt$', 'argon2')):
             obj.password = make_password(obj.password)

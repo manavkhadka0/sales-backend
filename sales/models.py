@@ -64,6 +64,7 @@ class Order(models.Model):
     payment_screenshot = models.ImageField(upload_to='payment_screenshots/', blank=True, null=True)
     order_status = models.CharField(max_length=255, choices=ORDER_STATUS_CHOICES, default='Pending')
     commission_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, blank=True, null=True)
+    date=models.DateField(auto_now_add=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
