@@ -1,8 +1,8 @@
 from django.shortcuts import render
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-from .models import Inventory, Order,Commission,Product
-from .serializers import InventorySerializer, OrderSerializer,ProductSerializer, OrderDetailSerializer
+from .models import Inventory, Order,Commission,Product,InventoryChangeLog
+from .serializers import InventorySerializer, OrderSerializer,ProductSerializer, OrderDetailSerializer,InventoryChangeLogSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
@@ -15,11 +15,12 @@ from rest_framework.pagination import PageNumberPagination
 
 class InventoryListView(generics.ListAPIView):
     serializer_class = InventorySerializer
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        return Inventory.objects.filter(distributor=user.distributor)
+        # user = self.request.user
+        # return Inventory.objects.filter(distributor=user.distributor)
+        return Inventory.objects.all()
     
 class CustomPagination(PageNumberPagination):
     page_size = 10
@@ -179,4 +180,42 @@ class ProductListView(generics.ListAPIView):
     serializer_class = ProductSerializer
     queryset = Product.objects.all()
 
-            
+class InventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Inventory.objects.all()
+    serializer_class = InventorySerializer
+    # permission_classes = [IsAuthenticated]
+
+    def perform_update(self, serializer):
+        inventory_item = self.get_object()
+        
+        # Retrieve the new quantity from the request data
+        new_quantity = self.request.data.get('new_quantity')        
+        # Create a log entry before updating
+        InventoryChangeLog.objects.create(
+            inventory=inventory_item,
+            old_quantity=inventory_item.quantity,
+            new_quantity=new_quantity if new_quantity is not None else inventory_item.quantity
+        )
+        
+        # Update the inventory item's quantity if new_quantity is provided
+        if new_quantity is not None:  # Check if new_quantity is provided
+            inventory_item.quantity = new_quantity
+        
+        # Save the updated inventory item using the serializer
+        serializer.save(quantity=inventory_item.quantity)  # Pass the updated quantity to the serializer
+
+class InventoryChangeLogView(generics.ListAPIView):
+    serializer_class = InventoryChangeLogSerializer
+    queryset = InventoryChangeLog.objects.all()
+
+    def get_queryset(self):
+        # Use 'pk' instead of 'id'
+        inventory_pk = self.kwargs.get('pk')
+        if inventory_pk is not None:
+            logs = InventoryChangeLog.objects.filter(inventory__id=inventory_pk)  # Filter by inventory PK
+            return logs
+        return InventoryChangeLog.objects.none()  # Return an empty queryset if 'pk' is not provided
+
+class Inventorylogs(generics.ListAPIView):
+    serializer_class = InventoryChangeLogSerializer
+    queryset = InventoryChangeLog.objects.all()

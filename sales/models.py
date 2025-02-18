@@ -10,6 +10,16 @@ class Inventory(models.Model):
     def __str__(self):
         return f"{self.product.name} - {self.quantity}"
 
+class InventoryChangeLog(models.Model):
+    inventory = models.ForeignKey(Inventory, on_delete=models.CASCADE, related_name='change_logs')
+    changed_at = models.DateTimeField(auto_now_add=True)
+    old_quantity = models.PositiveIntegerField()
+    new_quantity = models.PositiveIntegerField()
+
+    def __str__(self):
+        return f"Change on {self.changed_at}: {self.old_quantity} -> {self.new_quantity}"
+
+
 class Product(models.Model):
     PRODUCT_CHOICES = [
         ('Dandruff Oil Bottle', 'Dandruff Oil Bottle'),

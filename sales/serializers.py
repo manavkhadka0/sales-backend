@@ -1,16 +1,24 @@
 from rest_framework import serializers
-from .models import Inventory, Order, OrderProduct, Product
+from .models import Inventory, Order, OrderProduct, Product,InventoryChangeLog
 from account.models import CustomUser
 from account.serializers import CustomUserSerializer
-class InventorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Inventory
-        fields = ['id', 'distributor', 'product', 'quantity']
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = ['id', 'name', 'price', 'description']
+
+class InventorySerializer(serializers.ModelSerializer):
+    product=ProductSerializer(read_only=True)
+    class Meta:
+        model = Inventory
+        fields = ['id', 'distributor', 'product', 'quantity']
+
+class InventoryChangeLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InventoryChangeLog
+        fields = '__all__'  # You can specify fields explicitly if needed
+
 
 class OrderProductSerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
