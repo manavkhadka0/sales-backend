@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Inventory, Order, OrderProduct, Product
 from account.models import CustomUser
+from account.serializers import CustomUserSerializer
 class InventorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Inventory
@@ -21,13 +22,13 @@ class OrderProductSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     order_products = OrderProductSerializer(many=True)
-
+    sales_person=CustomUserSerializer(read_only=True)
     class Meta:
         model = Order
         fields = ['id','full_name', 'city', 'delivery_address', 'landmark',
                   'phone_number', 'alternate_phone_number', 'delivery_charge', 'payment_method',
-                  'payment_screenshot', 'order_status', 'created_at', 'updated_at', 'order_products',
-                  'total_amount', 'remarks']
+                  'payment_screenshot', 'order_status', 'date','created_at', 'updated_at', 'order_products',
+                  'total_amount', 'remarks','sales_person']
 
     def create(self, validated_data):
         order_products_data = validated_data.pop('order_products')

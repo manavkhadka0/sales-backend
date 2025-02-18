@@ -6,6 +6,10 @@ from .serializers import InventorySerializer, OrderSerializer,ProductSerializer,
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
+from django_filters import rest_framework as django_filters
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters as rest_filters
+from rest_framework.pagination import PageNumberPagination
 
 # Create your views here.
 
@@ -16,26 +20,46 @@ class InventoryListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         return Inventory.objects.filter(distributor=user.distributor)
+class CustomPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+class OrderFilter(django_filters.FilterSet):
+    distributor = django_filters.CharFilter(field_name="distributor__id", lookup_expr='exact')
+    sales_person = django_filters.CharFilter(field_name="sales_person__id", lookup_expr='exact')
+    order_status = django_filters.CharFilter(field_name="order_status", lookup_expr='icontains')
+    city=django_filters.CharFilter(field_name="city", lookup_expr='icontains')
+    date=django_filters.DateFilter(field_name="date", lookup_expr='exact')
+    gte_date=django_filters.DateFilter(field_name="date", lookup_expr='gte')
+    lte_date=django_filters.DateFilter(field_name="date", lookup_expr='lte')
+
+    class Meta:
+        model = Order
+        fields = ['distributor', 'sales_person', 'order_status', 'date', 'gte_date', 'lte_date', 'city']
 
 class OrderListCreateView(generics.ListCreateAPIView):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]  
+    filterset_class = OrderFilter
+    filter_backends = [DjangoFilterBackend, rest_filters.SearchFilter,rest_filters.OrderingFilter]  # Added SearchFilter
+    search_fields = ['phone_number', 'sales_person__username']  # Specify the fields to search
+    ordering_fields = ['date',]
+    pagination_class = CustomPagination
 
-    def get_queryset(self):
-        user = self.request.user  
-        if user.role == 'Distributor':  
-            queryset = Order.objects.filter(distributor=user.distributor)  
-            return queryset 
-        elif user.role == 'SalesPerson': 
-            queryset = Order.objects.filter(sales_person=user)  
-            return queryset  
-        return Order.objects.none()  
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()  
-        serializer = self.get_serializer(queryset, many=True)  
-        return Response(serializer.data)  
+    # def get_queryset(self):
+    #     # user = self.request.user  
+    #     # if user.role == 'Distributor':  
+    #     #     queryset = Order.objects.filter(distributor=user.distributor)  
+    #     #     return queryset 
+    #     # elif user.role == 'SalesPerson': 
+    #     #     queryset = Order.objects.filter(sales_person=user)  
+    #     #     return queryset  
+    #     # elif user.role == 'SuperAdmin':  
+    #     #     queryset = Order.objects.all()  
+    #     #     return queryset
+    #     return Order.objects.all()
 
     def perform_create(self, serializer):
         salesperson = self.request.user
