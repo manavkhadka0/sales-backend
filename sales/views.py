@@ -20,6 +20,7 @@ class InventoryListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         return Inventory.objects.filter(distributor=user.distributor)
+    
 class CustomPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
