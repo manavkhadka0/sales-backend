@@ -6,7 +6,7 @@ from account.serializers import CustomUserSerializer
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
-        fields = ['id', 'name', 'price', 'description']
+        fields = ['id', 'name', 'description']
 
 class InventorySerializer(serializers.ModelSerializer):
     product=ProductSerializer(read_only=True)
@@ -26,7 +26,7 @@ class OrderProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderProduct
-        fields = ['id', 'product', 'product_id', 'quantity', 'discount', 'get_total_price']
+        fields = ['id', 'product', 'product_id', 'quantity']
 
 class OrderSerializer(serializers.ModelSerializer):
     order_products = OrderProductSerializer(many=True)
@@ -37,22 +37,6 @@ class OrderSerializer(serializers.ModelSerializer):
                   'phone_number', 'alternate_phone_number', 'delivery_charge', 'payment_method',
                   'payment_screenshot', 'order_status', 'date','created_at', 'updated_at', 'order_products',
                   'total_amount', 'remarks','sales_person']
-
-    def create(self, validated_data):
-        order_products_data = validated_data.pop('order_products')
-        total_amount = 0  # Initialize total_amount
-        order = Order.objects.create(**validated_data)
-
-        for order_product_data in order_products_data:
-            # Ensure get_total_price is called correctly
-            product = OrderProduct(**order_product_data)  # Create an instance
-            total_amount += product.get_total_price()  # Call the method
-
-            OrderProduct.objects.create(order=order, **order_product_data)
-
-        order.total_amount = total_amount  # Set the total_amount
-        order.save()  # Save the order with the updated total_amount
-        return order
 
 
     def update(self, instance, validated_data):
@@ -89,3 +73,9 @@ class InventoryRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = InventoryRequest
         fields = '__all__'
+
+    def create(self, validated_data):
+        # Get the user from the context
+        user = self.context['request'].user
+        validated_data['user'] = user  # Set the user in the validated data
+        return super().create(validated_data)  # Call the parent class's create method

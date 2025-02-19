@@ -27,9 +27,10 @@ class InventoryRequest(models.Model):
         ('Accepted', 'Accepted'),
         ('Rejected', 'Rejected')
     )
-    user = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE)
+    user = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE,null=True, blank=True)
     product = models.ForeignKey('sales.Product', on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=0)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, blank=True, null=True)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES,default="Pending")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -47,20 +48,15 @@ class Product(models.Model):
         ('Shampoo Sachet', 'Shampoo Sachet')
     ]
     name = models.CharField(max_length=255, choices=PRODUCT_CHOICES)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(blank=True)
 
     def __str__(self):
-        return f"{self.name} - ₹{self.price}"
+        return self.name
 
 class OrderProduct(models.Model):
     order = models.ForeignKey('Order', on_delete=models.CASCADE, related_name='order_products')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
-    discount = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-
-    def get_total_price(self):
-        return (self.product.price * self.quantity) - self.discount
 
     def __str__(self):
         return f"{self.product.name} - {self.quantity}"
@@ -97,16 +93,6 @@ class Order(models.Model):
 
     def __str__(self):
         return f'{self.full_name} - {self.order_status}'
-
-    def save(self, *args, **kwargs):
-        is_new = self.pk is None
-        super().save(*args, **kwargs)
-        if is_new:
-            self.total_amount = self.delivery_charge
-        else:
-            self.total_amount = sum(op.get_total_price() for op in self.order_products.all()) + self.delivery_charge
-        if is_new:
-            super().save(update_fields=['total_amount'])
 
 class Commission(models.Model):
     sales_person = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE, related_name='commissions')

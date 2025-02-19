@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-from .models import Inventory, Order,Commission,Product,InventoryChangeLog
+from .models import Inventory, Order,Commission,Product,InventoryChangeLog,InventoryRequest
 from account.models import Distributor, Franchise,Factory
 from .serializers import InventorySerializer, OrderSerializer,ProductSerializer, OrderDetailSerializer,InventoryChangeLogSerializer,InventoryRequestSerializer
 from rest_framework.response import Response
@@ -189,18 +189,18 @@ class OrderListCreateView(generics.ListCreateAPIView):
     ordering_fields = ['-id',]
     pagination_class = CustomPagination
 
-    def get_queryset(self):
-        user = self.request.user  
-        if user.role == 'Distributor':  
-            queryset = Order.objects.filter(distributor=user.distributor).order_by('-id')
-            return queryset 
-        elif user.role == 'SalesPerson': 
-            queryset = Order.objects.filter(sales_person=user).order_by('-id')
-            return queryset  
-        elif user.role == 'SuperAdmin':  
-            queryset = Order.objects.all().order_by('-id')
-            return queryset
-        return Order.objects.all().order_by('-id')
+    # def get_queryset(self):
+    #     user = self.request.user  
+    #     if user.role == 'Distributor':  
+    #         queryset = Order.objects.filter(distributor=user.distributor).order_by('-id')
+    #         return queryset 
+    #     elif user.role == 'SalesPerson': 
+    #         queryset = Order.objects.filter(sales_person=user).order_by('-id')
+    #         return queryset  
+    #     elif user.role == 'SuperAdmin':  
+    #         queryset = Order.objects.all().order_by('-id')
+    #         return queryset
+    #     return Order.objects.all().order_by('-id')
 
     def perform_create(self, serializer):
         salesperson = self.request.user
@@ -260,9 +260,7 @@ class OrderUpdateView(generics.UpdateAPIView):
                 print(f"Commission Rate: {distributor_commission.rate}")  # Changed from amount to rate
                 
                 # Calculate total amount from order products
-                total_amount = sum(order_product.get_total_price() for order_product in order.order_products.all())  # Assuming order_products is a related name
-
-                order.commission_amount = (distributor_commission.rate / 100) * total_amount  # Calculate commission based on total amount
+                order.commission_amount = (distributor_commission.rate / 100) * order.total_amount  # Calculate commission based on total amount
                 order.save()  # Save the order with the updated commission amount
 
                 # Update the salesperson's total commission amount
@@ -360,14 +358,31 @@ class Inventorylogs(generics.ListAPIView):
     serializer_class = InventoryChangeLogSerializer
     queryset = InventoryChangeLog.objects.all()
 
-class InventoryRequestView(generics.CreateAPIView):
-    queryset = Inventory.objects.all()
+class InventoryRequestView(generics.ListCreateAPIView):
+    queryset = InventoryRequest.objects.all()
+    serializer_class = InventoryRequestSerializer
+
+    def perform_create(self, serializer):
+        # The user will be set in the serializer's create method
+        serializer.save()
+
+class InventoryRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = InventoryRequest.objects.all()
     serializer_class = InventoryRequestSerializer
     # permission_classes = [IsAuthenticated]
 
+    def patch(self, request, *args, **kwargs):
+        partial = True  # Allow partial updates
+        return self.update(request, *args, partial=partial, **kwargs)
 
-    def perform_create(self, serializer):
-        # Set the user who is logged in as the creator of the InventoryRequest
-        serializer.save(user=self.request.user)
+    def perform_update(self, serializer):
+        # Update the total_amount and status if provided in the request data
+        total_amount = self.request.data.get('total_amount')
+        status = self.request.data.get('status')
 
-# Return an empty queryset for non-Distributor users
+        if total_amount is not None:
+            serializer.instance.total_amount = total_amount
+        if status is not None:
+            serializer.instance.status = status
+
+        serializer.save()  # Save the updated instance 
