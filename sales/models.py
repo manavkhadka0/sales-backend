@@ -5,6 +5,7 @@ from django.db import models
 class Inventory(models.Model):
     distributor = models.ForeignKey('account.Distributor', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
     franchise= models.ForeignKey('account.Franchise', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
+    factory = models.ForeignKey('account.Factory', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
     product = models.ForeignKey('sales.Product', on_delete=models.CASCADE, related_name='inventory')
     quantity = models.PositiveIntegerField(default=0)
 
@@ -102,5 +103,20 @@ class Commission(models.Model):
 
     def __str__(self):
         return f"{self.sales_person} - {self.distributor} - ₹{self.rate}"
+
+class InventoryRequest(models.Model):
+    STATUS_CHOICES=(
+        ('Accepted', 'Accepted'),
+        ('Rejected', 'Rejected')
+    )
+    user = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE)
+    product = models.ForeignKey('sales.Product', on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=255, choices=STATUS_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+    def __str__(self):
+        return f"{self.distributor} - {self.product} - {self.quantity}"
     
 

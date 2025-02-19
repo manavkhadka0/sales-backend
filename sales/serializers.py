@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Inventory, Order, OrderProduct, Product,InventoryChangeLog
+from .models import Inventory, Order, OrderProduct, Product,InventoryChangeLog, InventoryRequest
 from account.models import CustomUser
 from account.serializers import CustomUserSerializer
 
@@ -84,3 +84,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = ['id', 'order_status', 'total_amount', 'created_at', 'sales_person', 'order_products']  # Add more fields as needed
+
+class InventoryRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InventoryRequest
+        fields = '__all__'

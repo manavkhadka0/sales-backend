@@ -2,8 +2,8 @@ from django.shortcuts import render
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from .models import Inventory, Order,Commission,Product,InventoryChangeLog
-from account.models import Distributor, Franchise
-from .serializers import InventorySerializer, OrderSerializer,ProductSerializer, OrderDetailSerializer,InventoryChangeLogSerializer
+from account.models import Distributor, Franchise,Factory
+from .serializers import InventorySerializer, OrderSerializer,ProductSerializer, OrderDetailSerializer,InventoryChangeLogSerializer,InventoryRequestSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
@@ -28,28 +28,40 @@ class InventoryListView(generics.ListAPIView):
         user = self.request.user
         print(user.role)
         if user.role == 'SuperAdmin':
-            # Get all distributors and their inventories
-            distributors = Distributor.objects.prefetch_related('inventory')
+            # Get all factories and their inventories
+            factories = Factory.objects.prefetch_related('inventory')
             inventory_summary = {}
-            for distributor in distributors:
-                inventory_summary[distributor.name] = {
+            for factory in factories:
+                inventory_summary[factory.name] = {
                     'inventory': [
                         {
                             'product': inventory.product.name,
                             'quantity': inventory.quantity
-                        } for inventory in distributor.inventory.all()
+                        } for inventory in factory.inventory.all()
                     ],
-                    'franchises': {}
+                    'distributors': {}
                 }
-                # Get franchises associated with the distributor
-                franchises = Franchise.objects.filter(distributor=distributor)
-                for franchise in franchises:
-                    inventory_summary[distributor.name]['franchises'][franchise.name] = [
-                        {
-                            'product': inventory.product.name,
-                            'quantity': inventory.quantity
-                        } for inventory in franchise.inventory.all()
-                    ]
+                # Get distributors associated with the factory
+                distributors = Distributor.objects.prefetch_related('inventory')
+                for distributor in distributors:
+                    inventory_summary[factory.name]['distributors'][distributor.name] = {
+                        'inventory': [
+                            {
+                                'product': inventory.product.name,
+                                'quantity': inventory.quantity
+                            } for inventory in distributor.inventory.all()
+                        ],
+                        'franchises': {}
+                    }
+                    # Get franchises associated with the distributor
+                    franchises = Franchise.objects.filter(distributor=distributor)
+                    for franchise in franchises:
+                        inventory_summary[factory.name]['distributors'][distributor.name]['franchises'][franchise.name] = [
+                            {
+                                'product': inventory.product.name,
+                                'quantity': inventory.quantity
+                            } for inventory in franchise.inventory.all()
+                        ]
             return Response(inventory_summary)  # Return the summary for SuperAdmin
         elif user.role == 'Distributor':
             # Get the distributor's inventory
@@ -289,3 +301,7 @@ class InventoryChangeLogView(generics.ListAPIView):
 class Inventorylogs(generics.ListAPIView):
     serializer_class = InventoryChangeLogSerializer
     queryset = InventoryChangeLog.objects.all()
+
+class InventoryRequestView(generics.CreateAPIView):
+    queryset = Inventory.objects.all()
+    serializer_class = InventoryRequestSerializer

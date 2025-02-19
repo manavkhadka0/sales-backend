@@ -3,11 +3,12 @@ from unfold.admin import ModelAdmin
 from django.contrib.auth.hashers import make_password
 
 # Register your models here.
-from .models import CustomUser, Distributor,Franchise
+from .models import CustomUser, Distributor,Franchise,Factory
 
 # admin.site.register(CustomUser,ModelAdmin)
 admin.site.register(Distributor,ModelAdmin)
 admin.site.register(Franchise,ModelAdmin)
+admin.site.register(Factory,ModelAdmin)
 
 
 class CustomUserAdmin(ModelAdmin):
