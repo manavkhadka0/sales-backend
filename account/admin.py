@@ -3,15 +3,16 @@ from unfold.admin import ModelAdmin
 from django.contrib.auth.hashers import make_password
 
 # Register your models here.
-from .models import CustomUser, Distributor
+from .models import CustomUser, Distributor,Franchise
 
 # admin.site.register(CustomUser,ModelAdmin)
 admin.site.register(Distributor,ModelAdmin)
+admin.site.register(Franchise,ModelAdmin)
 
 
 class CustomUserAdmin(ModelAdmin):
     model = CustomUser
-    list_display = ('distributor__name','username','role', 'total_orders')  # Add other fields as necessary
+    list_display = ('username','phone_number','distributor__name','franchise__name','role', 'total_orders')  # Add other fields as necessary
     list_filter = ('role','distributor__name')
     def total_orders(self, obj):
         return obj.orders.count()  # Count the related orders for the user

@@ -22,7 +22,7 @@ class ProductAdmin(ModelAdmin):
     list_display = ['name', 'price']
 
 class InventoryAdmin(ModelAdmin):
-    list_display = ['product', 'distributor', 'quantity']
+    list_display = ['product', 'distributor', 'franchise','quantity']
     list_filter = ['distributor']
 
 admin.site.register(Product, ProductAdmin)

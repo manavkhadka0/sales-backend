@@ -2,6 +2,7 @@ from django.shortcuts import render
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from .models import Inventory, Order,Commission,Product,InventoryChangeLog
+from account.models import Distributor, Franchise
 from .serializers import InventorySerializer, OrderSerializer,ProductSerializer, OrderDetailSerializer,InventoryChangeLogSerializer
 from rest_framework.response import Response
 from rest_framework import status
@@ -18,10 +19,79 @@ class InventoryListView(generics.ListAPIView):
     # permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # user = self.request.user
-        # return Inventory.objects.filter(distributor=user.distributor)
-        return Inventory.objects.all()
-    
+        user = self.request.user
+        if user.role == 'Franchise':  # Only get inventory for Franchise users
+            return Inventory.objects.filter(franchise=user.franchise)  # Franchise can see their own inventory
+        return Inventory.objects.none()  # Return an empty queryset for other roles
+
+    def list(self, request, *args, **kwargs):
+        user = self.request.user
+        print(user.role)
+        if user.role == 'SuperAdmin':
+            # Get all distributors and their inventories
+            distributors = Distributor.objects.prefetch_related('inventory')
+            inventory_summary = {}
+            for distributor in distributors:
+                inventory_summary[distributor.name] = {
+                    'inventory': [
+                        {
+                            'product': inventory.product.name,
+                            'quantity': inventory.quantity
+                        } for inventory in distributor.inventory.all()
+                    ],
+                    'franchises': {}
+                }
+                # Get franchises associated with the distributor
+                franchises = Franchise.objects.filter(distributor=distributor)
+                for franchise in franchises:
+                    inventory_summary[distributor.name]['franchises'][franchise.name] = [
+                        {
+                            'product': inventory.product.name,
+                            'quantity': inventory.quantity
+                        } for inventory in franchise.inventory.all()
+                    ]
+            return Response(inventory_summary)  # Return the summary for SuperAdmin
+        elif user.role == 'Distributor':
+            # Get the distributor's inventory
+            inventory_summary = {
+                user.distributor.name: {
+                    'inventory': [
+                        {
+                            'product': inventory.product.name,
+                            'quantity': inventory.quantity
+                        } for inventory in user.distributor.inventory.all()
+                    ],
+                    'franchises': {}
+                }
+            }
+            # Get franchises associated with the distributor
+            franchises = Franchise.objects.filter(distributor=user.distributor)
+            for franchise in franchises:
+                inventory_summary[user.distributor.name]['franchises'][franchise.name] = [
+                    {
+                        'product': inventory.product.name,
+                        'quantity': inventory.quantity
+                    } for inventory in franchise.inventory.all()
+                ]
+            return Response(inventory_summary)  # Return the summary for Distributor
+        elif user.role == 'Franchise':  # Added handling for Franchise role
+            # Get the franchise's inventory
+            print(user.franchise.inventory.all())
+            inventory_summary = {
+                user.franchise.name: {
+                    'inventory': [
+                        {
+                            'product': inventory.product.name,
+                            'quantity': inventory.quantity
+                        } for inventory in user.franchise.inventory.all()
+                    ]
+                }
+            }
+            return Response(inventory_summary) # Return the summary for Franchise
+        else:
+            # Call the superclass's list method for other roles
+            return super().list(request, *args, **kwargs)
+
 class CustomPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
@@ -41,7 +111,7 @@ class OrderFilter(django_filters.FilterSet):
         fields = ['distributor', 'sales_person', 'order_status', 'date', 'gte_date', 'lte_date', 'city']
 
 class OrderListCreateView(generics.ListCreateAPIView):
-    queryset = Order.objects.all()
+    queryset = Order.objects.all().order_by('-created_at')
     serializer_class = OrderSerializer
     # permission_classes = [IsAuthenticated]  
     filterset_class = OrderFilter

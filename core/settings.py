@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'solo',
     'corsheaders',
     'django_filters',
+
 ]
 
 MIDDLEWARE = [

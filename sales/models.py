@@ -3,7 +3,8 @@ from django.db import models
 # Create your models here.
 
 class Inventory(models.Model):
-    distributor = models.ForeignKey('account.Distributor', on_delete=models.CASCADE, null=True, related_name='inventory')
+    distributor = models.ForeignKey('account.Distributor', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
+    franchise= models.ForeignKey('account.Franchise', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
     product = models.ForeignKey('sales.Product', on_delete=models.CASCADE, related_name='inventory')
     quantity = models.PositiveIntegerField(default=0)
 
@@ -56,8 +57,6 @@ class Order(models.Model):
 
     ORDER_STATUS_CHOICES = [
         ('Pending', 'Pending'),
-        ('Processing', 'Processing'),
-        ('Shipped', 'Shipped'),
         ('Delivered', 'Delivered'),
         ('Cancelled', 'Cancelled')
     ]
