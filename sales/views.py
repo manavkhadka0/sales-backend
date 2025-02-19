@@ -111,27 +111,27 @@ class OrderFilter(django_filters.FilterSet):
         fields = ['distributor', 'sales_person', 'order_status', 'date', 'gte_date', 'lte_date', 'city']
 
 class OrderListCreateView(generics.ListCreateAPIView):
-    queryset = Order.objects.all().order_by('-date')
+    queryset = Order.objects.all().order_by('-id')
     serializer_class = OrderSerializer
     # permission_classes = [IsAuthenticated]  
     filterset_class = OrderFilter
     filter_backends = [DjangoFilterBackend, rest_filters.SearchFilter,rest_filters.OrderingFilter]  # Added SearchFilter
     search_fields = ['phone_number', 'sales_person__username']  # Specify the fields to search
-    ordering_fields = ['date',]
+    ordering_fields = ['-id',]
     pagination_class = CustomPagination
 
     def get_queryset(self):
         user = self.request.user  
         if user.role == 'Distributor':  
-            queryset = Order.objects.filter(distributor=user.distributor).order_by('-date')
+            queryset = Order.objects.filter(distributor=user.distributor).order_by('-id')
             return queryset 
         elif user.role == 'SalesPerson': 
-            queryset = Order.objects.filter(sales_person=user).order_by('-date')
+            queryset = Order.objects.filter(sales_person=user).order_by('-id')
             return queryset  
         elif user.role == 'SuperAdmin':  
-            queryset = Order.objects.all().order_by('-date')
+            queryset = Order.objects.all().order_by('-id')
             return queryset
-        return Order.objects.all().order_by('-date')
+        return Order.objects.all().order_by('-id')
 
     def perform_create(self, serializer):
         salesperson = self.request.user
