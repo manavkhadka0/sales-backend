@@ -111,7 +111,7 @@ class OrderFilter(django_filters.FilterSet):
         fields = ['distributor', 'sales_person', 'order_status', 'date', 'gte_date', 'lte_date', 'city']
 
 class OrderListCreateView(generics.ListCreateAPIView):
-    queryset = Order.objects.all().order_by('date')
+    queryset = Order.objects.all().order_by('-date')
     serializer_class = OrderSerializer
     # permission_classes = [IsAuthenticated]  
     filterset_class = OrderFilter
@@ -120,18 +120,18 @@ class OrderListCreateView(generics.ListCreateAPIView):
     ordering_fields = ['date',]
     pagination_class = CustomPagination
 
-    # def get_queryset(self):
-    #     user = self.request.user  
-    #     if user.role == 'Distributor':  
-    #         queryset = Order.objects.filter(distributor=user.distributor)  
-    #         return queryset 
-    #     elif user.role == 'SalesPerson': 
-    #         queryset = Order.objects.filter(sales_person=user)  
-    #         return queryset  
-    #     elif user.role == 'SuperAdmin':  
-    #         queryset = Order.objects.all()  
-    #         return queryset
-    #     return Order.objects.all()
+    def get_queryset(self):
+        user = self.request.user  
+        if user.role == 'Distributor':  
+            queryset = Order.objects.filter(distributor=user.distributor)  
+            return queryset 
+        elif user.role == 'SalesPerson': 
+            queryset = Order.objects.filter(sales_person=user)  
+            return queryset  
+        elif user.role == 'SuperAdmin':  
+            queryset = Order.objects.all()  
+            return queryset
+        return Order.objects.all()
 
     def perform_create(self, serializer):
         salesperson = self.request.user
