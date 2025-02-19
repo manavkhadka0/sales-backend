@@ -363,5 +363,11 @@ class Inventorylogs(generics.ListAPIView):
 class InventoryRequestView(generics.CreateAPIView):
     queryset = Inventory.objects.all()
     serializer_class = InventoryRequestSerializer
+    # permission_classes = [IsAuthenticated]
+
+
+    def perform_create(self, serializer):
+        # Set the user who is logged in as the creator of the InventoryRequest
+        serializer.save(user=self.request.user)
 
 # Return an empty queryset for non-Distributor users
