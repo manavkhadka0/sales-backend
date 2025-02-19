@@ -123,15 +123,15 @@ class OrderListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         user = self.request.user  
         if user.role == 'Distributor':  
-            queryset = Order.objects.filter(distributor=user.distributor)  
+            queryset = Order.objects.filter(distributor=user.distributor).order_by('-date')
             return queryset 
         elif user.role == 'SalesPerson': 
-            queryset = Order.objects.filter(sales_person=user)  
+            queryset = Order.objects.filter(sales_person=user).order_by('-date')
             return queryset  
         elif user.role == 'SuperAdmin':  
-            queryset = Order.objects.all()  
+            queryset = Order.objects.all().order_by('-date')
             return queryset
-        return Order.objects.all()
+        return Order.objects.all().order_by('-date')
 
     def perform_create(self, serializer):
         salesperson = self.request.user
