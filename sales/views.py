@@ -104,6 +104,63 @@ class InventoryListView(generics.ListAPIView):
             # Call the superclass's list method for other roles
             return super().list(request, *args, **kwargs)
 
+class FactoryInventoryListView(generics.ListAPIView):
+    serializer_class = InventorySerializer
+    queryset = Inventory.objects.all()
+
+    def list(self, request, *args, **kwargs):
+        user = self.request.user
+        if user.role == 'SuperAdmin':
+            # Get all factories and their inventories
+            factories = Factory.objects.prefetch_related('inventory')
+            inventory_summary = []
+            for factory in factories:
+                inventory_summary.append({
+                    'factory': factory.name,
+                    'inventory': [
+                        {
+                            'product': inventory.product.name,
+                            'quantity': inventory.quantity
+                        } for inventory in factory.inventory.all()
+                    ]
+                })
+            return Response(inventory_summary)  # Return the summary for SuperAdmin
+        return Inventory.objects.none()  # Return an empty queryset for non-SuperAdmin users
+
+class DistributorInventoryListView(generics.ListAPIView):
+    serializer_class = InventorySerializer
+    queryset = Inventory.objects.all()
+
+    def list(self, request, *args, **kwargs):
+        user = self.request.user
+        if user.role == 'SuperAdmin':
+            distributors = Distributor.objects.prefetch_related('inventory')
+            inventory_summary = []
+            for distributor in distributors:
+                distributor_inventory = {
+                    distributor.name: {
+                        'inventory': [
+                            {
+                                'product': inventory.product.name,
+                                'quantity': inventory.quantity
+                            } for inventory in distributor.inventory.all()
+                        ],
+                        'franchises': {}
+                    }
+                }
+                # Get franchises associated with the distributor
+                franchises = Franchise.objects.filter(distributor=distributor)
+                for franchise in franchises:
+                    distributor_inventory[distributor.name]['franchises'][franchise.name] = [
+                        {
+                            'product': inventory.product.name,
+                            'quantity': inventory.quantity
+                        } for inventory in franchise.inventory.all()
+                    ]
+                inventory_summary.append(distributor_inventory)
+            return Response(inventory_summary)
+        return Inventory.objects.none()
+
 class CustomPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
@@ -286,6 +343,7 @@ class InventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
         # Save the updated inventory item using the serializer
         serializer.save(quantity=inventory_item.quantity)  # Pass the updated quantity to the serializer
 
+
 class InventoryChangeLogView(generics.ListAPIView):
     serializer_class = InventoryChangeLogSerializer
     queryset = InventoryChangeLog.objects.all()
@@ -305,3 +363,5 @@ class Inventorylogs(generics.ListAPIView):
 class InventoryRequestView(generics.CreateAPIView):
     queryset = Inventory.objects.all()
     serializer_class = InventoryRequestSerializer
+
+# Return an empty queryset for non-Distributor users
