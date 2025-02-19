@@ -111,7 +111,7 @@ class OrderFilter(django_filters.FilterSet):
         fields = ['distributor', 'sales_person', 'order_status', 'date', 'gte_date', 'lte_date', 'city']
 
 class OrderListCreateView(generics.ListCreateAPIView):
-    queryset = Order.objects.all().order_by('created_at')
+    queryset = Order.objects.all().order_by('date')
     serializer_class = OrderSerializer
     # permission_classes = [IsAuthenticated]  
     filterset_class = OrderFilter
