@@ -7,8 +7,8 @@ class DistributorSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class CustomUserSerializer(serializers.ModelSerializer):
-    distributor = serializers.PrimaryKeyRelatedField(queryset=Distributor.objects.all(), write_only=True, required=False)
-    franchise = serializers.PrimaryKeyRelatedField(queryset=Franchise.objects.all(), write_only=True, required=False)
+    distributor = serializers.PrimaryKeyRelatedField(queryset=Distributor.objects.all(), write_only=True, required=False, allow_null=True)
+    franchise = serializers.PrimaryKeyRelatedField(queryset=Franchise.objects.all(), write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = CustomUser
@@ -20,6 +20,13 @@ class CustomUserSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password')  # Remove password from validated data
         phone_number = validated_data.get('phone_number')
         validated_data['username'] = phone_number  # Set username to phone number
+        
+        # Handle null values for distributor and franchise
+        if 'distributor' in validated_data and validated_data['distributor'] is None:
+            validated_data.pop('distributor')
+        if 'franchise' in validated_data and validated_data['franchise'] is None:
+            validated_data.pop('franchise')
+        
         user = CustomUser(**validated_data)  # Create user instance
         user.set_password(password)  # Hash the password
         user.save()  # Save the user instance
