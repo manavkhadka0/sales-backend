@@ -6,6 +6,11 @@ class DistributorSerializer(serializers.ModelSerializer):
         model = Distributor
         fields = '__all__'
 
+class FranchiseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Franchise
+        fields = '__all__'
+
 class CustomUserSerializer(serializers.ModelSerializer):
     distributor = serializers.PrimaryKeyRelatedField(queryset=Distributor.objects.all(), write_only=True, required=False, allow_null=True)
     franchise = serializers.PrimaryKeyRelatedField(queryset=Franchise.objects.all(), write_only=True, required=False, allow_null=True)

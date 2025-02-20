@@ -5,10 +5,11 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import CustomUser
-from .serializers import CustomUserSerializer,DistributorSerializer,LoginSerializer
+from .models import CustomUser, Distributor, Franchise  # Make sure to import these models
+from .serializers import CustomUserSerializer,DistributorSerializer,LoginSerializer,FranchiseSerializer
 from rest_framework_simplejwt.tokens import RefreshToken  # Import JWT token utilities
 from rest_framework.permissions import AllowAny  # Import permission class
+from rest_framework import generics
 
 class UserListView(APIView):
     serializer_class = CustomUserSerializer
@@ -54,4 +55,20 @@ class UserProfileView(APIView):
         serializer = CustomUserSerializer(user)
         return Response(serializer.data)
     
+
+class DistributorListCreateView(generics.ListCreateAPIView):
+    queryset = Distributor.objects.all()
+    serializer_class = DistributorSerializer
+
+class FranchiseByDistributorView(APIView):
+    def get(self, request, distributor_id):
+        try:
+            franchises = Franchise.objects.filter(distributor_id=distributor_id)
+            serializer = FranchiseSerializer(franchises, many=True)
+            return Response(serializer.data)
+        except Franchise.DoesNotExist:
+            return Response(
+                {'error': 'No franchises found for this distributor'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
 
