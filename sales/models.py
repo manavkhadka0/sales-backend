@@ -8,6 +8,7 @@ class Inventory(models.Model):
     factory = models.ForeignKey('account.Factory', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
     product = models.ForeignKey('sales.Product', on_delete=models.CASCADE, related_name='inventory')
     quantity = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.product.name} - {self.quantity}"

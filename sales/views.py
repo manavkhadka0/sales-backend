@@ -120,11 +120,13 @@ class FactoryInventoryListView(generics.ListAPIView):
                     'inventory': [
                         {
                             'product': inventory.product.name,
-                            'quantity': inventory.quantity
+                            'quantity': inventory.quantity,
+
                         } for inventory in factory.inventory.all()
                     ]
                 })
             return Response(inventory_summary)  # Return the summary for SuperAdmin
+        
         return Inventory.objects.none()  # Return an empty queryset for non-SuperAdmin users
 
 class DistributorInventoryListView(generics.ListAPIView):
@@ -133,6 +135,7 @@ class DistributorInventoryListView(generics.ListAPIView):
 
     def list(self, request, *args, **kwargs):
         user = self.request.user
+        print(user.role)
         if user.role == 'SuperAdmin':
             distributors = Distributor.objects.prefetch_related('inventory')
             inventory_summary = []
@@ -145,21 +148,48 @@ class DistributorInventoryListView(generics.ListAPIView):
                                 'quantity': inventory.quantity
                             } for inventory in distributor.inventory.all()
                         ],
-                        'franchises': {}
                     }
                 }
-                # Get franchises associated with the distributor
-                franchises = Franchise.objects.filter(distributor=distributor)
-                for franchise in franchises:
-                    distributor_inventory[distributor.name]['franchises'][franchise.name] = [
+                inventory_summary.append(distributor_inventory)
+            return Response(inventory_summary)
+        elif user.role == 'Distributor':
+            # Get the distributor's inventory
+            inventory_summary = {
+                user.distributor.name: {
+                    'inventory': [
                         {
                             'product': inventory.product.name,
                             'quantity': inventory.quantity
-                        } for inventory in franchise.inventory.all()
-                    ]
-                inventory_summary.append(distributor_inventory)
+                        } for inventory in user.distributor.inventory.all()
+                    ],
+                    'franchises': {}
+                }
+            }
+            # Get franchises associated with the distributor
+            franchises = Franchise.objects.filter(distributor=user.distributor)
+            for franchise in franchises:
+                inventory_summary[user.distributor.name]['franchises'][franchise.name] = [
+                    {
+                        'product': inventory.product.name,
+                        'quantity': inventory.quantity
+                    } for inventory in franchise.inventory.all()
+                ]
             return Response(inventory_summary)
-        return Inventory.objects.none()
+        elif user.role == 'Franchise':  # Added handling for Franchise role
+            # Get the franchise's inventory
+            print(user.franchise.inventory.all())
+            inventory_summary = {
+                user.franchise.name: {
+                    'inventory': [
+                        {
+                            'product': inventory.product.name,
+                            'quantity': inventory.quantity
+                        } for inventory in user.franchise.inventory.all()
+                    ]
+                }
+            }
+            return Response(inventory_summary) # Return the summary for Franchise
+        return Response([])  # Return an empty Response for non-SuperAdmin users
 
 class CustomPagination(PageNumberPagination):
     page_size = 10
