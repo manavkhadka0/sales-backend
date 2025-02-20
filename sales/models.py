@@ -49,6 +49,7 @@ class Product(models.Model):
         ('Shampoo Sachet', 'Shampoo Sachet')
     ]
     name = models.CharField(max_length=255, choices=PRODUCT_CHOICES)
+    image=models.FileField(upload_to='products/',blank=True,null=True)
     description = models.TextField(blank=True)
 
     def __str__(self):

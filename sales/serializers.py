@@ -6,7 +6,7 @@ from account.serializers import CustomUserSerializer
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
-        fields = ['id', 'name', 'description']
+        fields = ['id', 'name', 'description','image']
 
 class InventorySerializer(serializers.ModelSerializer):
     product=ProductSerializer(read_only=True)
@@ -83,7 +83,7 @@ class OrderSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
-        fields = ['id', 'name', 'description']
+        fields = ['id', 'name', 'description','image']
 
 class SalesPersonSerializer(serializers.ModelSerializer):
     class Meta:
