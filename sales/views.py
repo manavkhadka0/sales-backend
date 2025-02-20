@@ -138,19 +138,26 @@ class DistributorInventoryListView(generics.ListAPIView):
         print(user.role)
         if user.role == 'SuperAdmin':
             distributors = Distributor.objects.prefetch_related('inventory')
-            inventory_summary = []
+            inventory_summary = {}  # Changed from list to dictionary
             for distributor in distributors:
                 distributor_inventory = {
-                    distributor.name: {
-                        'inventory': [
-                            {
-                                'product': inventory.product.name,
-                                'quantity': inventory.quantity
-                            } for inventory in distributor.inventory.all()
-                        ],
-                    }
+                    'inventory': [
+                        {
+                            'product': inventory.product.name,
+                            'quantity': inventory.quantity
+                        } for inventory in distributor.inventory.all()
+                    ],
+                    'franchises': {}
                 }
-                inventory_summary.append(distributor_inventory)
+                franchises = Franchise.objects.filter(distributor=distributor)
+                for franchise in franchises:
+                    distributor_inventory['franchises'][franchise.name] = [  # Accessing the correct dictionary
+                        {
+                            'product': inventory.product.name,
+                            'quantity': inventory.quantity
+                        } for inventory in franchise.inventory.all()
+                    ]
+                inventory_summary[distributor.name] = distributor_inventory  # Store in the dictionary
             return Response(inventory_summary)
         elif user.role == 'Distributor':
             # Get the distributor's inventory
@@ -188,7 +195,7 @@ class DistributorInventoryListView(generics.ListAPIView):
                     ]
                 }
             }
-            return Response(inventory_summary) # Return the summary for Franchise
+            return Response(inventory_summary)  # Return the summary for Franchise
         return Response([])  # Return an empty Response for non-SuperAdmin users
 
 class CustomPagination(PageNumberPagination):
