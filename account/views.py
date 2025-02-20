@@ -37,9 +37,11 @@ class LoginView(APIView):
             user = CustomUser.objects.get(phone_number=phone_number)
             if user.check_password(password):  # Check if the password is correct
                 refresh = RefreshToken.for_user(user)  # Create JWT tokens
+                user_serializer = CustomUserSerializer(user)  # Serialize user data
                 return Response({
                     'refresh': str(refresh),
                     'access': str(refresh.access_token),
+                    'user': user_serializer.data  # Include user details in response
                 }, status=status.HTTP_200_OK)
             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
         except CustomUser.DoesNotExist:

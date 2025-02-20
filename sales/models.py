@@ -56,11 +56,11 @@ class Product(models.Model):
 
 class OrderProduct(models.Model):
     order = models.ForeignKey('Order', on_delete=models.CASCADE, related_name='order_products')
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    product = models.ForeignKey(Inventory, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
 
     def __str__(self):
-        return f"{self.product.name} - {self.quantity}"
+        return f"{self.product.product.name} - {self.quantity}"
 
 class Order(models.Model):
     PAYMENT_CHOICES = [
@@ -73,7 +73,7 @@ class Order(models.Model):
         ('Delivered', 'Delivered'),
         ('Cancelled', 'Cancelled')
     ]
-    distributor = models.ForeignKey('account.Distributor', on_delete=models.CASCADE, related_name='orders')
+    franchise = models.ForeignKey('account.Franchise', on_delete=models.CASCADE, related_name='orders')
     sales_person = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE, related_name='orders')
     full_name = models.CharField(max_length=200)
     city = models.CharField(max_length=200, blank=True)
@@ -97,12 +97,12 @@ class Order(models.Model):
 
 class Commission(models.Model):
     sales_person = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE, related_name='commissions')
-    distributor = models.ForeignKey('account.Distributor', on_delete=models.CASCADE, related_name='commissions')
+    franchise = models.ForeignKey('account.Franchise', on_delete=models.CASCADE, related_name='commissions')
     rate = models.DecimalField(max_digits=10, decimal_places=2)
     paid=models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.sales_person} - {self.distributor} - ₹{self.rate}"
+        return f"{self.sales_person} - {self.franchise} - ₹{self.rate}"
 

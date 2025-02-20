@@ -21,8 +21,12 @@ class InventoryChangeLogSerializer(serializers.ModelSerializer):
 
 
 class OrderProductSerializer(serializers.ModelSerializer):
-    product = ProductSerializer(read_only=True)
-    product_id = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), write_only=True, source='product')
+    product = InventorySerializer(read_only=True)
+    product_id = serializers.PrimaryKeyRelatedField(
+        queryset=Inventory.objects.all(),  # Changed from Product to Inventory
+        write_only=True,
+        source='product'
+    )
 
     class Meta:
         model = OrderProduct
@@ -30,14 +34,39 @@ class OrderProductSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     order_products = OrderProductSerializer(many=True)
-    sales_person=CustomUserSerializer(read_only=True)
+    sales_person = CustomUserSerializer(read_only=True)
+    franchise_name = serializers.CharField(source='franchise.name', read_only=True)
+    
     class Meta:
         model = Order
-        fields = ['id','full_name', 'city', 'delivery_address', 'landmark',
+        fields = ['id', 'full_name', 'city', 'delivery_address', 'landmark',
                   'phone_number', 'alternate_phone_number', 'delivery_charge', 'payment_method',
-                  'payment_screenshot', 'order_status', 'date','created_at', 'updated_at', 'order_products',
-                  'total_amount', 'remarks','sales_person']
+                  'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at', 'order_products',
+                  'total_amount', 'remarks', 'sales_person', 'franchise_name']
 
+    def create(self, validated_data):
+        # Extract order_products data from validated_data
+        order_products_data = validated_data.pop('order_products')
+        
+        # Get the user from the context
+        user = self.context['request'].user
+        
+        # Remove sales_person and franchise from validated_data if they exist
+        validated_data.pop('sales_person', None)
+        validated_data.pop('franchise', None)
+        
+        # Create the order instance
+        order = Order.objects.create(
+            sales_person=user,
+            franchise=user.franchise,
+            **validated_data
+        )
+        
+        # Create each order product
+        for order_product_data in order_products_data:
+            OrderProduct.objects.create(order=order, **order_product_data)
+        
+        return order
 
     def update(self, instance, validated_data):
         order_products_data = validated_data.pop('order_products', None)
@@ -54,7 +83,7 @@ class OrderSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
-        fields = ['id', 'name', 'price', 'description']
+        fields = ['id', 'name', 'description']
 
 class SalesPersonSerializer(serializers.ModelSerializer):
     class Meta:

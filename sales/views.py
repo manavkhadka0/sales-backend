@@ -11,6 +11,7 @@ from django_filters import rest_framework as django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as rest_filters
 from rest_framework.pagination import PageNumberPagination
+from rest_framework import serializers
 
 # Create your views here.
 
@@ -93,6 +94,7 @@ class InventoryListView(generics.ListAPIView):
                 user.franchise.name: {
                     'inventory': [
                         {
+                            'id': inventory.id,
                             'product': inventory.product.name,
                             'quantity': inventory.quantity
                         } for inventory in user.franchise.inventory.all()
@@ -184,7 +186,6 @@ class DistributorInventoryListView(generics.ListAPIView):
             return Response(inventory_summary)
         elif user.role == 'Franchise':  # Added handling for Franchise role
             # Get the franchise's inventory
-            print(user.franchise.inventory.all())
             inventory_summary = {
                 user.franchise.name: {
                     'inventory': [
@@ -219,7 +220,7 @@ class OrderFilter(django_filters.FilterSet):
 class OrderListCreateView(generics.ListCreateAPIView):
     queryset = Order.objects.all().order_by('-id')
     serializer_class = OrderSerializer
-    # permission_classes = [IsAuthenticated]  
+    # permission_classes = [IsAuthenticated]
     filterset_class = OrderFilter
     filter_backends = [DjangoFilterBackend, rest_filters.SearchFilter,rest_filters.OrderingFilter]  # Added SearchFilter
     search_fields = ['phone_number', 'sales_person__username']  # Specify the fields to search
@@ -229,48 +230,63 @@ class OrderListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         user = self.request.user  
         if user.role == 'Distributor':  
-            queryset = Order.objects.filter(distributor=user.distributor).order_by('-id')
+            # Get orders from all franchises under this distributor
+            franchises = Franchise.objects.filter(distributor=user.distributor)
+            queryset = Order.objects.filter(franchise__in=franchises).order_by('-id')
             return queryset 
         elif user.role == 'SalesPerson': 
+            # Get orders where the user is the sales person
             queryset = Order.objects.filter(sales_person=user).order_by('-id')
             return queryset  
+        elif user.role == 'Franchise':
+            # Get orders for this franchise
+            queryset = Order.objects.filter(franchise=user.franchise).order_by('-id')
+            return queryset
         elif user.role == 'SuperAdmin':  
+            # SuperAdmin can see all orders
             queryset = Order.objects.all().order_by('-id')
             return queryset
-        return Order.objects.all().order_by('-id')
+        else:
+            return Order.objects.none()  # Return empty queryset for unknown roles
 
     def perform_create(self, serializer):
         salesperson = self.request.user
-        distributor = salesperson.distributor
+        franchise = salesperson.franchise
         
-        # Check if the phone number already exists in any order
-        phone_number = self.request.data.get('phone_number')
-        existing_order = Order.objects.filter(phone_number=phone_number).first()
-        
-        if existing_order:
-            # If an existing order is found, return a message with details
-            order_detail_serializer = OrderDetailSerializer(existing_order)
-            return Response({
-                "detail": "This phone number is already associated with an existing order.",
-                "order": order_detail_serializer.data
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        order = serializer.save(sales_person=salesperson, distributor=distributor)
-
-        # Reduce the quantity in the Inventory model
+        # Validate inventory before creating order
         order_products_data = self.request.data.get('order_products', [])
         for order_product_data in order_products_data:
-            product_id = order_product_data['product_id']
+            inventory_id = order_product_data['product_id']
             quantity = order_product_data['quantity']
 
-            # Get the corresponding Inventory item
             try:
-                inventory_item = Inventory.objects.get(distributor=distributor, product_id=product_id)
-                inventory_item.quantity -= quantity
-                inventory_item.save()  # Save the updated inventory item
+                inventory_item = Inventory.objects.get(
+                    id=inventory_id,
+                    franchise=franchise  # Ensure the inventory belongs to the franchise
+                )
+                if inventory_item.quantity < quantity:
+                    raise serializers.ValidationError(
+                        f"Insufficient inventory for product {inventory_item.product.name}. "
+                        f"Available: {inventory_item.quantity}, Requested: {quantity}"
+                    )
             except Inventory.DoesNotExist:
-                # Handle the case where the inventory item does not exist
-                raise Exception(f"Inventory item for product ID {product_id} not found for distributor {distributor.id}.")
+                raise serializers.ValidationError(
+                    f"Inventory item with ID {inventory_id} not found in franchise inventory"
+                )
+
+        # Create order if validation passes
+        order = serializer.save(sales_person=salesperson, franchise=franchise)
+
+        # Update inventory quantities
+        for order_product_data in order_products_data:
+            inventory_id = order_product_data['product_id']
+            quantity = order_product_data['quantity']
+
+            inventory_item = Inventory.objects.get(id=inventory_id)
+            inventory_item.quantity -= quantity
+            inventory_item.save()
+
+        return order
 
 class OrderUpdateView(generics.UpdateAPIView):
     queryset = Order.objects.all()
@@ -346,13 +362,58 @@ class CommissionPaymentView(generics.UpdateAPIView):
             return Response({"detail": "Commission not found for this salesperson."}, status=status.HTTP_404_NOT_FOUND)
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        if order.salesperson != request.user:
-            return Response({"detail": "You do not have permission to update this order."}, status=status.HTTP_403_FORBIDDEN)
-        return super().update(request, *args, **kwargs)
+
     
 class ProductListView(generics.ListAPIView):
     serializer_class = ProductSerializer
-    queryset = Product.objects.all()
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'Franchise' or user.role == 'SalesPerson':
+            # Get products and their inventory IDs from franchise's inventory
+            franchise_inventory = Inventory.objects.filter(franchise=user.franchise).values(
+                'id', 
+                'product', 
+                'product__name',
+                'quantity'
+            )
+            product_list = []
+            for inv in franchise_inventory:
+                product_list.append({
+                    'inventory_id': inv['id'],
+                    'product_id': inv['product'],
+                    'product_name': inv['product__name'],
+                    'quantity': inv['quantity']
+                })
+            return product_list
+        elif user.role == 'Distributor':
+            # Get products and their inventory IDs from distributor's inventory
+            distributor_inventory = Inventory.objects.filter(distributor=user.distributor).values(
+                'id', 
+                'product', 
+                'product__name',
+                'quantity'
+            )
+            product_list = []
+            for inv in distributor_inventory:
+                product_list.append({
+                    'inventory_id': inv['id'],
+                    'product_id': inv['product'],
+                    'product_name': inv['product__name'],
+                    'quantity': inv['quantity']
+                })
+            return product_list
+        elif user.role == 'SuperAdmin':
+            # SuperAdmin can see all products
+            return Product.objects.all()
+        return Product.objects.none()  # Return empty queryset for other roles
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        if isinstance(queryset, list):  # If it's our custom product list
+            return Response(queryset)
+        # Otherwise, use default serializer behavior
+        return super().list(request, *args, **kwargs)
 
 class InventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Inventory.objects.all()
