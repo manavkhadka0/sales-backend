@@ -628,3 +628,18 @@ class InventoryRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
             serializer.instance.status = status
 
         serializer.save()  # Save the updated instance 
+
+class AllProductsListView(generics.ListAPIView):
+    serializer_class = ProductSerializer
+    queryset = Product.objects.all()
+    filter_backends = [DjangoFilterBackend, rest_filters.SearchFilter, rest_filters.OrderingFilter]
+    search_fields = ['name']
+    ordering_fields = ['name', 'id']
+    pagination_class = CustomPagination
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        if isinstance(queryset, list):  # If it's our custom product list
+            return Response(queryset)
+        # Otherwise, use default serializer behavior
+        return super().list(request, *args, **kwargs) 

@@ -1,6 +1,6 @@
 # sales-backend/sales/urls.py
 from django.urls import path
-from .views import InventoryListView, OrderListCreateView, OrderUpdateView,CommissionPaymentView,ProductListView,InventoryDetailView,InventoryChangeLogView,Inventorylogs,FactoryInventoryListView,DistributorInventoryListView,InventoryRequestView,InventoryRequestDetailView
+from .views import InventoryListView, OrderListCreateView, OrderUpdateView,CommissionPaymentView,ProductListView,InventoryDetailView,InventoryChangeLogView,Inventorylogs,FactoryInventoryListView,DistributorInventoryListView,InventoryRequestView,InventoryRequestDetailView,AllProductsListView
     
 urlpatterns = [
     path('inventory/', InventoryListView.as_view(), name='inventory-list'),
@@ -16,6 +16,8 @@ urlpatterns = [
     path('orders/<int:pk>/', OrderUpdateView.as_view(), name='order-update'),  # URL for updating orders
     path('commission/payment/<int:salesperson_id>/', CommissionPaymentView.as_view(), name='commission-payment'),
     path('products/', ProductListView.as_view(), name='product-list'),
+    path('all-products/', AllProductsListView.as_view(), name='all-products-list'),
+
 
 
 ]
