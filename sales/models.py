@@ -20,7 +20,7 @@ class Inventory(models.Model):
         return f"{self.product.name} - {self.quantity}"
 
 class InventoryChangeLog(models.Model):
-    inventory = models.ForeignKey(Inventory, on_delete=models.CASCADE, related_name='change_logs')
+    inventory = models.ForeignKey(Inventory, on_delete=models.SET_NULL, null=True, related_name='change_logs')
     user = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE, related_name='inventory_changes')
     changed_at = models.DateTimeField(auto_now_add=True)
     old_quantity = models.PositiveIntegerField()
