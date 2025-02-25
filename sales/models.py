@@ -25,6 +25,11 @@ class InventoryChangeLog(models.Model):
     changed_at = models.DateTimeField(auto_now_add=True)
     old_quantity = models.PositiveIntegerField()
     new_quantity = models.PositiveIntegerField()
+    action = models.CharField(max_length=20, default='update', choices=[
+        ('add', 'Add'),
+        ('update', 'Update'),
+        ('deleted', 'Deleted'),
+    ])
 
     def __str__(self):
         return f"Change by {self.user.username} on {self.changed_at}: {self.old_quantity} -> {self.new_quantity}"

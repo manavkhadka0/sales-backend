@@ -130,12 +130,13 @@ class InventoryListView(generics.ListCreateAPIView):
             ).first()
 
             if existing_inventory:
-                # Create log before updating
+                # Create log before updating with 'update' action
                 InventoryChangeLog.objects.create(
                     inventory=existing_inventory,
                     user=user,
                     old_quantity=existing_inventory.quantity,
-                    new_quantity=existing_inventory.quantity + quantity
+                    new_quantity=existing_inventory.quantity + quantity,
+                    action='update'
                 )
                 # Update existing inventory
                 existing_inventory.quantity += quantity
@@ -145,12 +146,13 @@ class InventoryListView(generics.ListCreateAPIView):
             else:
                 # Create new inventory
                 inventory = serializer.save(franchise=user.franchise)
-                # Create log for new inventory
+                # Create log for new inventory with 'add' action
                 InventoryChangeLog.objects.create(
                     inventory=inventory,
                     user=user,
                     old_quantity=0,
-                    new_quantity=quantity
+                    new_quantity=quantity,
+                    action='add'
                 )
                 return inventory
 
@@ -161,12 +163,13 @@ class InventoryListView(generics.ListCreateAPIView):
             ).first()
 
             if existing_inventory:
-                # Create log before updating
+                # Create log before updating with 'update' action
                 InventoryChangeLog.objects.create(
                     inventory=existing_inventory,
                     user=user,
                     old_quantity=existing_inventory.quantity,
-                    new_quantity=existing_inventory.quantity + quantity
+                    new_quantity=existing_inventory.quantity + quantity,
+                    action='update'
                 )
                 existing_inventory.quantity += quantity
                 existing_inventory.status = status
@@ -174,12 +177,13 @@ class InventoryListView(generics.ListCreateAPIView):
                 return existing_inventory
             else:
                 inventory = serializer.save(distributor=user.distributor)
-                # Create log for new inventory
+                # Create log for new inventory with 'add' action
                 InventoryChangeLog.objects.create(
                     inventory=inventory,
                     user=user,
                     old_quantity=0,
-                    new_quantity=quantity
+                    new_quantity=quantity,
+                    action='add'
                 )
                 return inventory
 
@@ -190,12 +194,13 @@ class InventoryListView(generics.ListCreateAPIView):
             ).first()
 
             if existing_inventory:
-                # Create log before updating
+                # Create log before updating with 'update' action
                 InventoryChangeLog.objects.create(
                     inventory=existing_inventory,
                     user=user,
                     old_quantity=existing_inventory.quantity,
-                    new_quantity=existing_inventory.quantity + quantity
+                    new_quantity=existing_inventory.quantity + quantity,
+                    action='update'
                 )
                 existing_inventory.quantity += quantity
                 existing_inventory.status = status
@@ -203,12 +208,13 @@ class InventoryListView(generics.ListCreateAPIView):
                 return existing_inventory
             else:
                 inventory = serializer.save(factory=user.factory)
-                # Create log for new inventory
+                # Create log for new inventory with 'add' action
                 InventoryChangeLog.objects.create(
                     inventory=inventory,
                     user=user,
                     old_quantity=0,
-                    new_quantity=quantity
+                    new_quantity=quantity,
+                    action='add'
                 )
                 return inventory
         else:
@@ -402,14 +408,24 @@ class OrderListCreateView(generics.ListCreateAPIView):
         # Create order if validation passes
         order = serializer.save(sales_person=salesperson, franchise=franchise)
 
-        # Update inventory quantities
+        # Update inventory quantities and create logs
         for order_product_data in order_products_data:
             inventory_id = order_product_data['product_id']
             quantity = order_product_data['quantity']
 
             inventory_item = Inventory.objects.get(id=inventory_id)
+            old_quantity = inventory_item.quantity
             inventory_item.quantity -= quantity
             inventory_item.save()
+
+            # Create log for inventory update from order
+            InventoryChangeLog.objects.create(
+                inventory=inventory_item,
+                user=self.request.user,
+                old_quantity=old_quantity,
+                new_quantity=inventory_item.quantity,
+                action='update'
+            )
 
         return order
 
@@ -564,7 +580,7 @@ class InventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_update(self, serializer):
         inventory_item = self.get_object()
-        user = self.request.user  # Get the current user
+        user = self.request.user
         
         # Retrieve the new quantity from the request data
         new_quantity = self.request.data.get('new_quantity')        
@@ -573,7 +589,8 @@ class InventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
             inventory=inventory_item,
             user=user,
             old_quantity=inventory_item.quantity,
-            new_quantity=new_quantity if new_quantity is not None else inventory_item.quantity
+            new_quantity=new_quantity if new_quantity is not None else inventory_item.quantity,
+            action='update'
         )
         
         # Update the inventory item's quantity if new_quantity is provided
@@ -582,6 +599,21 @@ class InventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
         
         # Save the updated inventory item using the serializer
         serializer.save(quantity=inventory_item.quantity)
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        
+        # Create a log entry before deleting
+        InventoryChangeLog.objects.create(
+            inventory=instance,
+            user=user,
+            old_quantity=instance.quantity,
+            new_quantity=0,
+            action='deleted'
+        )
+        
+        # Perform the deletion
+        instance.delete()
 
 
 class InventoryChangeLogView(generics.ListAPIView):
