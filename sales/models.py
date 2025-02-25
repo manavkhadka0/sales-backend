@@ -3,10 +3,16 @@ from django.db import models
 # Create your models here.
 
 class Inventory(models.Model):
+    STATUS_CHOICES = [
+        ('incoming', 'Incoming'),
+        ('ready_to_dispatch', 'Ready to Dispatch'),
+        ('damaged_returned', 'Damaged/Returned')
+    ]
     distributor = models.ForeignKey('account.Distributor', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
     franchise= models.ForeignKey('account.Franchise', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
     factory = models.ForeignKey('account.Factory', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
     product = models.ForeignKey('sales.Product', on_delete=models.CASCADE, related_name='inventory')
+    status = models.CharField(max_length=255, choices=STATUS_CHOICES, default='incoming',null=True, blank=True)
     quantity = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -15,12 +21,13 @@ class Inventory(models.Model):
 
 class InventoryChangeLog(models.Model):
     inventory = models.ForeignKey(Inventory, on_delete=models.CASCADE, related_name='change_logs')
+    user = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE, related_name='inventory_changes')
     changed_at = models.DateTimeField(auto_now_add=True)
     old_quantity = models.PositiveIntegerField()
     new_quantity = models.PositiveIntegerField()
 
     def __str__(self):
-        return f"Change on {self.changed_at}: {self.old_quantity} -> {self.new_quantity}"
+        return f"Change by {self.user.username} on {self.changed_at}: {self.old_quantity} -> {self.new_quantity}"
 
 class InventoryRequest(models.Model):
     STATUS_CHOICES=(
@@ -40,15 +47,7 @@ class InventoryRequest(models.Model):
     
 
 class Product(models.Model):
-    PRODUCT_CHOICES = [
-        ('Dandruff Oil Bottle', 'Dandruff Oil Bottle'),
-        ('Hairfall Oil Bottle', 'Hairfall Oil Bottle'),
-        ('Baldness Oil Bottle', 'Baldness Oil Bottle'),
-        ('Hair Oil Sachet', 'Hair Oil Sachet'),
-        ('Shampoo Bottle', 'Shampoo Bottle'),
-        ('Shampoo Sachet', 'Shampoo Sachet')
-    ]
-    name = models.CharField(max_length=255, choices=PRODUCT_CHOICES)
+    name = models.CharField(max_length=255)
     image=models.FileField(upload_to='products/',blank=True,null=True)
     description = models.TextField(blank=True)
 

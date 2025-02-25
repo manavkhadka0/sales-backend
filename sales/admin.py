@@ -19,7 +19,7 @@ class OrderAdmin(ModelAdmin):
     inlines = [OrderProductInline]
 
 class ProductAdmin(ModelAdmin):
-    list_display = ['name']
+    list_display = ['name','id']
 
 class InventoryAdmin(ModelAdmin):
     list_display = ['product', 'id','distributor', 'franchise','quantity']

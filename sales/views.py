@@ -15,15 +15,9 @@ from rest_framework import serializers
 
 # Create your views here.
 
-class InventoryListView(generics.ListAPIView):
+class InventoryListView(generics.ListCreateAPIView):
     serializer_class = InventorySerializer
     # permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        user = self.request.user
-        if user.role == 'Franchise':  # Only get inventory for Franchise users
-            return Inventory.objects.filter(franchise=user.franchise)  # Franchise can see their own inventory
-        return Inventory.objects.none()  # Return an empty queryset for other roles
 
     def list(self, request, *args, **kwargs):
         user = self.request.user
@@ -36,8 +30,11 @@ class InventoryListView(generics.ListAPIView):
                 inventory_summary[factory.name] = {
                     'inventory': [
                         {
+                            'id': inventory.id,
+                            'product_id': inventory.product.id,
                             'product': inventory.product.name,
-                            'quantity': inventory.quantity
+                            'quantity': inventory.quantity,
+                            'status': inventory.status
                         } for inventory in factory.inventory.all()
                     ],
                     'distributors': {}
@@ -48,8 +45,11 @@ class InventoryListView(generics.ListAPIView):
                     inventory_summary[factory.name]['distributors'][distributor.name] = {
                         'inventory': [
                             {
+                                'id': inventory.id,
+                                'product_id': inventory.product.id,
                                 'product': inventory.product.name,
-                                'quantity': inventory.quantity
+                                'quantity': inventory.quantity,
+                                'status': inventory.status
                             } for inventory in distributor.inventory.all()
                         ],
                         'franchises': {}
@@ -59,8 +59,11 @@ class InventoryListView(generics.ListAPIView):
                     for franchise in franchises:
                         inventory_summary[factory.name]['distributors'][distributor.name]['franchises'][franchise.name] = [
                             {
+                                'id': inventory.id,
+                                'product_id': inventory.product.id,
                                 'product': inventory.product.name,
-                                'quantity': inventory.quantity
+                                'quantity': inventory.quantity,
+                                'status': inventory.status
                             } for inventory in franchise.inventory.all()
                         ]
             return Response(inventory_summary)  # Return the summary for SuperAdmin
@@ -70,8 +73,11 @@ class InventoryListView(generics.ListAPIView):
                 user.distributor.name: {
                     'inventory': [
                         {
+                            'id': inventory.id,
+                            'product_id': inventory.product.id,
                             'product': inventory.product.name,
-                            'quantity': inventory.quantity
+                            'quantity': inventory.quantity,
+                            'status': inventory.status
                         } for inventory in user.distributor.inventory.all()
                     ],
                     'franchises': {}
@@ -82,8 +88,11 @@ class InventoryListView(generics.ListAPIView):
             for franchise in franchises:
                 inventory_summary[user.distributor.name]['franchises'][franchise.name] = [
                     {
+                        'id': inventory.id,
+                        'product_id': inventory.product.id,
                         'product': inventory.product.name,
-                        'quantity': inventory.quantity
+                        'quantity': inventory.quantity,
+                        'status': inventory.status
                     } for inventory in franchise.inventory.all()
                 ]
             return Response(inventory_summary)  # Return the summary for Distributor
@@ -95,8 +104,10 @@ class InventoryListView(generics.ListAPIView):
                     'inventory': [
                         {
                             'id': inventory.id,
+                            'product_id': inventory.product.id,
                             'product': inventory.product.name,
-                            'quantity': inventory.quantity
+                            'quantity': inventory.quantity,
+                            'status': inventory.status
                         } for inventory in user.franchise.inventory.all()
                     ]
                 }
@@ -105,6 +116,103 @@ class InventoryListView(generics.ListAPIView):
         else:
             # Call the superclass's list method for other roles
             return super().list(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        product = serializer.validated_data['product']
+        quantity = serializer.validated_data['quantity']
+        status = serializer.validated_data.get('status', 'incoming')
+
+        if user.role == 'Franchise':
+            existing_inventory = Inventory.objects.filter(
+                franchise=user.franchise,
+                product=product
+            ).first()
+
+            if existing_inventory:
+                # Create log before updating
+                InventoryChangeLog.objects.create(
+                    inventory=existing_inventory,
+                    user=user,
+                    old_quantity=existing_inventory.quantity,
+                    new_quantity=existing_inventory.quantity + quantity
+                )
+                # Update existing inventory
+                existing_inventory.quantity += quantity
+                existing_inventory.status = status
+                existing_inventory.save()
+                return existing_inventory
+            else:
+                # Create new inventory
+                inventory = serializer.save(franchise=user.franchise)
+                # Create log for new inventory
+                InventoryChangeLog.objects.create(
+                    inventory=inventory,
+                    user=user,
+                    old_quantity=0,
+                    new_quantity=quantity
+                )
+                return inventory
+
+        elif user.role == 'Distributor':
+            existing_inventory = Inventory.objects.filter(
+                distributor=user.distributor,
+                product=product
+            ).first()
+
+            if existing_inventory:
+                # Create log before updating
+                InventoryChangeLog.objects.create(
+                    inventory=existing_inventory,
+                    user=user,
+                    old_quantity=existing_inventory.quantity,
+                    new_quantity=existing_inventory.quantity + quantity
+                )
+                existing_inventory.quantity += quantity
+                existing_inventory.status = status
+                existing_inventory.save()
+                return existing_inventory
+            else:
+                inventory = serializer.save(distributor=user.distributor)
+                # Create log for new inventory
+                InventoryChangeLog.objects.create(
+                    inventory=inventory,
+                    user=user,
+                    old_quantity=0,
+                    new_quantity=quantity
+                )
+                return inventory
+
+        elif user.role == 'SuperAdmin':
+            existing_inventory = Inventory.objects.filter(
+                factory=user.factory,
+                product=product
+            ).first()
+
+            if existing_inventory:
+                # Create log before updating
+                InventoryChangeLog.objects.create(
+                    inventory=existing_inventory,
+                    user=user,
+                    old_quantity=existing_inventory.quantity,
+                    new_quantity=existing_inventory.quantity + quantity
+                )
+                existing_inventory.quantity += quantity
+                existing_inventory.status = status
+                existing_inventory.save()
+                return existing_inventory
+            else:
+                inventory = serializer.save(factory=user.factory)
+                # Create log for new inventory
+                InventoryChangeLog.objects.create(
+                    inventory=inventory,
+                    user=user,
+                    old_quantity=0,
+                    new_quantity=quantity
+                )
+                return inventory
+        else:
+            raise serializers.ValidationError("User does not have permission to create inventory")
 
 class FactoryInventoryListView(generics.ListAPIView):
     serializer_class = InventorySerializer
@@ -404,8 +512,24 @@ class ProductListView(generics.ListAPIView):
                 })
             return product_list
         elif user.role == 'SuperAdmin':
-            # SuperAdmin can see all products
-            return Product.objects.all()
+            # Get products and their inventory IDs from factory's inventory
+            factory_inventory = Inventory.objects.filter(factory=user.factory).values(
+                'id', 
+                'product', 
+                'product__name',
+                'quantity',
+                'status'
+            )
+            product_list = []
+            for inv in factory_inventory:
+                product_list.append({
+                    'inventory_id': inv['id'],
+                    'product_id': inv['product'],
+                    'product_name': inv['product__name'],
+                    'quantity': inv['quantity'],
+                    'status': inv['status']
+                })
+            return product_list
         return Product.objects.none()  # Return empty queryset for other roles
 
     def list(self, request, *args, **kwargs):
@@ -415,6 +539,7 @@ class ProductListView(generics.ListAPIView):
         # Otherwise, use default serializer behavior
         return super().list(request, *args, **kwargs)
 
+
 class InventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Inventory.objects.all()
     serializer_class = InventorySerializer
@@ -422,22 +547,24 @@ class InventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_update(self, serializer):
         inventory_item = self.get_object()
+        user = self.request.user  # Get the current user
         
         # Retrieve the new quantity from the request data
         new_quantity = self.request.data.get('new_quantity')        
         # Create a log entry before updating
         InventoryChangeLog.objects.create(
             inventory=inventory_item,
+            user=user,
             old_quantity=inventory_item.quantity,
             new_quantity=new_quantity if new_quantity is not None else inventory_item.quantity
         )
         
         # Update the inventory item's quantity if new_quantity is provided
-        if new_quantity is not None:  # Check if new_quantity is provided
+        if new_quantity is not None:
             inventory_item.quantity = new_quantity
         
         # Save the updated inventory item using the serializer
-        serializer.save(quantity=inventory_item.quantity)  # Pass the updated quantity to the serializer
+        serializer.save(quantity=inventory_item.quantity)
 
 
 class InventoryChangeLogView(generics.ListAPIView):

@@ -9,10 +9,17 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description','image']
 
 class InventorySerializer(serializers.ModelSerializer):
-    product=ProductSerializer(read_only=True)
+    product = ProductSerializer(read_only=True)
+    product_id = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(),
+        write_only=True,
+        source='product'
+    )
+
     class Meta:
         model = Inventory
-        fields = ['id', 'distributor', 'product', 'quantity']
+        fields = ['id', 'distributor', 'franchise', 'factory', 'product', 'product_id', 'quantity', 'status']
+        read_only_fields = ['distributor', 'franchise', 'factory']  # These will be set in the view
 
 class InventoryChangeLogSerializer(serializers.ModelSerializer):
     class Meta:
