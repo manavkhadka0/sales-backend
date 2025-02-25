@@ -229,9 +229,11 @@ class FactoryInventoryListView(generics.ListAPIView):
                     'factory': factory.name,
                     'inventory': [
                         {
+                            'id': inventory.id,
+                            'product_id': inventory.product.id,
                             'product': inventory.product.name,
                             'quantity': inventory.quantity,
-
+                            'status': inventory.status
                         } for inventory in factory.inventory.all()
                     ]
                 })
@@ -253,8 +255,11 @@ class DistributorInventoryListView(generics.ListAPIView):
                 distributor_inventory = {
                     'inventory': [
                         {
+                            'id': inventory.id,
+                            'product_id': inventory.product.id, 
                             'product': inventory.product.name,
-                            'quantity': inventory.quantity
+                            'quantity': inventory.quantity,
+                            'status': inventory.status
                         } for inventory in distributor.inventory.all()
                     ],
                     'franchises': {}
@@ -263,8 +268,11 @@ class DistributorInventoryListView(generics.ListAPIView):
                 for franchise in franchises:
                     distributor_inventory['franchises'][franchise.name] = [  # Accessing the correct dictionary
                         {
+                            'id': inventory.id,
+                            'product_id': inventory.product.id,
                             'product': inventory.product.name,
-                            'quantity': inventory.quantity
+                            'quantity': inventory.quantity,
+                            'status': inventory.status
                         } for inventory in franchise.inventory.all()
                     ]
                 inventory_summary[distributor.name] = distributor_inventory  # Store in the dictionary
@@ -275,8 +283,11 @@ class DistributorInventoryListView(generics.ListAPIView):
                 user.distributor.name: {
                     'inventory': [
                         {
+                            'id': inventory.id,
+                            'product_id': inventory.product.id,
                             'product': inventory.product.name,
-                            'quantity': inventory.quantity
+                            'quantity': inventory.quantity,
+                            'status': inventory.status
                         } for inventory in user.distributor.inventory.all()
                     ],
                     'franchises': {}
@@ -287,8 +298,11 @@ class DistributorInventoryListView(generics.ListAPIView):
             for franchise in franchises:
                 inventory_summary[user.distributor.name]['franchises'][franchise.name] = [
                     {
+                        'id': inventory.id,
+                        'product_id': inventory.product.id,
                         'product': inventory.product.name,
-                        'quantity': inventory.quantity
+                        'quantity': inventory.quantity,
+                        'status': inventory.status
                     } for inventory in franchise.inventory.all()
                 ]
             return Response(inventory_summary)
@@ -298,8 +312,11 @@ class DistributorInventoryListView(generics.ListAPIView):
                 user.franchise.name: {
                     'inventory': [
                         {
+                            'id': inventory.id,
+                            'product_id': inventory.product.id,
                             'product': inventory.product.name,
-                            'quantity': inventory.quantity
+                            'quantity': inventory.quantity,
+                            'status': inventory.status
                         } for inventory in user.franchise.inventory.all()
                     ]
                 }
