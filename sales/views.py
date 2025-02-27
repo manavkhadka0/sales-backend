@@ -28,6 +28,7 @@ class InventoryListCreateView(generics.ListCreateAPIView):
             inventory_summary = {}
             for factory in factories:
                 inventory_summary[factory.name] = {
+                    'id': factory.id,
                     'inventory': [
                         {
                             'id': inventory.id,
@@ -43,6 +44,7 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                 distributors = Distributor.objects.prefetch_related('inventory')
                 for distributor in distributors:
                     inventory_summary[factory.name]['distributors'][distributor.name] = {
+                        'id': distributor.id,
                         'inventory': [
                             {
                                 'id': inventory.id,
@@ -57,20 +59,24 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                     # Get franchises associated with the distributor
                     franchises = Franchise.objects.filter(distributor=distributor)
                     for franchise in franchises:
-                        inventory_summary[factory.name]['distributors'][distributor.name]['franchises'][franchise.name] = [
-                            {
-                                'id': inventory.id,
-                                'product_id': inventory.product.id,
-                                'product': inventory.product.name,
-                                'quantity': inventory.quantity,
-                                'status': inventory.status
-                            } for inventory in franchise.inventory.all()
-                        ]
+                        inventory_summary[factory.name]['distributors'][distributor.name]['franchises'][franchise.name] = {
+                            'id': franchise.id,
+                            'inventory': [
+                                {
+                                    'id': inventory.id,
+                                    'product_id': inventory.product.id,
+                                    'product': inventory.product.name,
+                                    'quantity': inventory.quantity,
+                                    'status': inventory.status
+                                } for inventory in franchise.inventory.all()
+                            ]
+                        }
             return Response(inventory_summary)  # Return the summary for SuperAdmin
         elif user.role == 'Distributor':
             # Get the distributor's inventory
             inventory_summary = {
                 user.distributor.name: {
+                    'id': user.distributor.id,
                     'inventory': [
                         {
                             'id': inventory.id,
@@ -86,21 +92,25 @@ class InventoryListCreateView(generics.ListCreateAPIView):
             # Get franchises associated with the distributor
             franchises = Franchise.objects.filter(distributor=user.distributor)
             for franchise in franchises:
-                inventory_summary[user.distributor.name]['franchises'][franchise.name] = [
-                    {
-                        'id': inventory.id,
-                        'product_id': inventory.product.id,
-                        'product': inventory.product.name,
-                        'quantity': inventory.quantity,
-                        'status': inventory.status
-                    } for inventory in franchise.inventory.all()
-                ]
+                inventory_summary[user.distributor.name]['franchises'][franchise.name] = {
+                    'id': franchise.id,
+                    'inventory': [
+                        {
+                            'id': inventory.id,
+                            'product_id': inventory.product.id,
+                            'product': inventory.product.name,
+                            'quantity': inventory.quantity,
+                            'status': inventory.status
+                        } for inventory in franchise.inventory.all()
+                    ]
+                }
             return Response(inventory_summary)  # Return the summary for Distributor
         elif user.role == 'Franchise':  # Added handling for Franchise role
             # Get the franchise's inventory
             print(user.franchise.inventory.all())
             inventory_summary = {
                 user.franchise.name: {
+                    'id': user.franchise.id,
                     'inventory': [
                         {
                             'id': inventory.id,
@@ -121,9 +131,183 @@ class InventoryListCreateView(generics.ListCreateAPIView):
         user = self.request.user
         product = serializer.validated_data['product']
         quantity = serializer.validated_data['quantity']
-        status = serializer.validated_data.get('status', '')
+        status = serializer.validated_data.get('status', None)  # Changed default to None
+        
+        # Get distributor_id and franchise_id from request data
+        distributor_id = self.request.data.get('distributor_id')
+        franchise_id = self.request.data.get('franchise_id')
 
-        if user.role == 'Franchise':
+        if user.role == 'SuperAdmin':
+            if distributor_id:
+                try:
+                    distributor = Distributor.objects.get(id=distributor_id)
+                    existing_inventory = Inventory.objects.filter(
+                        distributor=distributor,
+                        product=product
+                    ).first()
+                    
+                    if existing_inventory:
+                        InventoryChangeLog.objects.create(
+                            inventory=existing_inventory,
+                            user=user,
+                            old_quantity=existing_inventory.quantity,
+                            new_quantity=existing_inventory.quantity + quantity,
+                            action='update'
+                        )
+                        existing_inventory.quantity += quantity
+                        if status:  # Only update status if provided
+                            existing_inventory.status = status
+                        existing_inventory.save()
+                        return existing_inventory
+                    else:
+                        inventory = serializer.save(distributor=distributor)
+                        InventoryChangeLog.objects.create(
+                            inventory=inventory,
+                            user=user,
+                            old_quantity=0,
+                            new_quantity=quantity,
+                            action='add'
+                        )
+                        return inventory
+                except Distributor.DoesNotExist:
+                    raise serializers.ValidationError("Distributor not found")
+                    
+            elif franchise_id:
+                try:
+                    franchise = Franchise.objects.get(id=franchise_id)
+                    existing_inventory = Inventory.objects.filter(
+                        franchise=franchise,
+                        product=product
+                    ).first()
+                    
+                    if existing_inventory:
+                        InventoryChangeLog.objects.create(
+                            inventory=existing_inventory,
+                            user=user,
+                            old_quantity=existing_inventory.quantity,
+                            new_quantity=existing_inventory.quantity + quantity,
+                            action='update'
+                        )
+                        existing_inventory.quantity += quantity
+                        if status:  # Only update status if provided
+                            existing_inventory.status = status
+                        existing_inventory.save()
+                        return existing_inventory
+                    else:
+                        inventory = serializer.save(franchise=franchise)
+                        InventoryChangeLog.objects.create(
+                            inventory=inventory,
+                            user=user,
+                            old_quantity=0,
+                            new_quantity=quantity,
+                            action='add'
+                        )
+                        return inventory
+                except Franchise.DoesNotExist:
+                    raise serializers.ValidationError("Franchise not found")
+            else:
+                # Original SuperAdmin factory inventory creation logic
+                existing_inventory = Inventory.objects.filter(
+                    factory=user.factory,
+                    product=product
+                ).first()
+
+                if existing_inventory:
+                    # Create log before updating with 'update' action
+                    InventoryChangeLog.objects.create(
+                        inventory=existing_inventory,
+                        user=user,
+                        old_quantity=existing_inventory.quantity,
+                        new_quantity=existing_inventory.quantity + quantity,
+                        action='update'
+                    )
+                    existing_inventory.quantity += quantity
+                    if status:  # Only update status if provided
+                        existing_inventory.status = status
+                    existing_inventory.save()
+                    return existing_inventory
+                else:
+                    inventory = serializer.save(factory=user.factory)
+                    # Create log for new inventory with 'add' action
+                    InventoryChangeLog.objects.create(
+                        inventory=inventory,
+                        user=user,
+                        old_quantity=0,
+                        new_quantity=quantity,
+                        action='add'
+                    )
+                    return inventory
+
+        elif user.role == 'Distributor':
+            if franchise_id:
+                try:
+                    # Verify the franchise belongs to this distributor
+                    franchise = Franchise.objects.get(
+                        id=franchise_id, 
+                        distributor=user.distributor
+                    )
+                    existing_inventory = Inventory.objects.filter(
+                        franchise=franchise,
+                        product=product
+                    ).first()
+                    
+                    if existing_inventory:
+                        InventoryChangeLog.objects.create(
+                            inventory=existing_inventory,
+                            user=user,
+                            old_quantity=existing_inventory.quantity,
+                            new_quantity=existing_inventory.quantity + quantity,
+                            action='update'
+                        )
+                        existing_inventory.quantity += quantity
+                        if status:  # Only update status if provided
+                            existing_inventory.status = status
+                        existing_inventory.save()
+                        return existing_inventory
+                    else:
+                        inventory = serializer.save(franchise=franchise)
+                        InventoryChangeLog.objects.create(
+                            inventory=inventory,
+                            user=user,
+                            old_quantity=0,
+                            new_quantity=quantity,
+                            action='add'
+                        )
+                        return inventory
+                except Franchise.DoesNotExist:
+                    raise serializers.ValidationError("Franchise not found or does not belong to your distributorship")
+            else:
+                # Original distributor inventory creation logic
+                existing_inventory = Inventory.objects.filter(
+                    distributor=user.distributor,
+                    product=product
+                ).first()
+
+                if existing_inventory:
+                    InventoryChangeLog.objects.create(
+                        inventory=existing_inventory,
+                        user=user,
+                        old_quantity=existing_inventory.quantity,
+                        new_quantity=existing_inventory.quantity + quantity,
+                        action='update'
+                    )
+                    existing_inventory.quantity += quantity
+                    if status:  # Only update status if provided
+                        existing_inventory.status = status
+                    existing_inventory.save()
+                    return existing_inventory
+                else:
+                    inventory = serializer.save(distributor=user.distributor)
+                    InventoryChangeLog.objects.create(
+                        inventory=inventory,
+                        user=user,
+                        old_quantity=0,
+                        new_quantity=quantity,
+                        action='add'
+                    )
+                    return inventory
+
+        elif user.role == 'Franchise':
             existing_inventory = Inventory.objects.filter(
                 franchise=user.franchise,
                 product=product
@@ -140,7 +324,8 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                 )
                 # Update existing inventory
                 existing_inventory.quantity += quantity
-                existing_inventory.status = status
+                if status:  # Only update status if provided
+                    existing_inventory.status = status
                 existing_inventory.save()
                 return existing_inventory
             else:
@@ -156,67 +341,6 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                 )
                 return inventory
 
-        elif user.role == 'Distributor':
-            existing_inventory = Inventory.objects.filter(
-                distributor=user.distributor,
-                product=product
-            ).first()
-
-            if existing_inventory:
-                # Create log before updating with 'update' action
-                InventoryChangeLog.objects.create(
-                    inventory=existing_inventory,
-                    user=user,
-                    old_quantity=existing_inventory.quantity,
-                    new_quantity=existing_inventory.quantity + quantity,
-                    action='update'
-                )
-                existing_inventory.quantity += quantity
-                existing_inventory.status = status
-                existing_inventory.save()
-                return existing_inventory
-            else:
-                inventory = serializer.save(distributor=user.distributor)
-                # Create log for new inventory with 'add' action
-                InventoryChangeLog.objects.create(
-                    inventory=inventory,
-                    user=user,
-                    old_quantity=0,
-                    new_quantity=quantity,
-                    action='add'
-                )
-                return inventory
-
-        elif user.role == 'SuperAdmin':
-            existing_inventory = Inventory.objects.filter(
-                factory=user.factory,
-                product=product
-            ).first()
-
-            if existing_inventory:
-                # Create log before updating with 'update' action
-                InventoryChangeLog.objects.create(
-                    inventory=existing_inventory,
-                    user=user,
-                    old_quantity=existing_inventory.quantity,
-                    new_quantity=existing_inventory.quantity + quantity,
-                    action='update'
-                )
-                existing_inventory.quantity += quantity
-                existing_inventory.status = status
-                existing_inventory.save()
-                return existing_inventory
-            else:
-                inventory = serializer.save(factory=user.factory)
-                # Create log for new inventory with 'add' action
-                InventoryChangeLog.objects.create(
-                    inventory=inventory,
-                    user=user,
-                    old_quantity=0,
-                    new_quantity=quantity,
-                    action='add'
-                )
-                return inventory
         else:
             raise serializers.ValidationError("User does not have permission to create inventory")
 
