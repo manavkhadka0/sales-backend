@@ -131,7 +131,7 @@ class InventoryListCreateView(generics.ListCreateAPIView):
         user = self.request.user
         product = serializer.validated_data['product']
         quantity = serializer.validated_data['quantity']
-        status = serializer.validated_data.get('status', None)  # Changed default to None
+        status = serializer.validated_data.get('status', None)  # Default to None if not provided
         
         # Get distributor_id and franchise_id from request data
         distributor_id = self.request.data.get('distributor_id')
@@ -155,12 +155,16 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                             action='update'
                         )
                         existing_inventory.quantity += quantity
-                        if status:  # Only update status if provided
+                        if status is not None:  # Only update status if provided
                             existing_inventory.status = status
                         existing_inventory.save()
                         return existing_inventory
                     else:
-                        inventory = serializer.save(distributor=distributor)
+                        # For new inventory, only include status if provided
+                        create_kwargs = {'distributor': distributor}
+                        if status is not None:
+                            create_kwargs['status'] = status
+                        inventory = serializer.save(**create_kwargs)
                         InventoryChangeLog.objects.create(
                             inventory=inventory,
                             user=user,
@@ -189,12 +193,15 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                             action='update'
                         )
                         existing_inventory.quantity += quantity
-                        if status:  # Only update status if provided
+                        if status is not None:  # Only update status if provided
                             existing_inventory.status = status
                         existing_inventory.save()
                         return existing_inventory
                     else:
-                        inventory = serializer.save(franchise=franchise)
+                        create_kwargs = {'franchise': franchise}
+                        if status is not None:
+                            create_kwargs['status'] = status
+                        inventory = serializer.save(**create_kwargs)
                         InventoryChangeLog.objects.create(
                             inventory=inventory,
                             user=user,
@@ -206,14 +213,12 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                 except Franchise.DoesNotExist:
                     raise serializers.ValidationError("Franchise not found")
             else:
-                # Original SuperAdmin factory inventory creation logic
                 existing_inventory = Inventory.objects.filter(
                     factory=user.factory,
                     product=product
                 ).first()
 
                 if existing_inventory:
-                    # Create log before updating with 'update' action
                     InventoryChangeLog.objects.create(
                         inventory=existing_inventory,
                         user=user,
@@ -222,13 +227,15 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                         action='update'
                     )
                     existing_inventory.quantity += quantity
-                    if status:  # Only update status if provided
+                    if status is not None:  # Only update status if provided
                         existing_inventory.status = status
                     existing_inventory.save()
                     return existing_inventory
                 else:
-                    inventory = serializer.save(factory=user.factory)
-                    # Create log for new inventory with 'add' action
+                    create_kwargs = {'factory': user.factory}
+                    if status is not None:
+                        create_kwargs['status'] = status
+                    inventory = serializer.save(**create_kwargs)
                     InventoryChangeLog.objects.create(
                         inventory=inventory,
                         user=user,
@@ -241,7 +248,6 @@ class InventoryListCreateView(generics.ListCreateAPIView):
         elif user.role == 'Distributor':
             if franchise_id:
                 try:
-                    # Verify the franchise belongs to this distributor
                     franchise = Franchise.objects.get(
                         id=franchise_id, 
                         distributor=user.distributor
@@ -260,12 +266,15 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                             action='update'
                         )
                         existing_inventory.quantity += quantity
-                        if status:  # Only update status if provided
+                        if status is not None:  # Only update status if provided
                             existing_inventory.status = status
                         existing_inventory.save()
                         return existing_inventory
                     else:
-                        inventory = serializer.save(franchise=franchise)
+                        create_kwargs = {'franchise': franchise}
+                        if status is not None:
+                            create_kwargs['status'] = status
+                        inventory = serializer.save(**create_kwargs)
                         InventoryChangeLog.objects.create(
                             inventory=inventory,
                             user=user,
@@ -277,7 +286,6 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                 except Franchise.DoesNotExist:
                     raise serializers.ValidationError("Franchise not found or does not belong to your distributorship")
             else:
-                # Original distributor inventory creation logic
                 existing_inventory = Inventory.objects.filter(
                     distributor=user.distributor,
                     product=product
@@ -292,12 +300,15 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                         action='update'
                     )
                     existing_inventory.quantity += quantity
-                    if status:  # Only update status if provided
+                    if status is not None:  # Only update status if provided
                         existing_inventory.status = status
                     existing_inventory.save()
                     return existing_inventory
                 else:
-                    inventory = serializer.save(distributor=user.distributor)
+                    create_kwargs = {'distributor': user.distributor}
+                    if status is not None:
+                        create_kwargs['status'] = status
+                    inventory = serializer.save(**create_kwargs)
                     InventoryChangeLog.objects.create(
                         inventory=inventory,
                         user=user,
@@ -314,7 +325,6 @@ class InventoryListCreateView(generics.ListCreateAPIView):
             ).first()
 
             if existing_inventory:
-                # Create log before updating with 'update' action
                 InventoryChangeLog.objects.create(
                     inventory=existing_inventory,
                     user=user,
@@ -322,16 +332,16 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                     new_quantity=existing_inventory.quantity + quantity,
                     action='update'
                 )
-                # Update existing inventory
                 existing_inventory.quantity += quantity
-                if status:  # Only update status if provided
+                if status is not None:  # Only update status if provided
                     existing_inventory.status = status
                 existing_inventory.save()
                 return existing_inventory
             else:
-                # Create new inventory
-                inventory = serializer.save(franchise=user.franchise)
-                # Create log for new inventory with 'add' action
+                create_kwargs = {'franchise': user.franchise}
+                if status is not None:
+                    create_kwargs['status'] = status
+                inventory = serializer.save(**create_kwargs)
                 InventoryChangeLog.objects.create(
                     inventory=inventory,
                     user=user,
