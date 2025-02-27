@@ -15,7 +15,7 @@ from rest_framework import serializers
 
 # Create your views here.
 
-class InventoryListView(generics.ListCreateAPIView):
+class InventoryListCreateView(generics.ListCreateAPIView):
     serializer_class = InventorySerializer
     # permission_classes = [IsAuthenticated]
 
@@ -121,7 +121,7 @@ class InventoryListView(generics.ListCreateAPIView):
         user = self.request.user
         product = serializer.validated_data['product']
         quantity = serializer.validated_data['quantity']
-        status = serializer.validated_data.get('status', 'incoming')
+        status = serializer.validated_data.get('status', '')
 
         if user.role == 'Franchise':
             existing_inventory = Inventory.objects.filter(

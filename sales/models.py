@@ -32,7 +32,29 @@ class InventoryChangeLog(models.Model):
     ])
 
     def __str__(self):
-        return f"Change by {self.user.username} on {self.changed_at}: {self.old_quantity} -> {self.new_quantity}"
+        product_name = self.inventory.product.name if self.inventory else "Unknown Product"
+        # Get inventory organization
+        org_name = None
+        if self.inventory:
+            if self.inventory.factory:
+                org_name = f"Factory: {self.inventory.factory}"
+            elif self.inventory.distributor:
+                org_name = f"Distributor: {self.inventory.distributor}"
+            elif self.inventory.franchise:
+                org_name = f"Franchise: {self.inventory.franchise}"
+        org_str = f" ({org_name})" if org_name else ""
+        
+        # Get user role and organization
+        user_role = self.user.role if hasattr(self.user, 'role') else "Unknown Role"
+        user_org = ""
+        if hasattr(self.user, 'factory'):
+            user_org = f"Factory: {self.user.factory}"
+        elif hasattr(self.user, 'distributor'):
+            user_org = f"Distributor: {self.user.distributor}"
+        elif hasattr(self.user, 'franchise'):
+            user_org = f"Franchise: {self.user.franchise}"
+        
+        return f"{self.action.title()} - {product_name}{org_str}: {self.old_quantity} → {self.new_quantity} by {self.user.username} ({user_role} at {user_org})"
 
 class InventoryRequest(models.Model):
     STATUS_CHOICES=(
