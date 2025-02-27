@@ -21,7 +21,6 @@ class InventoryListCreateView(generics.ListCreateAPIView):
 
     def list(self, request, *args, **kwargs):
         user = self.request.user
-        print(user.role)
         if user.role == 'SuperAdmin':
             # Get all factories and their inventories
             factories = Factory.objects.prefetch_related('inventory')
@@ -107,7 +106,6 @@ class InventoryListCreateView(generics.ListCreateAPIView):
             return Response(inventory_summary)  # Return the summary for Distributor
         elif user.role == 'Franchise':  # Added handling for Franchise role
             # Get the franchise's inventory
-            print(user.franchise.inventory.all())
             inventory_summary = {
                 user.franchise.name: {
                     'id': user.franchise.id,
@@ -387,7 +385,6 @@ class DistributorInventoryListView(generics.ListAPIView):
 
     def list(self, request, *args, **kwargs):
         user = self.request.user
-        print(user.role)
         if user.role == 'SuperAdmin':
             distributors = Distributor.objects.prefetch_related('inventory')
             inventory_summary = {}  # Changed from list to dictionary
@@ -570,7 +567,6 @@ class OrderUpdateView(generics.UpdateAPIView):
 
     def update(self, request, *args, **kwargs):
         order = self.get_object()
-        print(f"Order ID: {order.id}")
         
         previous_status = order.order_status  
         
@@ -585,7 +581,6 @@ class OrderUpdateView(generics.UpdateAPIView):
                     distributor=order.distributor,
                     sales_person=order.sales_person
                 )
-                print(f"Commission Rate: {distributor_commission.rate}")  # Changed from amount to rate
                 
                 # Calculate total amount from order products
                 order.commission_amount = (distributor_commission.rate / 100) * order.total_amount  # Calculate commission based on total amount
@@ -795,13 +790,19 @@ class InventoryRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
 
         serializer.save()  # Save the updated instance 
 
-class AllProductsListView(generics.ListAPIView):
+class AllProductsListView(generics.ListCreateAPIView):
     serializer_class = ProductSerializer
     queryset = Product.objects.all()
     filter_backends = [DjangoFilterBackend, rest_filters.SearchFilter, rest_filters.OrderingFilter]
     search_fields = ['name']
     ordering_fields = ['name', 'id']
     pagination_class = CustomPagination
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role != 'SuperAdmin':
+            raise serializers.ValidationError("Only SuperAdmin can create products")
+        serializer.save()
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
