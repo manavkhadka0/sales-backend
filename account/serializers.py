@@ -37,6 +37,11 @@ class CustomUserSerializer(serializers.ModelSerializer):
         user.save()  # Save the user instance
         return user
 
+class UserSmallSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ('id', 'first_name', 'last_name', 'phone_number')
+
 class LoginSerializer(serializers.Serializer):
     phone_number = serializers.CharField(required=True)
     password = serializers.CharField(required=True, write_only=True)

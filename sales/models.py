@@ -29,6 +29,8 @@ class InventoryChangeLog(models.Model):
         ('add', 'Add'),
         ('update', 'Update'),
         ('deleted', 'Deleted'),
+        ('restore', 'Restore'),  # Added new choice for order cancellation
+
     ])
 
     def __str__(self):

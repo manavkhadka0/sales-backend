@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import Inventory, Order, OrderProduct, Product,InventoryChangeLog, InventoryRequest
 from account.models import CustomUser
-from account.serializers import CustomUserSerializer
+from account.serializers import CustomUserSerializer, UserSmallSerializer
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
@@ -28,9 +28,9 @@ class InventoryChangeLogSerializer(serializers.ModelSerializer):
 
 
 class OrderProductSerializer(serializers.ModelSerializer):
-    product = InventorySerializer(read_only=True)
+    product = ProductSerializer(source='product.product', read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
-        queryset=Inventory.objects.all(),  # Changed from Product to Inventory
+        queryset=Inventory.objects.all(),
         write_only=True,
         source='product'
     )
@@ -41,7 +41,7 @@ class OrderProductSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     order_products = OrderProductSerializer(many=True)
-    sales_person = CustomUserSerializer(read_only=True)
+    sales_person = UserSmallSerializer(read_only=True)
     franchise_name = serializers.CharField(source='franchise.name', read_only=True)
     
     class Meta:
