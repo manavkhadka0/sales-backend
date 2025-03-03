@@ -531,21 +531,21 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     inventory_item = Inventory.objects.filter(
                         product_id=product_id,
                         franchise=franchise
-                    ).first()  # Get the first matching inventory item
+                    )  # Get the first matching inventory item
                     if not inventory_item:
                         raise Inventory.DoesNotExist
                 elif user.role == 'SuperAdmin':
                     inventory_item = Inventory.objects.filter(
                         product_id=product_id,
                         factory=user.factory
-                    ).first()
+                    )
                     if not inventory_item:
                         raise Inventory.DoesNotExist
                 elif user.role == 'Distributor':
                     inventory_item = Inventory.objects.filter(
                         product_id=product_id,
                         distributor=user.distributor
-                    ).first()
+                    )
                     if not inventory_item:
                         raise Inventory.DoesNotExist
                 else:
@@ -574,17 +574,17 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 inventory_item = Inventory.objects.filter(
                     product_id=product_id,
                     franchise=franchise
-                ).first()
+                )
             elif user.role == 'SuperAdmin':
                 inventory_item = Inventory.objects.filter(
                     product_id=product_id,
                     factory=user.factory
-                ).first()
+                )
             elif user.role == 'Distributor':
                 inventory_item = Inventory.objects.filter(
                     product_id=product_id,
                     distributor=user.distributor
-                ).first()
+                )
             
             if inventory_item:
                 old_quantity = inventory_item.quantity
