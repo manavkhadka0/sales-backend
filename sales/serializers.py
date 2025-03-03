@@ -62,16 +62,25 @@ class OrderSerializer(serializers.ModelSerializer):
         validated_data.pop('sales_person', None)
         validated_data.pop('franchise', None)
         
+        # Set franchise based on user role
+        franchise = None
+        if user.role in ['SalesPerson', 'Franchise']:
+            franchise = user.franchise
+        
         # Create the order instance
         order = Order.objects.create(
             sales_person=user,
-            franchise=user.franchise,
+            franchise=franchise,
             **validated_data
         )
         
-        # Create each order product
+        # Create each order product (only one per product)
+        processed_products = set()
         for order_product_data in order_products_data:
-            OrderProduct.objects.create(order=order, **order_product_data)
+            product = order_product_data['product']
+            if product.id not in processed_products:
+                OrderProduct.objects.create(order=order, **order_product_data)
+                processed_products.add(product.id)
         
         return order
 

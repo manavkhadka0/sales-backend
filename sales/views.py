@@ -515,8 +515,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
             return Order.objects.none()  # Return empty queryset for unknown roles
 
     def perform_create(self, serializer):
-        salesperson = self.request.user
-        franchise = salesperson.franchise
+        user = self.request.user
+        print(user.role)
+        franchise = user.franchise
         
         # Validate inventory before creating order
         order_products_data = self.request.data.get('order_products', [])
@@ -526,10 +527,30 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
             try:
                 # Find inventory item using product_id and franchise
-                inventory_item = Inventory.objects.get(
-                    product_id=product_id,
-                    franchise=franchise  # Ensure the inventory belongs to the franchise
-                )
+                if user.role == 'SalesPerson' and user.sales_person == 'Franchise':
+                    inventory_item = Inventory.objects.filter(
+                        product_id=product_id,
+                        franchise=franchise
+                    ).first()  # Get the first matching inventory item
+                    if not inventory_item:
+                        raise Inventory.DoesNotExist
+                elif user.role == 'SuperAdmin':
+                    inventory_item = Inventory.objects.filter(
+                        product_id=product_id,
+                        factory=user.factory
+                    ).first()
+                    if not inventory_item:
+                        raise Inventory.DoesNotExist
+                elif user.role == 'Distributor':
+                    inventory_item = Inventory.objects.filter(
+                        product_id=product_id,
+                        distributor=user.distributor
+                    ).first()
+                    if not inventory_item:
+                        raise Inventory.DoesNotExist
+                else:
+                    raise serializers.ValidationError("Invalid user role")
+                
                 if inventory_item.quantity < quantity:
                     raise serializers.ValidationError(
                         f"Insufficient inventory for product {inventory_item.product.name}. "
@@ -537,33 +558,47 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     )
             except Inventory.DoesNotExist:
                 raise serializers.ValidationError(
-                    f"Product with ID {product_id} not found in franchise inventory"
+                    f"Product with ID {product_id} not found in inventory"
                 )
 
         # Create order if validation passes
-        order = serializer.save(sales_person=salesperson, franchise=franchise)
+        order = serializer.save(sales_person=user, franchise=franchise)
 
         # Update inventory quantities and create logs
         for order_product_data in order_products_data:
             product_id = order_product_data['product_id']
             quantity = order_product_data['quantity']
 
-            inventory_item = Inventory.objects.get(
-                product_id=product_id,
-                franchise=franchise
-            )
-            old_quantity = inventory_item.quantity
-            inventory_item.quantity -= quantity
-            inventory_item.save()
+            # Use filter().first() instead of get()
+            if user.role == 'SalesPerson' and user.sales_person == 'Franchise':
+                inventory_item = Inventory.objects.filter(
+                    product_id=product_id,
+                    franchise=franchise
+                ).first()
+            elif user.role == 'SuperAdmin':
+                inventory_item = Inventory.objects.filter(
+                    product_id=product_id,
+                    factory=user.factory
+                ).first()
+            elif user.role == 'Distributor':
+                inventory_item = Inventory.objects.filter(
+                    product_id=product_id,
+                    distributor=user.distributor
+                ).first()
+            
+            if inventory_item:
+                old_quantity = inventory_item.quantity
+                inventory_item.quantity -= quantity
+                inventory_item.save()
 
-            # Create log for inventory update from order
-            InventoryChangeLog.objects.create(
-                inventory=inventory_item,
-                user=self.request.user,
-                old_quantity=old_quantity,
-                new_quantity=inventory_item.quantity,
-                action='update'
-            )
+                # Create log for inventory update from order
+                InventoryChangeLog.objects.create(
+                    inventory=inventory_item,
+                    user=self.request.user,
+                    old_quantity=old_quantity,
+                    new_quantity=inventory_item.quantity,
+                    action='update'
+                )
 
         return order
 
@@ -851,151 +886,83 @@ class SalesStatisticsView(generics.GenericAPIView):
         today = timezone.now().date()
         
         if user.role == 'SuperAdmin':
-            # Get all orders statistics for today
+            # Get daily statistics
             daily_stats = Order.objects.filter(
                 date=today
             ).aggregate(
                 total_orders=Count('id'),
-                total_sales=Sum('total_amount'),
-                total_delivery_charges=Sum('delivery_charge'),
-                total_commission=Sum('commission_amount')
+                total_sales=Sum('total_amount')
             )
             
-            # Get product-wise sales
-            product_sales = OrderProduct.objects.filter(
-                order__date=today
-            ).values(
-                'product__product__name'
-            ).annotate(
-                total_quantity=Sum('quantity')
-            )
-            
-            # Get payment method distribution
-            payment_stats = Order.objects.filter(
-                date=today
-            ).values('payment_method').annotate(
-                count=Count('id'),
-                total=Sum('total_amount')
-            )
-            
-            # Get order status distribution
-            status_stats = Order.objects.filter(
-                date=today
-            ).values('order_status').annotate(
-                count=Count('id')
+            # Get all-time statistics
+            all_time_stats = Order.objects.all().aggregate(
+                total_orders=Count('id'),
+                total_sales=Sum('total_amount')
             )
             
             return Response({
                 'date': today,
                 'total_orders': daily_stats['total_orders'] or 0,
                 'total_sales': daily_stats['total_sales'] or 0,
-                'total_delivery_charges': daily_stats['total_delivery_charges'] or 0,
-                'total_commission': daily_stats['total_commission'] or 0,
-                'product_wise_sales': product_sales,
-                'payment_distribution': payment_stats,
-                'order_status_distribution': status_stats
+                'all_time_orders': all_time_stats['total_orders'] or 0,
+                'all_time_sales': all_time_stats['total_sales'] or 0
             })
             
         elif user.role == 'Distributor':
             # Get franchises under this distributor
             franchises = Franchise.objects.filter(distributor=user.distributor)
             
-            # Get aggregated stats for all franchises
+            # Get daily statistics
             daily_stats = Order.objects.filter(
                 date=today,
                 franchise__in=franchises
             ).aggregate(
                 total_orders=Count('id'),
-                total_sales=Sum('total_amount'),
-                total_delivery_charges=Sum('delivery_charge'),
-                total_commission=Sum('commission_amount')
+                total_sales=Sum('total_amount')
             )
             
-            # Get franchise-wise breakdown
-            franchise_stats = Order.objects.filter(
-                date=today,
+            # Get all-time statistics
+            all_time_stats = Order.objects.filter(
                 franchise__in=franchises
-            ).values('franchise__name').annotate(
-                orders=Count('id'),
-                sales=Sum('total_amount')
-            )
-            
-            # Get product-wise sales
-            product_sales = OrderProduct.objects.filter(
-                order__date=today,
-                order__franchise__in=franchises
-            ).values(
-                'product__product__name'
-            ).annotate(
-                total_quantity=Sum('quantity')
+            ).aggregate(
+                total_orders=Count('id'),
+                total_sales=Sum('total_amount')
             )
             
             return Response({
                 'date': today,
-                'distributor': user.distributor.name,
                 'total_orders': daily_stats['total_orders'] or 0,
                 'total_sales': daily_stats['total_sales'] or 0,
-                'total_delivery_charges': daily_stats['total_delivery_charges'] or 0,
-                'total_commission': daily_stats['total_commission'] or 0,
-                'franchise_wise_stats': franchise_stats,
-                'product_wise_sales': product_sales
+                'all_time_orders': all_time_stats['total_orders'] or 0,
+                'all_time_sales': all_time_stats['total_sales'] or 0
             })
             
         elif user.role == 'Franchise':
-            # Get detailed stats for this franchise
+            # Get daily statistics
             daily_stats = Order.objects.filter(
                 date=today,
                 franchise=user.franchise
             ).aggregate(
                 total_orders=Count('id'),
-                total_sales=Sum('total_amount'),
-                total_delivery_charges=Sum('delivery_charge'),
-                total_commission=Sum('commission_amount')
+                total_sales=Sum('total_amount')
             )
             
-            # Get salesperson-wise performance
-            salesperson_stats = Order.objects.filter(
-                date=today,
+            # Get all-time statistics
+            all_time_stats = Order.objects.filter(
                 franchise=user.franchise
-            ).values(
-                'sales_person__username'
-            ).annotate(
-                orders=Count('id'),
-                sales=Sum('total_amount'),
-                commission=Sum('commission_amount')
-            )
-            
-            # Get product-wise sales
-            product_sales = OrderProduct.objects.filter(
-                order__date=today,
-                order__franchise=user.franchise
-            ).values(
-                'product__product__name'
-            ).annotate(
-                total_quantity=Sum('quantity')
-            )
-            
-            # Get payment method distribution
-            payment_stats = Order.objects.filter(
-                date=today,
-                franchise=user.franchise
-            ).values('payment_method').annotate(
-                count=Count('id'),
-                total=Sum('total_amount')
+            ).aggregate(
+                total_orders=Count('id'),
+                total_sales=Sum('total_amount')
             )
             
             return Response({
                 'date': today,
-                'franchise': user.franchise.name,
                 'total_orders': daily_stats['total_orders'] or 0,
                 'total_sales': daily_stats['total_sales'] or 0,
-                'total_delivery_charges': daily_stats['total_delivery_charges'] or 0,
-                'total_commission': daily_stats['total_commission'] or 0,
-                'salesperson_performance': salesperson_stats,
-                'product_wise_sales': product_sales,
-                'payment_distribution': payment_stats
+                'all_time_orders': all_time_stats['total_orders'] or 0,
+                'all_time_sales': all_time_stats['total_sales'] or 0
             })
             
         return Response({
             "detail": "You don't have permission to view statistics"
-        }, status=status.HTTP_403_FORBIDDEN) 
+        }, status=status.HTTP_403_FORBIDDEN)
