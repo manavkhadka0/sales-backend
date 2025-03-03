@@ -107,7 +107,7 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                     ]
                 }
             return Response(inventory_summary)  # Return the summary for Distributor
-        elif user.role == 'Franchise':  # Added handling for Franchise role
+        elif user.role == 'Franchise' or user.role == 'SalesPerson':  # Added handling for Franchise role
             # Get the franchise's inventory
             inventory_summary = {
                 user.franchise.name: {
@@ -515,9 +515,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
             return Order.objects.none()  # Return empty queryset for unknown roles
 
     def perform_create(self, serializer):
-        user = self.request.user
-        print(user.role)
-        franchise = user.franchise
+        salesperson = self.request.user
+
         
         # Validate inventory before creating order
         order_products_data = self.request.data.get('order_products', [])
@@ -527,30 +526,24 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
             try:
                 # Find inventory item using product_id and franchise
-                if user.role == 'SalesPerson' and user.sales_person == 'Franchise':
-                    inventory_item = Inventory.objects.filter(
+                if salesperson.role == 'Franchise' or salesperson.role == 'SalesPerson':
+                    franchise = salesperson.franchise
+                    inventory_item = Inventory.objects.get(
                         product_id=product_id,
-                        franchise=franchise
-                    )  # Get the first matching inventory item
-                    if not inventory_item:
-                        raise Inventory.DoesNotExist
-                elif user.role == 'SuperAdmin':
-                    inventory_item = Inventory.objects.filter(
-                        product_id=product_id,
-                        factory=user.factory
+                        franchise=franchise  # Ensure the inventory belongs to the franchise
                     )
-                    if not inventory_item:
-                        raise Inventory.DoesNotExist
-                elif user.role == 'Distributor':
-                    inventory_item = Inventory.objects.filter(
+                elif salesperson.role == 'Distributor':
+                    distributor = salesperson.distributor
+                    inventory_item = Inventory.objects.get(
                         product_id=product_id,
-                        distributor=user.distributor
+                        distributor=distributor
                     )
-                    if not inventory_item:
-                        raise Inventory.DoesNotExist
-                else:
-                    raise serializers.ValidationError("Invalid user role")
-                
+                elif salesperson.role == 'SuperAdmin':
+                    factory=salesperson.factory
+                    inventory_item = Inventory.objects.get(
+                        product_id=product_id,
+                        factory=factory
+                    )
                 if inventory_item.quantity < quantity:
                     raise serializers.ValidationError(
                         f"Insufficient inventory for product {inventory_item.product.name}. "
@@ -558,47 +551,60 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     )
             except Inventory.DoesNotExist:
                 raise serializers.ValidationError(
-                    f"Product with ID {product_id} not found in inventory"
+                    f"Product with ID {product_id} not found in franchise inventory"
                 )
 
         # Create order if validation passes
-        order = serializer.save(sales_person=user, franchise=franchise)
+        if salesperson.role == 'Franchise' or salesperson.role == 'SalesPerson':
+            franchise = salesperson.franchise
+            order = serializer.save(sales_person=salesperson, franchise=franchise)
+        elif salesperson.role == 'Distributor':
+            distributor = salesperson.distributor
+            order = serializer.save(distributor=distributor, sales_person=salesperson)
+        elif salesperson.role == 'SuperAdmin':
+            factory=salesperson.factory
+            order = serializer.save(factory=factory, sales_person=salesperson)
 
         # Update inventory quantities and create logs
         for order_product_data in order_products_data:
             product_id = order_product_data['product_id']
             quantity = order_product_data['quantity']
 
-            # Use filter().first() instead of get()
-            if user.role == 'SalesPerson' and user.sales_person == 'Franchise':
-                inventory_item = Inventory.objects.filter(
-                    product_id=product_id,
-                    franchise=franchise
-                )
-            elif user.role == 'SuperAdmin':
-                inventory_item = Inventory.objects.filter(
-                    product_id=product_id,
-                    factory=user.factory
-                )
-            elif user.role == 'Distributor':
-                inventory_item = Inventory.objects.filter(
-                    product_id=product_id,
-                    distributor=user.distributor
-                )
-            
-            if inventory_item:
-                old_quantity = inventory_item.quantity
-                inventory_item.quantity -= quantity
-                inventory_item.save()
+            if salesperson.role == 'Franchise' or salesperson.role == 'SalesPerson':
+                    franchise = salesperson.franchise
+                    inventory_item = Inventory.objects.get(
+                        product_id=product_id,
+                        franchise=franchise  # Ensure the inventory belongs to the franchise
+                    )
+            elif salesperson.role == 'Distributor':
+                    distributor = salesperson.distributor
+                    inventory_item = Inventory.objects.get(
+                        product_id=product_id,
+                        distributor=distributor
+                    )
+            elif salesperson.role == 'SuperAdmin':
+                    factory=salesperson.factory
+                    inventory_item = Inventory.objects.get(
+                        product_id=product_id,
+                        factory=factory
+                    )
+            if inventory_item.quantity < quantity:
+                    raise serializers.ValidationError(
+                        f"Insufficient inventory for product {inventory_item.product.name}. "
+                        f"Available: {inventory_item.quantity}, Requested: {quantity}"
+                    )
+            old_quantity = inventory_item.quantity
+            inventory_item.quantity -= quantity
+            inventory_item.save()
 
-                # Create log for inventory update from order
-                InventoryChangeLog.objects.create(
-                    inventory=inventory_item,
-                    user=self.request.user,
-                    old_quantity=old_quantity,
-                    new_quantity=inventory_item.quantity,
-                    action='update'
-                )
+            # Create log for inventory update from order
+            InventoryChangeLog.objects.create(
+                inventory=inventory_item,
+                user=self.request.user,
+                old_quantity=old_quantity,
+                new_quantity=inventory_item.quantity,
+                action='update'
+            )
 
         return order
 

@@ -103,6 +103,8 @@ class Order(models.Model):
         ('Cancelled', 'Cancelled')
     ]
     franchise = models.ForeignKey('account.Franchise', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
+    distributor = models.ForeignKey('account.Distributor', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
+    factory = models.ForeignKey('account.Factory', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
     sales_person = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE, related_name='orders')
     full_name = models.CharField(max_length=200)
     city = models.CharField(max_length=200, blank=True)

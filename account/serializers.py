@@ -38,9 +38,13 @@ class CustomUserSerializer(serializers.ModelSerializer):
         return user
 
 class UserSmallSerializer(serializers.ModelSerializer):
+    franchise = serializers.StringRelatedField(read_only=True)
+    distributor = serializers.StringRelatedField(read_only=True)
+    factory = serializers.StringRelatedField(read_only=True)
+
     class Meta:
         model = CustomUser
-        fields = ('id', 'first_name', 'last_name', 'phone_number')
+        fields = ('id', 'first_name', 'last_name', 'phone_number', 'franchise', 'distributor', 'factory')
 
 class LoginSerializer(serializers.Serializer):
     phone_number = serializers.CharField(required=True)

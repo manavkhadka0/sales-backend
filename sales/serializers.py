@@ -26,9 +26,24 @@ class InventoryChangeLogSerializer(serializers.ModelSerializer):
         model = InventoryChangeLog
         fields = '__all__'  # You can specify fields explicitly if needed
 
+class InventorySmallSerializer(serializers.ModelSerializer):
+    product = serializers.SerializerMethodField()
+    class Meta:
+        model = Inventory
+        fields = ['id', 'product', 'quantity', 'status']
+
+    def get_product(self, obj):
+        return {
+            'id': obj.product.id,
+            'name': obj.product.name
+        }
+class ProductSmallSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ['id', 'name']
 
 class OrderProductSerializer(serializers.ModelSerializer):
-    product = ProductSerializer(source='product.product', read_only=True)
+    product = serializers.SerializerMethodField()
     product_id = serializers.PrimaryKeyRelatedField(
         queryset=Inventory.objects.all(),
         write_only=True,
@@ -39,17 +54,21 @@ class OrderProductSerializer(serializers.ModelSerializer):
         model = OrderProduct
         fields = ['id', 'product', 'product_id', 'quantity']
 
+    def get_product(self, obj):
+        return {
+            'id': obj.product.id,
+            'name': obj.product.product.name
+        }
 class OrderSerializer(serializers.ModelSerializer):
     order_products = OrderProductSerializer(many=True)
     sales_person = UserSmallSerializer(read_only=True)
-    franchise_name = serializers.CharField(source='franchise.name', read_only=True)
     
     class Meta:
         model = Order
         fields = ['id', 'full_name', 'city', 'delivery_address', 'landmark',
                   'phone_number', 'alternate_phone_number', 'delivery_charge', 'payment_method',
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at', 'order_products',
-                  'total_amount', 'remarks', 'sales_person', 'franchise_name']
+                  'total_amount', 'remarks', 'sales_person']
 
     def create(self, validated_data):
         # Extract order_products data from validated_data
