@@ -30,7 +30,7 @@ class InventoryChangeLogSerializer(serializers.ModelSerializer):
 class OrderProductSerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
-        queryset=Product.objects.all(),
+        queryset=Inventory.objects.all(),
         write_only=True,
         source='product'
     )
@@ -38,6 +38,13 @@ class OrderProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderProduct
         fields = ['id', 'product', 'product_id', 'quantity']
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        # Replace product data with actual product info instead of inventory
+        if instance.product:
+            representation['product'] = ProductSerializer(instance.product.product).data
+        return representation
 
 class OrderSerializer(serializers.ModelSerializer):
     order_products = OrderProductSerializer(many=True)
@@ -59,39 +66,27 @@ class OrderSerializer(serializers.ModelSerializer):
         franchise = user.franchise if hasattr(user, 'franchise') else None
 
         for item in order_products_data:
-            product_id = item['product'].id
+            inventory = item['product']  # This is now the Inventory instance
             quantity = item['quantity']
 
-            # Check inventory based on user role
-            try:
-                if user.role == 'SalesPerson' and user.sales_person == 'Franchise':
-                    inventory = Inventory.objects.filter(
-                        product_id=product_id,
-                        franchise=franchise
-                    ).first()
-                elif user.role == 'SuperAdmin':
-                    inventory = Inventory.objects.filter(
-                        product_id=product_id,
-                        factory=user.factory
-                    ).first()
-                elif user.role == 'Distributor':
-                    inventory = Inventory.objects.filter(
-                        product_id=product_id,
-                        distributor=user.distributor
-                    ).first()
-                else:
-                    raise serializers.ValidationError("Invalid user role")
+            if inventory.quantity < quantity:
+                raise serializers.ValidationError(
+                    f"Insufficient inventory for product {inventory.product.name}. "
+                    f"Available: {inventory.quantity}, Requested: {quantity}"
+                )
 
-                if not inventory:
-                    raise serializers.ValidationError(f"Product {product_id} not found in inventory")
-                
-                if inventory.quantity < quantity:
-                    raise serializers.ValidationError(
-                        f"Insufficient inventory for product {inventory.product.name}. "
-                        f"Available: {inventory.quantity}, Requested: {quantity}"
-                    )
-            except Inventory.DoesNotExist:
-                raise serializers.ValidationError(f"Product {product_id} not found in inventory")
+            # Verify the inventory belongs to the correct entity
+            if user.role == 'SalesPerson' and user.sales_person == 'Franchise':
+                if inventory.franchise != franchise:
+                    raise serializers.ValidationError("Invalid inventory for this franchise")
+            elif user.role == 'SuperAdmin':
+                if inventory.factory != user.factory:
+                    raise serializers.ValidationError("Invalid inventory for this factory")
+            elif user.role == 'Distributor':
+                if inventory.distributor != user.distributor:
+                    raise serializers.ValidationError("Invalid inventory for this distributor")
+            else:
+                raise serializers.ValidationError("Invalid user role")
 
         return order_products_data
 
@@ -117,46 +112,29 @@ class OrderSerializer(serializers.ModelSerializer):
         
         # Create order products and update inventory
         for order_product_data in order_products_data:
-            product = order_product_data['product']
+            inventory = order_product_data['product']  # This is now the Inventory instance
             quantity = order_product_data['quantity']
 
             # Create the order product
             OrderProduct.objects.create(
                 order=order,
-                product=product,
+                product=inventory,  # Directly use the inventory instance
                 quantity=quantity
             )
 
             # Update inventory
-            if user.role == 'SalesPerson' and user.sales_person == 'Franchise':
-                inventory = Inventory.objects.filter(
-                    product=product,
-                    franchise=franchise
-                ).first()
-            elif user.role == 'SuperAdmin':
-                inventory = Inventory.objects.filter(
-                    product=product,
-                    factory=user.factory
-                ).first()
-            elif user.role == 'Distributor':
-                inventory = Inventory.objects.filter(
-                    product=product,
-                    distributor=user.distributor
-                ).first()
+            old_quantity = inventory.quantity
+            inventory.quantity -= quantity
+            inventory.save()
 
-            if inventory:
-                old_quantity = inventory.quantity
-                inventory.quantity -= quantity
-                inventory.save()
-
-                # Create inventory change log
-                InventoryChangeLog.objects.create(
-                    inventory=inventory,
-                    user=user,
-                    old_quantity=old_quantity,
-                    new_quantity=inventory.quantity,
-                    action='update'
-                )
+            # Create inventory change log
+            InventoryChangeLog.objects.create(
+                inventory=inventory,
+                user=user,
+                old_quantity=old_quantity,
+                new_quantity=inventory.quantity,
+                action='update'
+            )
         
         return order
 
