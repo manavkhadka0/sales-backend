@@ -28,7 +28,7 @@ class InventoryChangeLogSerializer(serializers.ModelSerializer):
 
 
 class OrderProductSerializer(serializers.ModelSerializer):
-    product = ProductSerializer(read_only=True)
+    product = ProductSerializer(source='product.product', read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
         queryset=Inventory.objects.all(),
         write_only=True,
@@ -38,13 +38,6 @@ class OrderProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderProduct
         fields = ['id', 'product', 'product_id', 'quantity']
-
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        # Replace product data with actual product info instead of inventory
-        if instance.product:
-            representation['product'] = ProductSerializer(instance.product.product).data
-        return representation
 
 class OrderSerializer(serializers.ModelSerializer):
     order_products = OrderProductSerializer(many=True)
@@ -58,83 +51,27 @@ class OrderSerializer(serializers.ModelSerializer):
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at', 'order_products',
                   'total_amount', 'remarks', 'sales_person', 'franchise_name']
 
-    def validate_order_products(self, order_products_data):
-        """
-        Validate that all products exist and have sufficient inventory
-        """
-        user = self.context['request'].user
-        franchise = user.franchise if hasattr(user, 'franchise') else None
-
-        for item in order_products_data:
-            inventory = item['product']  # This is now the Inventory instance
-            quantity = item['quantity']
-
-            if inventory.quantity < quantity:
-                raise serializers.ValidationError(
-                    f"Insufficient inventory for product {inventory.product.name}. "
-                    f"Available: {inventory.quantity}, Requested: {quantity}"
-                )
-
-            # Verify the inventory belongs to the correct entity
-            if user.role == 'SalesPerson' and user.sales_person == 'Franchise':
-                if inventory.franchise != franchise:
-                    raise serializers.ValidationError("Invalid inventory for this franchise")
-            elif user.role == 'SuperAdmin':
-                if inventory.factory != user.factory:
-                    raise serializers.ValidationError("Invalid inventory for this factory")
-            elif user.role == 'Distributor':
-                if inventory.distributor != user.distributor:
-                    raise serializers.ValidationError("Invalid inventory for this distributor")
-            else:
-                raise serializers.ValidationError("Invalid user role")
-
-        return order_products_data
-
     def create(self, validated_data):
+        # Extract order_products data from validated_data
         order_products_data = validated_data.pop('order_products')
+        
+        # Get the user from the context
         user = self.context['request'].user
         
         # Remove sales_person and franchise from validated_data if they exist
         validated_data.pop('sales_person', None)
         validated_data.pop('franchise', None)
         
-        # Set franchise based on user role
-        franchise = None
-        if user.role in ['SalesPerson', 'Franchise']:
-            franchise = user.franchise
-        
         # Create the order instance
         order = Order.objects.create(
             sales_person=user,
-            franchise=franchise,
+            franchise=user.franchise,
             **validated_data
         )
         
-        # Create order products and update inventory
+        # Create each order product
         for order_product_data in order_products_data:
-            inventory = order_product_data['product']  # This is now the Inventory instance
-            quantity = order_product_data['quantity']
-
-            # Create the order product
-            OrderProduct.objects.create(
-                order=order,
-                product=inventory,  # Directly use the inventory instance
-                quantity=quantity
-            )
-
-            # Update inventory
-            old_quantity = inventory.quantity
-            inventory.quantity -= quantity
-            inventory.save()
-
-            # Create inventory change log
-            InventoryChangeLog.objects.create(
-                inventory=inventory,
-                user=user,
-                old_quantity=old_quantity,
-                new_quantity=inventory.quantity,
-                action='update'
-            )
+            OrderProduct.objects.create(order=order, **order_product_data)
         
         return order
 

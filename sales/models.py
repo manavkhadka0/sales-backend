@@ -102,7 +102,7 @@ class Order(models.Model):
         ('Delivered', 'Delivered'),
         ('Cancelled', 'Cancelled')
     ]
-    franchise = models.ForeignKey('account.Franchise', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
+    franchise = models.ForeignKey('account.Franchise', on_delete=models.CASCADE, related_name='orders',)
     sales_person = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE, related_name='orders')
     full_name = models.CharField(max_length=200)
     city = models.CharField(max_length=200, blank=True)
