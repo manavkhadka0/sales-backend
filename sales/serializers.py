@@ -28,9 +28,9 @@ class InventoryChangeLogSerializer(serializers.ModelSerializer):
 
 
 class OrderProductSerializer(serializers.ModelSerializer):
-    product = ProductSerializer(source='product.product', read_only=True)
+    product = ProductSerializer(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
-        queryset=Inventory.objects.all(),
+        queryset=Product.objects.all(),
         write_only=True,
         source='product'
     )
@@ -51,11 +51,52 @@ class OrderSerializer(serializers.ModelSerializer):
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at', 'order_products',
                   'total_amount', 'remarks', 'sales_person', 'franchise_name']
 
+    def validate_order_products(self, order_products_data):
+        """
+        Validate that all products exist and have sufficient inventory
+        """
+        user = self.context['request'].user
+        franchise = user.franchise if hasattr(user, 'franchise') else None
+
+        for item in order_products_data:
+            product_id = item['product'].id
+            quantity = item['quantity']
+
+            # Check inventory based on user role
+            try:
+                if user.role == 'SalesPerson' and user.sales_person == 'Franchise':
+                    inventory = Inventory.objects.filter(
+                        product_id=product_id,
+                        franchise=franchise
+                    ).first()
+                elif user.role == 'SuperAdmin':
+                    inventory = Inventory.objects.filter(
+                        product_id=product_id,
+                        factory=user.factory
+                    ).first()
+                elif user.role == 'Distributor':
+                    inventory = Inventory.objects.filter(
+                        product_id=product_id,
+                        distributor=user.distributor
+                    ).first()
+                else:
+                    raise serializers.ValidationError("Invalid user role")
+
+                if not inventory:
+                    raise serializers.ValidationError(f"Product {product_id} not found in inventory")
+                
+                if inventory.quantity < quantity:
+                    raise serializers.ValidationError(
+                        f"Insufficient inventory for product {inventory.product.name}. "
+                        f"Available: {inventory.quantity}, Requested: {quantity}"
+                    )
+            except Inventory.DoesNotExist:
+                raise serializers.ValidationError(f"Product {product_id} not found in inventory")
+
+        return order_products_data
+
     def create(self, validated_data):
-        # Extract order_products data from validated_data
         order_products_data = validated_data.pop('order_products')
-        
-        # Get the user from the context
         user = self.context['request'].user
         
         # Remove sales_person and franchise from validated_data if they exist
@@ -74,13 +115,48 @@ class OrderSerializer(serializers.ModelSerializer):
             **validated_data
         )
         
-        # Create each order product (only one per product)
-        processed_products = set()
+        # Create order products and update inventory
         for order_product_data in order_products_data:
             product = order_product_data['product']
-            if product.id not in processed_products:
-                OrderProduct.objects.create(order=order, **order_product_data)
-                processed_products.add(product.id)
+            quantity = order_product_data['quantity']
+
+            # Create the order product
+            OrderProduct.objects.create(
+                order=order,
+                product=product,
+                quantity=quantity
+            )
+
+            # Update inventory
+            if user.role == 'SalesPerson' and user.sales_person == 'Franchise':
+                inventory = Inventory.objects.filter(
+                    product=product,
+                    franchise=franchise
+                ).first()
+            elif user.role == 'SuperAdmin':
+                inventory = Inventory.objects.filter(
+                    product=product,
+                    factory=user.factory
+                ).first()
+            elif user.role == 'Distributor':
+                inventory = Inventory.objects.filter(
+                    product=product,
+                    distributor=user.distributor
+                ).first()
+
+            if inventory:
+                old_quantity = inventory.quantity
+                inventory.quantity -= quantity
+                inventory.save()
+
+                # Create inventory change log
+                InventoryChangeLog.objects.create(
+                    inventory=inventory,
+                    user=user,
+                    old_quantity=old_quantity,
+                    new_quantity=inventory.quantity,
+                    action='update'
+                )
         
         return order
 
