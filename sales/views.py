@@ -993,7 +993,6 @@ class SalesStatisticsView(generics.GenericAPIView):
                 'total_sales': daily_stats['total_sales'] or 0,
                 'all_time_orders': all_time_stats['total_orders'] or 0,
                 'all_time_sales': all_time_stats['total_sales'] or 0,
-                'total_commission': user.commission_amount or 0  # Added commission amount
             })
             
         return Response({
