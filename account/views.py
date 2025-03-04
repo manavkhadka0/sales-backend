@@ -5,8 +5,8 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import CustomUser, Distributor, Franchise  # Make sure to import these models
-from .serializers import CustomUserSerializer,DistributorSerializer,LoginSerializer,FranchiseSerializer
+from .models import CustomUser, Distributor, Franchise, Factory  # Make sure to import these models
+from .serializers import CustomUserSerializer,DistributorSerializer,LoginSerializer,FranchiseSerializer,FactorySerializer
 from rest_framework_simplejwt.tokens import RefreshToken  # Import JWT token utilities
 from rest_framework.permissions import AllowAny  # Import permission class
 from rest_framework import generics
@@ -59,6 +59,10 @@ class UserProfileView(APIView):
 class DistributorListCreateView(generics.ListCreateAPIView):
     queryset = Distributor.objects.all()
     serializer_class = DistributorSerializer
+
+class FactoryListCreateView(generics.ListCreateAPIView):
+    queryset = Factory.objects.all()
+    serializer_class = FactorySerializer
 
 class FranchiseByDistributorView(APIView):
     def get(self, request, distributor_id):

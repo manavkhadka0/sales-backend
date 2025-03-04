@@ -1,5 +1,10 @@
 from rest_framework import serializers
-from .models import CustomUser,Distributor,Franchise
+from .models import CustomUser,Distributor,Franchise,Factory
+
+class FactorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Factory
+        fields = '__all__'
 
 class DistributorSerializer(serializers.ModelSerializer):
     class Meta:
