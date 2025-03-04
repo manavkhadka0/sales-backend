@@ -3,7 +3,7 @@ from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from .models import Inventory, Order,Commission,Product,InventoryChangeLog,InventoryRequest, OrderProduct
 from account.models import Distributor, Franchise,Factory
-from .serializers import InventorySerializer, OrderSerializer,ProductSerializer, OrderDetailSerializer,InventoryChangeLogSerializer,InventoryRequestSerializer
+from .serializers import InventorySerializer, OrderSerializer,ProductSerializer,InventoryChangeLogSerializer,InventoryRequestSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
@@ -14,7 +14,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework import serializers
 from django.utils import timezone
 from django.db.models import Count, Sum
-from datetime import datetime
+
 
 # Create your views here.
 
@@ -967,6 +967,33 @@ class SalesStatisticsView(generics.GenericAPIView):
                 'total_sales': daily_stats['total_sales'] or 0,
                 'all_time_orders': all_time_stats['total_orders'] or 0,
                 'all_time_sales': all_time_stats['total_sales'] or 0
+            })
+            
+        elif user.role == 'SalesPerson':
+            # Get daily statistics
+            daily_stats = Order.objects.filter(
+                date=today,
+                sales_person=user
+            ).aggregate(
+                total_orders=Count('id'),
+                total_sales=Sum('total_amount')
+            )
+            
+            # Get all-time statistics
+            all_time_stats = Order.objects.filter(
+                sales_person=user
+            ).aggregate(
+                total_orders=Count('id'),
+                total_sales=Sum('total_amount')
+            )
+            
+            return Response({
+                'date': today,
+                'total_orders': daily_stats['total_orders'] or 0,
+                'total_sales': daily_stats['total_sales'] or 0,
+                'all_time_orders': all_time_stats['total_orders'] or 0,
+                'all_time_sales': all_time_stats['total_sales'] or 0,
+                'total_commission': user.commission_amount or 0  # Added commission amount
             })
             
         return Response({
