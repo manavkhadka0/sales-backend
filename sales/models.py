@@ -29,7 +29,9 @@ class InventoryChangeLog(models.Model):
         ('add', 'Add'),
         ('update', 'Update'),
         ('deleted', 'Deleted'),
-        ('restore', 'Restore'),  # Added new choice for order cancellation
+        ('order_created', 'Order Created'),  # Added new choice for order creation
+        ('order_cancelled', 'Order Cancelled'),  # Added new choice for order cancellation
+
 
     ])
 

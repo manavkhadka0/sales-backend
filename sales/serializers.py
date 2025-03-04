@@ -22,9 +22,32 @@ class InventorySerializer(serializers.ModelSerializer):
         read_only_fields = ['distributor', 'franchise', 'factory']  # These will be set in the view
 
 class InventoryChangeLogSerializer(serializers.ModelSerializer):
+    product_name = serializers.SerializerMethodField()
+    user_name = serializers.SerializerMethodField()
+    organization = serializers.SerializerMethodField()
+
     class Meta:
         model = InventoryChangeLog
-        fields = '__all__'  # You can specify fields explicitly if needed
+        fields = ['id', 'product_name', 'old_quantity', 'new_quantity', 
+                 'action', 'user_name', 'organization', 'changed_at']
+
+    def get_product_name(self, obj):
+        return obj.inventory.product.name if obj.inventory else "Unknown Product"
+
+    def get_user_name(self, obj):
+        return obj.user.username if obj.user else "Unknown User"
+    
+    def get_organization(self, obj):
+        if not obj.inventory:
+            return "Unknown Organization"
+        
+        if obj.inventory.factory:
+            return f"Factory: {obj.inventory.factory}"
+        elif obj.inventory.distributor:
+            return f"Distributor: {obj.inventory.distributor}"
+        elif obj.inventory.franchise:
+            return f"Franchise: {obj.inventory.franchise}"
+        return "No Organization"
 
 class InventorySmallSerializer(serializers.ModelSerializer):
     product = serializers.SerializerMethodField()

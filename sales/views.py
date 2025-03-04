@@ -485,10 +485,10 @@ class OrderFilter(django_filters.FilterSet):
 class OrderListCreateView(generics.ListCreateAPIView):
     queryset = Order.objects.all().order_by('-id')
     serializer_class = OrderSerializer
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
     filterset_class = OrderFilter
     filter_backends = [DjangoFilterBackend, rest_filters.SearchFilter,rest_filters.OrderingFilter]  # Added SearchFilter
-    search_fields = ['phone_number', 'sales_person__username']  # Specify the fields to search
+    search_fields = ['phone_number', 'sales_person__username','delivery_address','full_name']  # Specify the fields to search
     ordering_fields = ['-id',]
     pagination_class = CustomPagination
 
@@ -603,7 +603,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 user=self.request.user,
                 old_quantity=old_quantity,
                 new_quantity=inventory_item.quantity,
-                action='update'
+                action='order_created'
             )
 
         return order
@@ -640,7 +640,7 @@ class OrderUpdateView(generics.UpdateAPIView):
                         user=request.user,
                         old_quantity=old_quantity,
                         new_quantity=inventory.quantity,
-                        action='restore'
+                        action='order_cancelled'
                     )
                 except Inventory.DoesNotExist:
                     return Response(
@@ -832,7 +832,7 @@ class InventoryChangeLogView(generics.ListAPIView):
 
 class Inventorylogs(generics.ListAPIView):
     serializer_class = InventoryChangeLogSerializer
-    queryset = InventoryChangeLog.objects.all()
+    queryset = InventoryChangeLog.objects.all().order_by('-id')
 
 class InventoryRequestView(generics.ListCreateAPIView):
     queryset = InventoryRequest.objects.all()
@@ -972,3 +972,41 @@ class SalesStatisticsView(generics.GenericAPIView):
         return Response({
             "detail": "You don't have permission to view statistics"
         }, status=status.HTTP_403_FORBIDDEN)
+    
+
+class LatestOrdersView(generics.ListAPIView):
+    queryset = Order.objects.order_by('-id')[:5]  # Get the latest 5 orders
+    serializer_class = OrderSerializer
+
+class UserInventoryLogs(generics.ListAPIView):
+    serializer_class = InventoryChangeLogSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        
+        if user.role == 'SuperAdmin':
+            # Get logs for factory inventory
+            return InventoryChangeLog.objects.filter(
+                inventory__factory=user.factory
+            ).order_by('-id')
+            
+        elif user.role == 'Distributor':
+            # Get logs for distributor inventory
+            return InventoryChangeLog.objects.filter(
+                inventory__distributor=user.distributor
+            ).order_by('-id')
+            
+        elif user.role == 'Franchise':
+            # Get logs for franchise inventory
+            return InventoryChangeLog.objects.filter(
+                inventory__franchise=user.franchise
+            ).order_by('-id')
+            
+        elif user.role == 'SalesPerson':
+            # Get logs where the user is the one who made the change
+            return InventoryChangeLog.objects.filter(
+                user=user
+            ).order_by('-id')
+            
+        return InventoryChangeLog.objects.none()  # Return empty queryset for unknown roles
