@@ -29,6 +29,13 @@ class CustomUserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         password = validated_data.pop('password')  # Remove password from validated data
         phone_number = validated_data.get('phone_number')
+        
+        # Check if user with this phone number already exists
+        if CustomUser.objects.filter(phone_number=phone_number).exists():
+            raise serializers.ValidationError({
+                'phone_number': 'A user with this phone number already exists.'
+            })
+            
         validated_data['username'] = phone_number  # Set username to phone number
         
         # Handle null values for distributor and franchise
