@@ -88,7 +88,7 @@ class Product(models.Model):
 class OrderProduct(models.Model):
     order = models.ForeignKey('Order', on_delete=models.CASCADE, related_name='order_products')
     product = models.ForeignKey(Inventory, on_delete=models.CASCADE)
-    quantity = models.PositiveIntegerField(default=1)
+    quantity = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return f"{self.product.product.name} - {self.quantity}"
