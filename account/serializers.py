@@ -19,11 +19,11 @@ class FranchiseSerializer(serializers.ModelSerializer):
 class CustomUserSerializer(serializers.ModelSerializer):
     distributor = serializers.PrimaryKeyRelatedField(queryset=Distributor.objects.all(), write_only=True, required=False, allow_null=True)
     franchise = serializers.PrimaryKeyRelatedField(queryset=Franchise.objects.all(), write_only=True, required=False, allow_null=True)
-
+    factory = serializers.PrimaryKeyRelatedField(queryset=Factory.objects.all(), write_only=True, required=False, allow_null=True)
     class Meta:
         model = CustomUser
         fields = ('id', 'username', 'first_name', 'last_name', 'email', 
-                 'phone_number', 'address', 'role', 'distributor', 'franchise', 'password')
+                 'phone_number', 'address', 'role', 'factory','distributor', 'franchise', 'password')
         read_only_fields = ('username',)  # Make username read-only since we'll set it automatically
 
     def create(self, validated_data):
@@ -36,6 +36,8 @@ class CustomUserSerializer(serializers.ModelSerializer):
             validated_data.pop('distributor')
         if 'franchise' in validated_data and validated_data['franchise'] is None:
             validated_data.pop('franchise')
+        if 'factory' in validated_data and validated_data['factory'] is None:
+            validated_data.pop('factory')
         
         user = CustomUser(**validated_data)  # Create user instance
         user.set_password(password)  # Hash the password
