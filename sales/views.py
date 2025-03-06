@@ -3,7 +3,6 @@ from django.shortcuts import render
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 
-from account.serializers import UserSmallSerializer
 from .models import Inventory, Order,Commission,Product,InventoryChangeLog,InventoryRequest, OrderProduct
 from account.models import CustomUser, Distributor, Franchise,Factory
 from .serializers import InventorySerializer, OrderSerializer,ProductSerializer,InventoryChangeLogSerializer,InventoryRequestSerializer, TopSalespersonSerializer
@@ -27,324 +26,136 @@ class InventoryListCreateView(generics.ListCreateAPIView):
     serializer_class = InventorySerializer
     # permission_classes = [IsAuthenticated]
 
+    def _format_inventory_data(self, inventory_queryset):
+        """Helper method to format inventory data consistently"""
+        return [
+            {
+                'id': inventory.id,
+                'product_id': inventory.product.id,
+                'product': inventory.product.name,
+                'quantity': inventory.quantity,
+                'status': inventory.status
+            } for inventory in inventory_queryset
+        ]
+
+    def _get_franchise_data(self, franchise):
+        """Helper method to get franchise inventory data"""
+        return {
+            'id': franchise.id,
+            'inventory': self._format_inventory_data(franchise.inventory.all())
+        }
+
+    def _get_distributor_data(self, distributor):
+        """Helper method to get distributor and its franchises inventory data"""
+        distributor_data = {
+            'id': distributor.id,
+            'inventory': self._format_inventory_data(distributor.inventory.all()),
+            'franchises': {}
+        }
+        
+        franchises = Franchise.objects.filter(distributor=distributor)
+        for franchise in franchises:
+            distributor_data['franchises'][franchise.name] = self._get_franchise_data(franchise)
+            
+        return distributor_data
+
     def list(self, request, *args, **kwargs):
         user = self.request.user
+        
         if user.role == 'SuperAdmin':
-            # Get all factories and their inventories
             factories = Factory.objects.prefetch_related('inventory')
             inventory_summary = {}
+            
             for factory in factories:
-                inventory_summary[factory.name] = {
+                factory_data = {
                     'id': factory.id,
-                    'inventory': [
-                        {
-                            'id': inventory.id,
-                            'product_id': inventory.product.id,
-                            'product': inventory.product.name,
-                            'quantity': inventory.quantity,
-                            'status': inventory.status
-                        } for inventory in factory.inventory.all()
-                    ],
+                    'inventory': self._format_inventory_data(factory.inventory.all()),
                     'distributors': {}
                 }
-                # Get distributors associated with the factory
+                
                 distributors = Distributor.objects.prefetch_related('inventory')
                 for distributor in distributors:
-                    inventory_summary[factory.name]['distributors'][distributor.name] = {
-                        'id': distributor.id,
-                        'inventory': [
-                            {
-                                'id': inventory.id,
-                                'product_id': inventory.product.id,
-                                'product': inventory.product.name,
-                                'quantity': inventory.quantity,
-                                'status': inventory.status
-                            } for inventory in distributor.inventory.all()
-                        ],
-                        'franchises': {}
-                    }
-                    # Get franchises associated with the distributor
-                    franchises = Franchise.objects.filter(distributor=distributor)
-                    for franchise in franchises:
-                        inventory_summary[factory.name]['distributors'][distributor.name]['franchises'][franchise.name] = {
-                            'id': franchise.id,
-                            'inventory': [
-                                {
-                                    'id': inventory.id,
-                                    'product_id': inventory.product.id,
-                                    'product': inventory.product.name,
-                                    'quantity': inventory.quantity,
-                                    'status': inventory.status
-                                } for inventory in franchise.inventory.all()
-                            ]
-                        }
-            return Response(inventory_summary)  # Return the summary for SuperAdmin
+                    factory_data['distributors'][distributor.name] = self._get_distributor_data(distributor)
+                
+                inventory_summary[factory.name] = factory_data
+            
+            return Response(inventory_summary)
+            
         elif user.role == 'Distributor':
-            # Get the distributor's inventory
             inventory_summary = {
-                user.distributor.name: {
-                    'id': user.distributor.id,
-                    'inventory': [
-                        {
-                            'id': inventory.id,
-                            'product_id': inventory.product.id,
-                            'product': inventory.product.name,
-                            'quantity': inventory.quantity,
-                            'status': inventory.status
-                        } for inventory in user.distributor.inventory.all()
-                    ],
-                    'franchises': {}
-                }
+                user.distributor.name: self._get_distributor_data(user.distributor)
             }
-            # Get franchises associated with the distributor
-            franchises = Franchise.objects.filter(distributor=user.distributor)
-            for franchise in franchises:
-                inventory_summary[user.distributor.name]['franchises'][franchise.name] = {
-                    'id': franchise.id,
-                    'inventory': [
-                        {
-                            'id': inventory.id,
-                            'product_id': inventory.product.id,
-                            'product': inventory.product.name,
-                            'quantity': inventory.quantity,
-                            'status': inventory.status
-                        } for inventory in franchise.inventory.all()
-                    ]
-                }
-            return Response(inventory_summary)  # Return the summary for Distributor
-        elif user.role == 'Franchise' or user.role == 'SalesPerson':  # Added handling for Franchise role
-            # Get the franchise's inventory
+            return Response(inventory_summary)
+            
+        elif user.role in ['Franchise', 'SalesPerson']:
             inventory_summary = {
-                user.franchise.name: {
-                    'id': user.franchise.id,
-                    'inventory': [
-                        {
-                            'id': inventory.id,
-                            'product_id': inventory.product.id,
-                            'product': inventory.product.name,
-                            'quantity': inventory.quantity,
-                            'status': inventory.status
-                        } for inventory in user.franchise.inventory.all()
-                    ]
-                }
+                user.franchise.name: self._get_franchise_data(user.franchise)
             }
-            return Response(inventory_summary) # Return the summary for Franchise
-        else:
-            # Call the superclass's list method for other roles
-            return super().list(request, *args, **kwargs)
+            return Response(inventory_summary)
+            
+        return super().list(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         user = self.request.user
         product = serializer.validated_data['product']
         quantity = serializer.validated_data['quantity']
-        status = serializer.validated_data.get('status', None)  # Default to None if not provided
-        
-        # Get distributor_id and franchise_id from request data
-        distributor_id = self.request.data.get('distributor_id')
-        franchise_id = self.request.data.get('franchise_id')
+        status = serializer.validated_data.get('status', None)
 
-        if user.role == 'SuperAdmin':
-            if distributor_id:
-                try:
-                    distributor = Distributor.objects.get(id=distributor_id)
-                    existing_inventory = Inventory.objects.filter(
-                        distributor=distributor,
-                        product=product
-                    ).first()
-                    
-                    if existing_inventory:
-                        InventoryChangeLog.objects.create(
-                            inventory=existing_inventory,
-                            user=user,
-                            old_quantity=existing_inventory.quantity,
-                            new_quantity=existing_inventory.quantity + quantity,
-                            action='update'
-                        )
-                        existing_inventory.quantity += quantity
-                        if status is not None:  # Only update status if provided
-                            existing_inventory.status = status
-                        existing_inventory.save()
-                        return existing_inventory
-                    else:
-                        # For new inventory, only include status if provided
-                        create_kwargs = {'distributor': distributor}
-                        if status is not None:
-                            create_kwargs['status'] = status
-                        inventory = serializer.save(**create_kwargs)
-                        InventoryChangeLog.objects.create(
-                            inventory=inventory,
-                            user=user,
-                            old_quantity=0,
-                            new_quantity=quantity,
-                            action='add'
-                        )
-                        return inventory
-                except Distributor.DoesNotExist:
-                    raise serializers.ValidationError("Distributor not found")
-                    
-            elif franchise_id:
-                try:
-                    franchise = Franchise.objects.get(id=franchise_id)
-                    existing_inventory = Inventory.objects.filter(
-                        franchise=franchise,
-                        product=product
-                    ).first()
-                    
-                    if existing_inventory:
-                        InventoryChangeLog.objects.create(
-                            inventory=existing_inventory,
-                            user=user,
-                            old_quantity=existing_inventory.quantity,
-                            new_quantity=existing_inventory.quantity + quantity,
-                            action='update'
-                        )
-                        existing_inventory.quantity += quantity
-                        if status is not None:  # Only update status if provided
-                            existing_inventory.status = status
-                        existing_inventory.save()
-                        return existing_inventory
-                    else:
-                        create_kwargs = {'franchise': franchise}
-                        if status is not None:
-                            create_kwargs['status'] = status
-                        inventory = serializer.save(**create_kwargs)
-                        InventoryChangeLog.objects.create(
-                            inventory=inventory,
-                            user=user,
-                            old_quantity=0,
-                            new_quantity=quantity,
-                            action='add'
-                        )
-                        return inventory
-                except Franchise.DoesNotExist:
-                    raise serializers.ValidationError("Franchise not found")
-            else:
-                existing_inventory = Inventory.objects.filter(
-                    factory=user.factory,
-                    product=product
-                ).first()
+        def get_inventory_owner():
+            """Helper method to determine inventory owner based on user role and request data"""
+            distributor_id = self.request.data.get('distributor_id')
+            franchise_id = self.request.data.get('franchise_id')
 
-                if existing_inventory:
-                    InventoryChangeLog.objects.create(
-                        inventory=existing_inventory,
-                        user=user,
-                        old_quantity=existing_inventory.quantity,
-                        new_quantity=existing_inventory.quantity + quantity,
-                        action='update'
-                    )
-                    existing_inventory.quantity += quantity
-                    if status is not None:  # Only update status if provided
-                        existing_inventory.status = status
-                    existing_inventory.save()
-                    return existing_inventory
-                else:
-                    create_kwargs = {'factory': user.factory}
-                    if status is not None:
-                        create_kwargs['status'] = status
-                    inventory = serializer.save(**create_kwargs)
-                    InventoryChangeLog.objects.create(
-                        inventory=inventory,
-                        user=user,
-                        old_quantity=0,
-                        new_quantity=quantity,
-                        action='add'
-                    )
-                    return inventory
+            if user.role == 'SuperAdmin':
+                if distributor_id:
+                    try:
+                        return Distributor.objects.get(id=distributor_id), 'distributor'
+                    except Distributor.DoesNotExist:
+                        raise serializers.ValidationError("Distributor not found")
+                elif franchise_id:
+                    try:
+                        return Franchise.objects.get(id=franchise_id), 'franchise'
+                    except Franchise.DoesNotExist:
+                        raise serializers.ValidationError("Franchise not found")
+                return user.factory, 'factory'
+            
+            elif user.role == 'Distributor':
+                if franchise_id:
+                    try:
+                        franchise = Franchise.objects.get(id=franchise_id, distributor=user.distributor)
+                        return franchise, 'franchise'
+                    except Franchise.DoesNotExist:
+                        raise serializers.ValidationError("Franchise not found or does not belong to your distributorship")
+                return user.distributor, 'distributor'
+            
+            elif user.role == 'Franchise':
+                return user.franchise, 'franchise'
+            
+            raise serializers.ValidationError("User does not have permission to create inventory")
 
-        elif user.role == 'Distributor':
-            if franchise_id:
-                try:
-                    franchise = Franchise.objects.get(
-                        id=franchise_id, 
-                        distributor=user.distributor
-                    )
-                    existing_inventory = Inventory.objects.filter(
-                        franchise=franchise,
-                        product=product
-                    ).first()
-                    
-                    if existing_inventory:
-                        InventoryChangeLog.objects.create(
-                            inventory=existing_inventory,
-                            user=user,
-                            old_quantity=existing_inventory.quantity,
-                            new_quantity=existing_inventory.quantity + quantity,
-                            action='update'
-                        )
-                        existing_inventory.quantity += quantity
-                        if status is not None:  # Only update status if provided
-                            existing_inventory.status = status
-                        existing_inventory.save()
-                        return existing_inventory
-                    else:
-                        create_kwargs = {'franchise': franchise}
-                        if status is not None:
-                            create_kwargs['status'] = status
-                        inventory = serializer.save(**create_kwargs)
-                        InventoryChangeLog.objects.create(
-                            inventory=inventory,
-                            user=user,
-                            old_quantity=0,
-                            new_quantity=quantity,
-                            action='add'
-                        )
-                        return inventory
-                except Franchise.DoesNotExist:
-                    raise serializers.ValidationError("Franchise not found or does not belong to your distributorship")
-            else:
-                existing_inventory = Inventory.objects.filter(
-                    distributor=user.distributor,
-                    product=product
-                ).first()
-
-                if existing_inventory:
-                    InventoryChangeLog.objects.create(
-                        inventory=existing_inventory,
-                        user=user,
-                        old_quantity=existing_inventory.quantity,
-                        new_quantity=existing_inventory.quantity + quantity,
-                        action='update'
-                    )
-                    existing_inventory.quantity += quantity
-                    if status is not None:  # Only update status if provided
-                        existing_inventory.status = status
-                    existing_inventory.save()
-                    return existing_inventory
-                else:
-                    create_kwargs = {'distributor': user.distributor}
-                    if status is not None:
-                        create_kwargs['status'] = status
-                    inventory = serializer.save(**create_kwargs)
-                    InventoryChangeLog.objects.create(
-                        inventory=inventory,
-                        user=user,
-                        old_quantity=0,
-                        new_quantity=quantity,
-                        action='add'
-                    )
-                    return inventory
-
-        elif user.role == 'Franchise':
-            existing_inventory = Inventory.objects.filter(
-                franchise=user.franchise,
-                product=product
-            ).first()
+        def update_or_create_inventory(owner, owner_type):
+            """Helper method to handle inventory update or creation"""
+            filter_kwargs = {f"{owner_type}": owner, 'product': product}
+            existing_inventory = Inventory.objects.filter(**filter_kwargs).first()
 
             if existing_inventory:
+                # Update existing inventory
+                new_quantity = existing_inventory.quantity + quantity
                 InventoryChangeLog.objects.create(
                     inventory=existing_inventory,
                     user=user,
                     old_quantity=existing_inventory.quantity,
-                    new_quantity=existing_inventory.quantity + quantity,
+                    new_quantity=new_quantity,
                     action='update'
                 )
-                existing_inventory.quantity += quantity
-                if status is not None:  # Only update status if provided
+                existing_inventory.quantity = new_quantity
+                if status is not None:
                     existing_inventory.status = status
                 existing_inventory.save()
                 return existing_inventory
             else:
-                create_kwargs = {'franchise': user.franchise}
+                # Create new inventory
+                create_kwargs = {owner_type: owner}
                 if status is not None:
                     create_kwargs['status'] = status
                 inventory = serializer.save(**create_kwargs)
@@ -357,8 +168,9 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                 )
                 return inventory
 
-        else:
-            raise serializers.ValidationError("User does not have permission to create inventory")
+        # Get inventory owner and type, then update or create inventory
+        owner, owner_type = get_inventory_owner()
+        return update_or_create_inventory(owner, owner_type)
 
 class FactoryInventoryListView(generics.ListAPIView):
     serializer_class = InventorySerializer
@@ -391,83 +203,57 @@ class DistributorInventoryListView(generics.ListAPIView):
     serializer_class = InventorySerializer
     queryset = Inventory.objects.all()
 
+    def _format_inventory_data(self, inventory_queryset):
+        """Helper method to format inventory data consistently"""
+        return [
+            {
+                'id': inventory.id,
+                'product_id': inventory.product.id,
+                'product': inventory.product.name,
+                'quantity': inventory.quantity,
+                'status': inventory.status
+            } for inventory in inventory_queryset
+        ]
+
+    def _get_distributor_data(self, distributor):
+        """Helper method to get distributor and its franchises inventory data"""
+        distributor_data = {
+            'inventory': self._format_inventory_data(distributor.inventory.all()),
+            'franchises': {}
+        }
+        
+        franchises = Franchise.objects.filter(distributor=distributor)
+        for franchise in franchises:
+            distributor_data['franchises'][franchise.name] = self._format_inventory_data(franchise.inventory.all())
+            
+        return distributor_data
+
     def list(self, request, *args, **kwargs):
         user = self.request.user
+        
         if user.role == 'SuperAdmin':
             distributors = Distributor.objects.prefetch_related('inventory')
-            inventory_summary = {}  # Changed from list to dictionary
-            for distributor in distributors:
-                distributor_inventory = {
-                    'inventory': [
-                        {
-                            'id': inventory.id,
-                            'product_id': inventory.product.id, 
-                            'product': inventory.product.name,
-                            'quantity': inventory.quantity,
-                            'status': inventory.status
-                        } for inventory in distributor.inventory.all()
-                    ],
-                    'franchises': {}
-                }
-                franchises = Franchise.objects.filter(distributor=distributor)
-                for franchise in franchises:
-                    distributor_inventory['franchises'][franchise.name] = [  # Accessing the correct dictionary
-                        {
-                            'id': inventory.id,
-                            'product_id': inventory.product.id,
-                            'product': inventory.product.name,
-                            'quantity': inventory.quantity,
-                            'status': inventory.status
-                        } for inventory in franchise.inventory.all()
-                    ]
-                inventory_summary[distributor.name] = distributor_inventory  # Store in the dictionary
-            return Response(inventory_summary)
-        elif user.role == 'Distributor':
-            # Get the distributor's inventory
             inventory_summary = {
-                user.distributor.name: {
-                    'inventory': [
-                        {
-                            'id': inventory.id,
-                            'product_id': inventory.product.id,
-                            'product': inventory.product.name,
-                            'quantity': inventory.quantity,
-                            'status': inventory.status
-                        } for inventory in user.distributor.inventory.all()
-                    ],
-                    'franchises': {}
-                }
+                distributor.name: self._get_distributor_data(distributor)
+                for distributor in distributors
             }
-            # Get franchises associated with the distributor
-            franchises = Franchise.objects.filter(distributor=user.distributor)
-            for franchise in franchises:
-                inventory_summary[user.distributor.name]['franchises'][franchise.name] = [
-                    {
-                        'id': inventory.id,
-                        'product_id': inventory.product.id,
-                        'product': inventory.product.name,
-                        'quantity': inventory.quantity,
-                        'status': inventory.status
-                    } for inventory in franchise.inventory.all()
-                ]
             return Response(inventory_summary)
-        elif user.role == 'Franchise':  # Added handling for Franchise role
-            # Get the franchise's inventory
+            
+        elif user.role == 'Distributor':
+            inventory_summary = {
+                user.distributor.name: self._get_distributor_data(user.distributor)
+            }
+            return Response(inventory_summary)
+            
+        elif user.role == 'Franchise':
             inventory_summary = {
                 user.franchise.name: {
-                    'inventory': [
-                        {
-                            'id': inventory.id,
-                            'product_id': inventory.product.id,
-                            'product': inventory.product.name,
-                            'quantity': inventory.quantity,
-                            'status': inventory.status
-                        } for inventory in user.franchise.inventory.all()
-                    ]
+                    'inventory': self._format_inventory_data(user.franchise.inventory.all())
                 }
             }
-            return Response(inventory_summary)  # Return the summary for Franchise
-        return Response([])  # Return an empty Response for non-SuperAdmin users
+            return Response(inventory_summary)
+            
+        return Response([])  # Return an empty Response for non-authorized users
 
 class CustomPagination(PageNumberPagination):
     page_size = 10
@@ -689,10 +475,6 @@ class OrderUpdateView(generics.UpdateAPIView):
                 salesperson = order.sales_person
                 salesperson.commission_amount += order.commission_amount
                 salesperson.save()  # Save the updated salesperson
-
-                # # Optionally, create a commission record
-                # commission = Commission(sales_person=order.sales_person, distributor=order.distributor, rate=order.commission_amount)
-                # commission.save()  # Save the commission record
             except Commission.DoesNotExist:
                 return Response({"detail": "Commission not set for this salesperson."}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -736,68 +518,59 @@ class CommissionPaymentView(generics.UpdateAPIView):
 class ProductListView(generics.ListAPIView):
     serializer_class = ProductSerializer
 
+    def _format_inventory_data(self, inventory_queryset, include_status=False):
+        """Helper method to format inventory data consistently"""
+        base_fields = {
+            'id', 
+            'product', 
+            'product__name',
+            'quantity'
+        }
+        
+        if include_status:
+            base_fields.add('status')
+            
+        inventory_data = inventory_queryset.values(*base_fields)
+        
+        product_list = []
+        for inv in inventory_data:
+            product_dict = {
+                'inventory_id': inv['id'],
+                'product_id': inv['product'],
+                'product_name': inv['product__name'],
+                'quantity': inv['quantity']
+            }
+            if include_status:
+                product_dict['status'] = inv['status']
+            product_list.append(product_dict)
+            
+        return product_list
+
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'Franchise' or user.role == 'SalesPerson':
-            # Get products and their inventory IDs from franchise's inventory
-            franchise_inventory = Inventory.objects.filter(franchise=user.franchise).values(
-                'id', 
-                'product', 
-                'product__name',
-                'quantity'
+        
+        if user.role in ['Franchise', 'SalesPerson']:
+            return self._format_inventory_data(
+                Inventory.objects.filter(franchise=user.franchise)
             )
-            product_list = []
-            for inv in franchise_inventory:
-                product_list.append({
-                    'inventory_id': inv['id'],
-                    'product_id': inv['product'],
-                    'product_name': inv['product__name'],
-                    'quantity': inv['quantity']
-                })
-            return product_list
+            
         elif user.role == 'Distributor':
-            # Get products and their inventory IDs from distributor's inventory
-            distributor_inventory = Inventory.objects.filter(distributor=user.distributor).values(
-                'id', 
-                'product', 
-                'product__name',
-                'quantity'
+            return self._format_inventory_data(
+                Inventory.objects.filter(distributor=user.distributor)
             )
-            product_list = []
-            for inv in distributor_inventory:
-                product_list.append({
-                    'inventory_id': inv['id'],
-                    'product_id': inv['product'],
-                    'product_name': inv['product__name'],
-                    'quantity': inv['quantity']
-                })
-            return product_list
+            
         elif user.role == 'SuperAdmin':
-            # Get products and their inventory IDs from factory's inventory
-            factory_inventory = Inventory.objects.filter(factory=user.factory).values(
-                'id', 
-                'product', 
-                'product__name',
-                'quantity',
-                'status'
+            return self._format_inventory_data(
+                Inventory.objects.filter(factory=user.factory),
+                include_status=True
             )
-            product_list = []
-            for inv in factory_inventory:
-                product_list.append({
-                    'inventory_id': inv['id'],
-                    'product_id': inv['product'],
-                    'product_name': inv['product__name'],
-                    'quantity': inv['quantity'],
-                    'status': inv['status']
-                })
-            return product_list
+            
         return Product.objects.none()  # Return empty queryset for other roles
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         if isinstance(queryset, list):  # If it's our custom product list
             return Response(queryset)
-        # Otherwise, use default serializer behavior
         return super().list(request, *args, **kwargs)
 
 
@@ -913,117 +686,46 @@ class AllProductsListView(generics.ListCreateAPIView):
 class SalesStatisticsView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
+    def get_stats_for_queryset(self, queryset, today):
+        """Helper method to get statistics for a queryset"""
+        daily_stats = queryset.filter(date=today).aggregate(
+            total_orders=Count('id'),
+            total_sales=Sum('total_amount')
+        )
+        
+        all_time_stats = queryset.aggregate(
+            total_orders=Count('id'),
+            total_sales=Sum('total_amount')
+        )
+        
+        return {
+            'date': today,
+            'total_orders': daily_stats['total_orders'] or 0,
+            'total_sales': daily_stats['total_sales'] or 0,
+            'all_time_orders': all_time_stats['total_orders'] or 0,
+            'all_time_sales': all_time_stats['total_sales'] or 0
+        }
+
     def get(self, request):
         user = self.request.user
         today = timezone.now().date()
         
         if user.role == 'SuperAdmin':
-            # Get daily statistics
-            daily_stats = Order.objects.filter(
-                date=today
-            ).aggregate(
-                total_orders=Count('id'),
-                total_sales=Sum('total_amount')
-            )
-            
-            # Get all-time statistics
-            all_time_stats = Order.objects.all().aggregate(
-                total_orders=Count('id'),
-                total_sales=Sum('total_amount')
-            )
-            
-            return Response({
-                'date': today,
-                'total_orders': daily_stats['total_orders'] or 0,
-                'total_sales': daily_stats['total_sales'] or 0,
-                'all_time_orders': all_time_stats['total_orders'] or 0,
-                'all_time_sales': all_time_stats['total_sales'] or 0
-            })
-            
+            queryset = Order.objects.all()
         elif user.role == 'Distributor':
-            # Get franchises under this distributor
             franchises = Franchise.objects.filter(distributor=user.distributor)
-            
-            # Get daily statistics
-            daily_stats = Order.objects.filter(
-                date=today,
-                franchise__in=franchises
-            ).aggregate(
-                total_orders=Count('id'),
-                total_sales=Sum('total_amount')
-            )
-            
-            # Get all-time statistics
-            all_time_stats = Order.objects.filter(
-                franchise__in=franchises
-            ).aggregate(
-                total_orders=Count('id'),
-                total_sales=Sum('total_amount')
-            )
-            
-            return Response({
-                'date': today,
-                'total_orders': daily_stats['total_orders'] or 0,
-                'total_sales': daily_stats['total_sales'] or 0,
-                'all_time_orders': all_time_stats['total_orders'] or 0,
-                'all_time_sales': all_time_stats['total_sales'] or 0
-            })
-            
+            queryset = Order.objects.filter(franchise__in=franchises)
         elif user.role == 'Franchise':
-            # Get daily statistics
-            daily_stats = Order.objects.filter(
-                date=today,
-                franchise=user.franchise
-            ).aggregate(
-                total_orders=Count('id'),
-                total_sales=Sum('total_amount')
-            )
-            
-            # Get all-time statistics
-            all_time_stats = Order.objects.filter(
-                franchise=user.franchise
-            ).aggregate(
-                total_orders=Count('id'),
-                total_sales=Sum('total_amount')
-            )
-            
-            return Response({
-                'date': today,
-                'total_orders': daily_stats['total_orders'] or 0,
-                'total_sales': daily_stats['total_sales'] or 0,
-                'all_time_orders': all_time_stats['total_orders'] or 0,
-                'all_time_sales': all_time_stats['total_sales'] or 0
-            })
-            
+            queryset = Order.objects.filter(franchise=user.franchise)
         elif user.role == 'SalesPerson':
-            # Get daily statistics
-            daily_stats = Order.objects.filter(
-                date=today,
-                sales_person=user
-            ).aggregate(
-                total_orders=Count('id'),
-                total_sales=Sum('total_amount')
+            queryset = Order.objects.filter(sales_person=user)
+        else:
+            return Response(
+                {"detail": "You don't have permission to view statistics"},
+                status=status.HTTP_403_FORBIDDEN
             )
             
-            # Get all-time statistics
-            all_time_stats = Order.objects.filter(
-                sales_person=user
-            ).aggregate(
-                total_orders=Count('id'),
-                total_sales=Sum('total_amount')
-            )
-            
-            return Response({
-                'date': today,
-                'total_orders': daily_stats['total_orders'] or 0,
-                'total_sales': daily_stats['total_sales'] or 0,
-                'all_time_orders': all_time_stats['total_orders'] or 0,
-                'all_time_sales': all_time_stats['total_sales'] or 0,
-            })
-            
-        return Response({
-            "detail": "You don't have permission to view statistics"
-        }, status=status.HTTP_403_FORBIDDEN)
+        return Response(self.get_stats_for_queryset(queryset, today))
     
 
 class LatestOrdersView(generics.ListAPIView):

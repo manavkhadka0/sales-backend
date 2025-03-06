@@ -9,7 +9,7 @@ class OrderProductInline(TabularInline):
     
 
 class OrderAdmin(ModelAdmin):
-    list_display = ['date','full_name', 'sales_person', 'product_name','delivery_address','phone_number','payment_method','total_amount','order_status']
+    list_display = ['full_name', 'date','sales_person', 'product_name','delivery_address','phone_number','payment_method','total_amount','order_status']
     list_filter = ['sales_person', 'order_products__product__product', 'order_status', 'created_at']
 
     def product_name(self, obj):
