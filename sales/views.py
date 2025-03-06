@@ -1050,26 +1050,29 @@ class TopSalespersonView(generics.ListAPIView):
         # Get all users with role 'SalesPerson'
         salespersons = CustomUser.objects.filter(role='SalesPerson')
         
-        # Annotate each salesperson with their total sales amount
+        # Annotate each salesperson with their total sales count and amount
         salespersons = salespersons.annotate(
+            sales_count=Count('orders', filter=models.Q(orders__order_status='Delivered')),
             total_sales=Sum('orders__total_amount', filter=models.Q(orders__order_status='Delivered'))
-        ).order_by('-total_sales')[:5]  # Get top 5
+        ).order_by('-sales_count', '-total_sales')[:5]  # Get top 5 by sales count, then by amount
         
-        # Replace None values with 0 for total_sales
+        # Replace None values with 0
         for salesperson in salespersons:
             if salesperson.total_sales is None:
                 salesperson.total_sales = 0.0
+            if salesperson.sales_count is None:
+                salesperson.sales_count = 0
         
         return salespersons
-
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         serializer = self.get_serializer(queryset, many=True)
         
-        # Add total sales to each salesperson's data
+        # Add sales count and total sales to each salesperson's data
         data = serializer.data
         for index, item in enumerate(data):
+            item['sales_count'] = queryset[index].sales_count
             item['total_sales'] = float(queryset[index].total_sales or 0)
         
         return Response(data)

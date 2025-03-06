@@ -160,11 +160,9 @@ class InventoryRequestSerializer(serializers.ModelSerializer):
 
 class TopSalespersonSerializer(serializers.ModelSerializer):
     franchise = serializers.StringRelatedField(read_only=True)
-    total_sales = serializers.SerializerMethodField()
+    total_sales = serializers.FloatField(read_only=True)
+    sales_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = CustomUser
-        fields = ('first_name', 'last_name', 'phone_number', 'franchise', 'total_sales')
-
-    def get_total_sales(self, obj):
-        return float(obj.total_sales) if obj.total_sales is not None else 0.0
+        fields = ('first_name', 'last_name', 'phone_number', 'franchise', 'total_sales', 'sales_count')
