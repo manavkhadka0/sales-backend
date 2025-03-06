@@ -1047,21 +1047,17 @@ class TopSalespersonView(generics.ListAPIView):
     serializer_class = TopSalespersonSerializer
 
     def get_queryset(self):
-        # Get all users with role 'SalesPerson'
+        # Get all users with role 'SalesPerson' and annotate with sales data
         salespersons = CustomUser.objects.filter(role='SalesPerson')
         
-        # Annotate each salesperson with their total sales count and amount
+        # Annotate and filter out those with no sales
         salespersons = salespersons.annotate(
             sales_count=Count('orders'),
             total_sales=Sum('orders__total_amount')
+        ).filter(
+            sales_count__gt=0,  # Only include those with sales count greater than 0
+            total_sales__gt=0   # Only include those with total sales greater than 0
         ).order_by('-sales_count', '-total_sales')[:5]  # Get top 5 by sales count, then by amount
-        
-        # Replace None values with 0
-        for salesperson in salespersons:
-            if salesperson.total_sales is None:
-                salesperson.total_sales = 0.0
-            if salesperson.sales_count is None:
-                salesperson.sales_count = 0
         
         return salespersons
 
@@ -1069,11 +1065,10 @@ class TopSalespersonView(generics.ListAPIView):
         queryset = self.get_queryset()
         serializer = self.get_serializer(queryset, many=True)
         
-        # Add sales count and total sales to each salesperson's data
         data = serializer.data
         for index, item in enumerate(data):
             item['sales_count'] = queryset[index].sales_count
-            item['total_sales'] = float(queryset[index].total_sales or 0)
+            item['total_sales'] = float(queryset[index].total_sales)
         
         return Response(data)
 
