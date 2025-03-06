@@ -114,7 +114,6 @@ class Order(models.Model):
     landmark = models.CharField(max_length=255, blank=True)
     phone_number = models.CharField(max_length=20)
     alternate_phone_number = models.CharField(max_length=20, blank=True)
-    delivery_charge = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     payment_method = models.CharField(max_length=255, choices=PAYMENT_CHOICES)
     payment_screenshot = models.ImageField(upload_to='payment_screenshots/', blank=True, null=True)
     order_status = models.CharField(max_length=255, choices=ORDER_STATUS_CHOICES, default='Pending')
