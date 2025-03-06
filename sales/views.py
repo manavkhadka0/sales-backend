@@ -521,10 +521,31 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         salesperson = self.request.user
-
+        phone_number = self.request.data.get('phone_number')
+        
+        # Get the order products data
+        order_products_data = self.request.data.get('order_products', [])
+        
+        # Check for recent orders with same phone number and products
+        seven_days_ago = timezone.now() - timezone.timedelta(days=7)
+        
+        for order_product_data in order_products_data:
+            product_id = order_product_data['product_id']
+            product = Product.objects.get(id=product_id)
+            # Check if this phone number has ordered this product in the last 7 days
+            recent_orders = Order.objects.filter(
+                phone_number=phone_number,
+                created_at__gte=seven_days_ago
+            ).prefetch_related('order_products')
+            
+            for order in recent_orders:
+                if order.order_products.filter(product__product_id=product_id).exists():
+                    raise serializers.ValidationError(
+                        f"This phone number has already ordered {product.name} within the last 7 days. "
+                        "Please wait before ordering the same product again."
+                    )
         
         # Validate inventory before creating order
-        order_products_data = self.request.data.get('order_products', [])
         for order_product_data in order_products_data:
             product_id = order_product_data['product_id']
             quantity = order_product_data['quantity']
