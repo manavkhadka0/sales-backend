@@ -1,9 +1,12 @@
+from django.forms import DecimalField
 from django.shortcuts import render
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
+
+from account.serializers import UserSmallSerializer
 from .models import Inventory, Order,Commission,Product,InventoryChangeLog,InventoryRequest, OrderProduct
-from account.models import Distributor, Franchise,Factory
-from .serializers import InventorySerializer, OrderSerializer,ProductSerializer,InventoryChangeLogSerializer,InventoryRequestSerializer
+from account.models import CustomUser, Distributor, Franchise,Factory
+from .serializers import InventorySerializer, OrderSerializer,ProductSerializer,InventoryChangeLogSerializer,InventoryRequestSerializer, TopSalespersonSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
@@ -14,6 +17,8 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework import serializers
 from django.utils import timezone
 from django.db.models import Count, Sum
+from django.db import models
+from django.db.models.functions import TruncMonth, TruncWeek, TruncYear
 
 
 # Create your views here.
@@ -1036,3 +1041,141 @@ class UserInventoryLogs(generics.ListAPIView):
             ).order_by('-id')
             
         return InventoryChangeLog.objects.none()  # Return empty queryset for unknown roles
+    
+
+class TopSalespersonView(generics.ListAPIView):
+    serializer_class = TopSalespersonSerializer
+
+    def get_queryset(self):
+        # Get all users with role 'SalesPerson'
+        salespersons = CustomUser.objects.filter(role='SalesPerson')
+        
+        # Annotate each salesperson with their total sales amount
+        salespersons = salespersons.annotate(
+            total_sales=Sum('orders__total_amount', filter=models.Q(orders__order_status='Delivered'))
+        ).order_by('-total_sales')[:5]  # Get top 5
+        
+        # Replace None values with 0 for total_sales
+        for salesperson in salespersons:
+            if salesperson.total_sales is None:
+                salesperson.total_sales = 0.0
+        
+        return salespersons
+
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        
+        # Add total sales to each salesperson's data
+        data = serializer.data
+        for index, item in enumerate(data):
+            item['total_sales'] = float(queryset[index].total_sales or 0)
+        
+        return Response(data)
+
+class RevenueView(generics.ListAPIView):
+
+    def get(self, request, *args, **kwargs):
+        filter_type = request.GET.get('filter', 'monthly')  # Default to monthly
+        today = timezone.now().date()
+
+        try:
+            if filter_type == 'weekly':
+                revenue = (
+                    Order.objects.filter(created_at__year=today.year)
+                    .annotate(period=TruncWeek('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+                
+            elif filter_type == 'yearly':
+                revenue = (
+                    Order.objects.annotate(period=TruncYear('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+                
+            else:  # Default is monthly
+                revenue = (
+                    Order.objects.annotate(period=TruncMonth('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+
+            # Format the response data
+            response_data = [{
+                'period': entry['period'].strftime(
+                    '%Y-%m-%d' if filter_type == 'weekly' 
+                    else '%Y-%m' if filter_type == 'monthly'
+                    else '%Y'
+                ),
+                'total_revenue': float(entry['total_revenue']),
+                'order_count': entry['order_count']
+            } for entry in revenue]
+
+            return Response({
+                'filter_type': filter_type,
+                'data': response_data
+            })
+
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch revenue data: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class TopProductsView(generics.ListAPIView):
+    def get(self, request, *args, **kwargs):
+        try:
+            # Get all order products and aggregate their quantities and amounts
+            top_products = (
+                OrderProduct.objects.filter(
+                    order__order_status='Delivered'  # Only count delivered orders
+                ).values(
+                    'product__product__id',  # Get the actual product ID
+                    'product__product__name'  # Get the product name
+                ).annotate(
+                    total_quantity=Sum('quantity'),
+                    total_amount=Sum(
+                        models.F('quantity') * models.F('order__total_amount') / 
+                        models.Subquery(
+                            OrderProduct.objects.filter(order=models.OuterRef('order'))
+                            .values('order')
+                            .annotate(total_qty=Sum('quantity'))
+                            .values('total_qty')
+                        )
+                    )
+                ).order_by('-total_quantity')[:5]  # Get top 5 by quantity
+            )
+
+            # Format the response data
+            response_data = [{
+                'product_id': item['product__product__id'],
+                'product_name': item['product__product__name'],
+                'total_quantity': item['total_quantity'],
+                'total_amount': round(float(item['total_amount']), 2) if item['total_amount'] else 0.0
+            } for item in top_products]
+
+            return Response({
+                'count': len(response_data),
+                'data': response_data
+            })
+
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch top products data: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )

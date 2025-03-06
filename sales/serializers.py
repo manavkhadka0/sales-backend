@@ -157,3 +157,14 @@ class InventoryRequestSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         validated_data['user'] = user  # Set the user in the validated data
         return super().create(validated_data)  # Call the parent class's create method
+
+class TopSalespersonSerializer(serializers.ModelSerializer):
+    franchise = serializers.StringRelatedField(read_only=True)
+    total_sales = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomUser
+        fields = ('first_name', 'last_name', 'phone_number', 'franchise', 'total_sales')
+
+    def get_total_sales(self, obj):
+        return float(obj.total_sales) if obj.total_sales is not None else 0.0

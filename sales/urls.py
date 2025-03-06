@@ -1,6 +1,6 @@
 # sales-backend/sales/urls.py
 from django.urls import path
-from .views import InventoryListCreateView, LatestOrdersView, OrderListCreateView, OrderUpdateView,CommissionPaymentView,ProductListView,InventoryDetailView,InventoryChangeLogView,Inventorylogs,FactoryInventoryListView,DistributorInventoryListView,InventoryRequestView,InventoryRequestDetailView,AllProductsListView, SalesStatisticsView, UserInventoryLogs
+from .views import InventoryListCreateView, LatestOrdersView, OrderListCreateView, OrderUpdateView,CommissionPaymentView,ProductListView,InventoryDetailView,InventoryChangeLogView,Inventorylogs,FactoryInventoryListView,DistributorInventoryListView,InventoryRequestView,InventoryRequestDetailView,AllProductsListView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView
     
 urlpatterns = [
     path('inventory/', InventoryListCreateView.as_view(), name='inventory-list'),
@@ -22,4 +22,7 @@ urlpatterns = [
     path('products/', ProductListView.as_view(), name='product-list'),
     path('all-products/', AllProductsListView.as_view(), name='all-products-list'),
     path('statistics/', SalesStatisticsView.as_view(), name='sales-statistics'),
+    path('top-salespersons/', TopSalespersonView.as_view(), name='top-salespersons'),  # New URL for top salespersons
+    path('revenue/', RevenueView.as_view(), name='revenue'),
+    path('top-products/', TopProductsView.as_view(), name='top-products'),
 ]
