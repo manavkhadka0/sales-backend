@@ -153,16 +153,85 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         model = Order
         fields = ['id', 'order_status', 'total_amount', 'created_at', 'sales_person', 'order_products']  # Add more fields as needed
 
+
 class InventoryRequestSerializer(serializers.ModelSerializer):
+    product = ProductSerializer(read_only=True)
+    product_id = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(),
+        write_only=True,
+        source='product',
+        required=False
+    )
+
     class Meta:
         model = InventoryRequest
-        fields = '__all__'
+        fields = ['id', 'product', 'product_id', 'quantity', 'factory', 'distributor', 'status', 'total_amount', 'created_at']
+        read_only_fields = ['total_amount', 'user']
+
+    def validate(self, data):
+        user = self.context['request'].user
+        
+        # Skip validation for updates (PATCH/PUT requests)
+        if self.instance is not None:
+            return data
+
+        factory = data.get('factory')
+        distributor = data.get('distributor')
+
+        # Validation for create only
+        if not self.instance:
+            # Check that only one destination is specified
+            if factory and distributor:
+                raise serializers.ValidationError("Cannot request from both factory and distributor")
+            if not factory and not distributor:
+                raise serializers.ValidationError("Must specify either factory or distributor")
+
+            # Franchise validation
+            if user.role == 'Franchise':
+                if not hasattr(user, 'franchise'):
+                    raise serializers.ValidationError("User is not associated with a franchise")
+                
+                if factory:
+                    raise serializers.ValidationError("Franchise can only request from distributor")
+                
+                # Validate requesting from assigned distributor
+                if distributor != user.franchise.distributor:
+                    raise serializers.ValidationError("Can only request from your assigned distributor")
+
+            # Distributor validation
+            elif user.role == 'Distributor':
+                if not hasattr(user, 'distributor'):
+                    raise serializers.ValidationError("User is not associated with a distributor")
+                
+                if distributor:
+                    raise serializers.ValidationError("Distributor cannot request from another distributor")
+                
+                # Validate requesting from factory
+                if not factory:
+                    raise serializers.ValidationError("Distributor must request from factory")
+
+            else:
+                raise serializers.ValidationError(f"Users with role {user.role} cannot make inventory requests")
+
+            # Check for existing pending requests for the same product
+            existing_request = InventoryRequest.objects.filter(
+                user=user,
+                product=data['product'],
+                status='Pending'
+            )
+            if factory:
+                existing_request = existing_request.filter(factory=factory)
+            if distributor:
+                existing_request = existing_request.filter(distributor=distributor)
+                
+            if existing_request.exists():
+                raise serializers.ValidationError("You already have a pending request for this product")
+
+        return data
 
     def create(self, validated_data):
-        # Get the user from the context
-        user = self.context['request'].user
-        validated_data['user'] = user  # Set the user in the validated data
-        return super().create(validated_data)  # Call the parent class's create method
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
 
 class TopSalespersonSerializer(serializers.ModelSerializer):
     franchise = serializers.StringRelatedField(read_only=True)

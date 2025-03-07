@@ -66,6 +66,8 @@ class InventoryRequest(models.Model):
         ('Accepted', 'Accepted'),
         ('Rejected', 'Rejected')
     )
+    factory = models.ForeignKey('account.Factory', on_delete=models.CASCADE,null=True, blank=True)
+    distributor = models.ForeignKey('account.Distributor', on_delete=models.CASCADE,null=True, blank=True)
     user = models.ForeignKey('account.CustomUser', on_delete=models.CASCADE,null=True, blank=True)
     product = models.ForeignKey('sales.Product', on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=0)

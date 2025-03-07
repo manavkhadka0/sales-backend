@@ -216,17 +216,10 @@ class DistributorInventoryListView(generics.ListAPIView):
         ]
 
     def _get_distributor_data(self, distributor):
-        """Helper method to get distributor and its franchises inventory data"""
-        distributor_data = {
-            'inventory': self._format_inventory_data(distributor.inventory.all()),
-            'franchises': {}
+        """Helper method to get distributor inventory data"""
+        return {
+            'inventory': self._format_inventory_data(distributor.inventory.all())
         }
-        
-        franchises = Franchise.objects.filter(distributor=distributor)
-        for franchise in franchises:
-            distributor_data['franchises'][franchise.name] = self._format_inventory_data(franchise.inventory.all())
-            
-        return distributor_data
 
     def list(self, request, *args, **kwargs):
         user = self.request.user
