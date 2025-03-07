@@ -35,7 +35,7 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                 'product': inventory.product.name,
                 'quantity': inventory.quantity,
                 'status': inventory.status
-            } for inventory in inventory_queryset
+            } for inventory in inventory_queryset.filter(status='ready_to_dispatch')
         ]
 
     def _get_franchise_data(self, franchise):
@@ -174,7 +174,7 @@ class InventoryListCreateView(generics.ListCreateAPIView):
 
 class FactoryInventoryListView(generics.ListAPIView):
     serializer_class = InventorySerializer
-    queryset = Inventory.objects.all()
+    queryset = Inventory.objects.filter(status='ready_to_dispatch')
 
     def list(self, request, *args, **kwargs):
         user = self.request.user
@@ -513,7 +513,7 @@ class ProductListView(generics.ListAPIView):
         if include_status:
             base_fields.add('status')
             
-        inventory_data = inventory_queryset.values(*base_fields)
+        inventory_data = inventory_queryset.filter(status='ready_to_dispatch').values(*base_fields)
         
         product_list = []
         for inv in inventory_data:

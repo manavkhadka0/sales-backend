@@ -13,7 +13,7 @@ class Inventory(models.Model):
     franchise= models.ForeignKey('account.Franchise', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
     factory = models.ForeignKey('account.Factory', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
     product = models.ForeignKey('sales.Product', on_delete=models.CASCADE, related_name='inventory')
-    status = models.CharField(max_length=255, choices=STATUS_CHOICES, default='incoming',null=True, blank=True)
+    status = models.CharField(max_length=255, choices=STATUS_CHOICES, default='ready_to_dispatch',null=True, blank=True)
     quantity = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
