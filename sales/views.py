@@ -248,6 +248,62 @@ class DistributorInventoryListView(generics.ListAPIView):
             
         return Response([])  # Return an empty Response for non-authorized users
 
+class FranchiseInventoryListView(generics.ListAPIView):
+    serializer_class = InventorySerializer
+    queryset = Inventory.objects.all()
+
+    def _format_inventory_data(self, inventory_queryset):
+        """Helper method to format inventory data consistently"""
+        return [
+            {
+                'id': inventory.id,
+                'product_id': inventory.product.id,
+                'product': inventory.product.name,
+                'quantity': inventory.quantity,
+            } for inventory in inventory_queryset.filter(status='ready_to_dispatch')
+        ]
+
+    def list(self, request, *args, **kwargs):
+        user = self.request.user
+
+        if user.role == 'SuperAdmin':
+            # Get all franchises with their distributors
+            franchises = Franchise.objects.prefetch_related('inventory', 'distributor').all()
+            inventory_summary = {}
+            
+            for franchise in franchises:
+                inventory_summary[franchise.name] = {
+                    'distributor_name': franchise.distributor.name if franchise.distributor else "No Distributor",
+                    'inventory': self._format_inventory_data(franchise.inventory.all())
+                }
+            
+            return Response(inventory_summary)
+
+        elif user.role == 'Distributor':
+            # Get franchises under this distributor
+            franchises = Franchise.objects.filter(distributor=user.distributor).prefetch_related('inventory')
+            inventory_summary = {}
+            
+            for franchise in franchises:
+                inventory_summary[franchise.name] = {
+                    'distributor_name': user.distributor.name,
+                    'inventory': self._format_inventory_data(franchise.inventory.all())
+                }
+            
+            return Response(inventory_summary)
+
+        elif user.role == 'Franchise':
+            # Get only this franchise's inventory
+            inventory_summary = {
+                user.franchise.name: {
+                    'distributor_name': user.franchise.distributor.name if user.franchise.distributor else "No Distributor",
+                    'inventory': self._format_inventory_data(user.franchise.inventory.all())
+                }
+            }
+            return Response(inventory_summary)
+
+        return Response({})  # Return empty dict for unauthorized users
+
 class CustomPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'

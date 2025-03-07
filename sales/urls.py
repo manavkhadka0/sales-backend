@@ -1,11 +1,12 @@
 # sales-backend/sales/urls.py
 from django.urls import path
-from .views import InventoryListCreateView, LatestOrdersView, OrderListCreateView, OrderUpdateView,CommissionPaymentView,ProductListView,InventoryDetailView,InventoryChangeLogView,Inventorylogs,FactoryInventoryListView,DistributorInventoryListView,InventoryRequestView,InventoryRequestDetailView,AllProductsListView, RawMaterialListView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView
+from .views import FranchiseInventoryListView, InventoryListCreateView, LatestOrdersView, OrderListCreateView, OrderUpdateView,CommissionPaymentView,ProductListView,InventoryDetailView,InventoryChangeLogView,Inventorylogs,FactoryInventoryListView,DistributorInventoryListView,InventoryRequestView,InventoryRequestDetailView,AllProductsListView, RawMaterialListView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView
     
 urlpatterns = [
     path('inventory/', InventoryListCreateView.as_view(), name='inventory-list'),
     path('factory-inventory/', FactoryInventoryListView.as_view(), name='factory-inventory-list'),
     path('distributor-inventory/', DistributorInventoryListView.as_view(), name='distributor-inventory-list'),
+    path('franchise-inventory/', FranchiseInventoryListView.as_view(), name='franchise-inventory-list'),
     path('inventory/<int:pk>/', InventoryDetailView.as_view(), name='inventory-detail'),  # Detail, update, delete view
     path('inventory/<int:pk>/log/', InventoryChangeLogView.as_view(), name='inventory-log'),  # Updated to include 'id'
     path('inventory-request/', InventoryRequestView.as_view(), name='inventory-request'),
