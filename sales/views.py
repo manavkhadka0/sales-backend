@@ -435,11 +435,12 @@ class OrderUpdateView(generics.UpdateAPIView):
         # Handle order cancellation
         if order.order_status == "Cancelled" and previous_status != "Cancelled":
             # Restore inventory quantities for each product in the order
-            order_products = OrderProduct.objects.filter(order=order)
+            order_products = OrderProduct.objects.filter(order=order).select_related('product__product')
             for order_product in order_products:
                 try:
+                    # Get inventory using the product instance from order_product
                     inventory = Inventory.objects.get(
-                        product=order_product.product,
+                        product__id=order_product.product.product.id,  # Use the product ID
                         franchise=order.franchise
                     )
                     old_quantity = inventory.quantity
@@ -456,7 +457,7 @@ class OrderUpdateView(generics.UpdateAPIView):
                     )
                 except Inventory.DoesNotExist:
                     return Response(
-                        {"detail": f"Inventory not found for product {order_product.product.name}"},
+                        {"detail": f"Inventory not found for product {order_product.product.product.name}"},
                         status=status.HTTP_400_BAD_REQUEST
                     )
         
