@@ -8,6 +8,12 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = ['id', 'name', 'description','image']
 
+class RawMaterialSerializer(serializers.ModelSerializer):
+    product=ProductSerializer(read_only=True)
+    class Meta:
+        model = Inventory
+        fields = ['id', 'product', 'quantity', 'status']
+
 class InventorySerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(

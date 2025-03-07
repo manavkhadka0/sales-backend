@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from .models import Inventory, Order,Commission,Product,InventoryChangeLog,InventoryRequest, OrderProduct
 from account.models import CustomUser, Distributor, Franchise,Factory
-from .serializers import InventorySerializer, OrderSerializer,ProductSerializer,InventoryChangeLogSerializer,InventoryRequestSerializer, TopSalespersonSerializer
+from .serializers import InventorySerializer, OrderSerializer,ProductSerializer,InventoryChangeLogSerializer,InventoryRequestSerializer, RawMaterialSerializer, TopSalespersonSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
@@ -883,3 +883,37 @@ class TopProductsView(generics.ListAPIView):
                 {'error': f'Failed to fetch top products data: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+class RawMaterialListView(generics.ListAPIView):
+    serializer_class = RawMaterialSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        
+        # Only SuperAdmin can access raw materials
+        if user.role == 'SuperAdmin':
+            return Inventory.objects.filter(
+                factory=user.factory,
+                status='raw_material'
+            )
+        
+        # Return empty queryset for all other roles
+        return Inventory.objects.none()
+
+    def list(self, request, *args, **kwargs):
+        if request.user.role != 'SuperAdmin':
+            return Response(
+                {"detail": "Only SuperAdmin can access raw materials."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        
+        return Response({
+            'count': queryset.count(),
+            'results': serializer.data
+        })
+
+

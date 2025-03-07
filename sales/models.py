@@ -5,6 +5,7 @@ from django.db import models
 class Inventory(models.Model):
     STATUS_CHOICES = [
         ('incoming', 'Incoming'),
+        ('raw_material', 'Raw Material'),
         ('ready_to_dispatch', 'Ready to Dispatch'),
         ('damaged_returned', 'Damaged/Returned')
     ]
@@ -31,7 +32,6 @@ class InventoryChangeLog(models.Model):
         ('deleted', 'Deleted'),
         ('order_created', 'Order Created'),  # Added new choice for order creation
         ('order_cancelled', 'Order Cancelled'),  # Added new choice for order cancellation
-
 
     ])
 
