@@ -459,24 +459,6 @@ class OrderUpdateView(generics.UpdateAPIView):
                         {"detail": f"Inventory not found for product {order_product.product.name}"},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-
-        if order.order_status == "Delivered" and previous_status != "Delivered":
-            try:
-                distributor_commission = Commission.objects.get(
-                    distributor=order.distributor,
-                    sales_person=order.sales_person
-                )
-                
-                # Calculate total amount from order products
-                order.commission_amount = (distributor_commission.rate / 100) * order.total_amount  # Calculate commission based on total amount
-                order.save()  # Save the order with the updated commission amount
-
-                # Update the salesperson's total commission amount
-                salesperson = order.sales_person
-                salesperson.commission_amount += order.commission_amount
-                salesperson.save()  # Save the updated salesperson
-            except Commission.DoesNotExist:
-                return Response({"detail": "Commission not set for this salesperson."}, status=status.HTTP_400_BAD_REQUEST)
         
         return response
 
