@@ -60,6 +60,10 @@ class DistributorListCreateView(generics.ListCreateAPIView):
     queryset = Distributor.objects.all()
     serializer_class = DistributorSerializer
 
+class FranchiseListCreateView(generics.ListCreateAPIView):
+    queryset = Franchise.objects.all()
+    serializer_class = FranchiseSerializer
+
 class FactoryListCreateView(generics.ListCreateAPIView):
     queryset = Factory.objects.all()
     serializer_class = FactorySerializer
