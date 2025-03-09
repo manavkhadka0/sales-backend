@@ -669,6 +669,54 @@ class InventoryRequestView(generics.ListCreateAPIView):
     queryset = InventoryRequest.objects.all()
     serializer_class = InventoryRequestSerializer
 
+    def list(self, request, *args, **kwargs):
+        user = self.request.user
+        queryset = self.get_queryset()
+
+        if user.role == 'SuperAdmin':
+            # Separate requests to factory and other requests
+            factory_requests = []
+            other_requests = []
+
+            for request in queryset:
+                if request.factory:
+                    factory_requests.append(InventoryRequestSerializer(request).data)
+                else:
+                    other_requests.append(InventoryRequestSerializer(request).data)
+
+            return Response({
+                'factory_requests': factory_requests,
+                'other_requests': other_requests
+            })
+
+        elif user.role == 'Distributor':
+            # Separate requests to this distributor and requests from franchises
+            factory_requests = []
+            franchise_requests = []
+
+            for request in queryset:
+                if request.factory:
+                    factory_requests.append(InventoryRequestSerializer(request).data)
+                elif request.distributor == user.distributor:
+                    franchise_requests.append(InventoryRequestSerializer(request).data)
+
+            return Response({
+                'factory_requests': factory_requests,
+                'franchise_requests': franchise_requests
+            })
+
+        elif user.role == 'Franchise':
+            # Return only the franchise's requests
+            franchise_requests = []
+            for request in queryset:
+                franchise_requests.append(InventoryRequestSerializer(request).data)
+
+            return Response({
+                'franchise_requests': franchise_requests
+            })
+
+        return Response([])  # Return an empty Response for non-authorized users
+
     def perform_create(self, serializer):
         serializer.save()
 
