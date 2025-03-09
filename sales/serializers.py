@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import Inventory, Order, OrderProduct, Product,InventoryChangeLog, InventoryRequest
 from account.models import CustomUser
-from account.serializers import CustomUserSerializer, UserSmallSerializer
+from account.serializers import CustomUserSerializer, DistributorSerializer, FactorySerializer, UserSmallSerializer
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
@@ -163,9 +163,10 @@ class InventoryRequestSerializer(serializers.ModelSerializer):
         required=False
     )
 
+    user=UserSmallSerializer(read_only=True)
     class Meta:
         model = InventoryRequest
-        fields = ['id', 'product', 'product_id', 'quantity', 'factory', 'distributor', 'status', 'total_amount', 'created_at']
+        fields = ['id', 'user','product', 'product_id', 'quantity', 'factory', 'distributor', 'status', 'total_amount', 'created_at']
         read_only_fields = ['total_amount', 'user']
 
     def validate(self, data):

@@ -670,7 +670,6 @@ class InventoryRequestView(generics.ListCreateAPIView):
     serializer_class = InventoryRequestSerializer
 
     def perform_create(self, serializer):
-        # The user will be set in the serializer's create method
         serializer.save()
 
 class InventoryRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
