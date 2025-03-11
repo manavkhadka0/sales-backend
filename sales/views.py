@@ -1013,4 +1013,194 @@ class RawMaterialListView(generics.ListAPIView):
             'results': serializer.data
         })
 
+class DashboardStatsView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = self.request.user
+        current_date = timezone.now()
+        last_month = current_date - timezone.timedelta(days=30)
+
+        # Base queryset filters based on user role
+        if user.role == 'SuperAdmin':
+            # For SuperAdmin: all orders, all distributors/franchises as customers, all products
+            orders = Order.objects.all()
+            customers = CustomUser.objects.filter(
+                role__in=['Distributor', 'Franchise', 'SalesPerson'],
+                is_active=True
+            )
+            products = Inventory.objects.filter(
+                factory=user.factory,
+                status='ready_to_dispatch'
+            ).values('product').distinct()
+
+        elif user.role == 'Distributor':
+            # For Distributor: orders from their franchises, their franchises as customers
+            franchises = Franchise.objects.filter(distributor=user.distributor)
+            orders = Order.objects.filter(franchise__in=franchises)
+            customers = CustomUser.objects.filter(
+                franchise__in=franchises,
+                is_active=True
+            )
+            products = Inventory.objects.filter(
+                distributor=user.distributor,
+                status='ready_to_dispatch'
+            ).values('product').distinct()
+
+        elif user.role in ['Franchise', 'SalesPerson']:
+            # For Franchise/SalesPerson: their orders, their sales persons as customers
+            orders = Order.objects.filter(franchise=user.franchise)
+            customers = CustomUser.objects.filter(
+                franchise=user.franchise,
+                role='SalesPerson',
+                is_active=True
+            )
+            products = Inventory.objects.filter(
+                franchise=user.franchise,
+                status='ready_to_dispatch'
+            ).values('product').distinct()
+        else:
+            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+
+        # Calculate current period stats
+        current_revenue = orders.filter(
+            created_at__gte=last_month,
+            order_status='Delivered'  # Only count delivered orders for revenue
+        ).aggregate(total=Sum('total_amount'))['total'] or 0
+
+        current_orders = orders.filter(created_at__gte=last_month).count()
+        current_customers = customers.filter(date_joined__gte=last_month).count()
+        current_products = products.count()
+
+        # Calculate previous period stats for comparison
+        previous_month = last_month - timezone.timedelta(days=30)
+        previous_revenue = orders.filter(
+            created_at__gte=previous_month,
+            created_at__lt=last_month,
+            order_status='Delivered'
+        ).aggregate(total=Sum('total_amount'))['total'] or 0
+
+        previous_orders = orders.filter(
+            created_at__gte=previous_month,
+            created_at__lt=last_month
+        ).count()
+
+        previous_customers = customers.filter(
+            date_joined__gte=previous_month,
+            date_joined__lt=last_month
+        ).count()
+
+        previous_products = Inventory.objects.filter(
+            created_at__gte=previous_month,
+            created_at__lt=last_month
+        ).values('product').distinct().count()
+
+        # Calculate percentage changes
+        def calculate_percentage_change(current, previous):
+            if previous == 0:
+                return 100 if current > 0 else 0
+            return ((current - previous) / previous) * 100
+
+        revenue_change = calculate_percentage_change(current_revenue, previous_revenue)
+        orders_change = calculate_percentage_change(current_orders, previous_orders)
+        customers_change = calculate_percentage_change(current_customers, previous_customers)
+        products_change = calculate_percentage_change(current_products, previous_products)
+
+        response_data = {
+            "total_revenue": {
+                "amount": float(current_revenue),
+                "percentage_change": round(revenue_change, 1),
+                "change_label": "from last month"
+            },
+            "orders": {
+                "count": current_orders,
+                "percentage_change": round(orders_change, 1),
+                "change_label": "from last month"
+            },
+            "customers": {
+                "count": current_customers,
+                "percentage_change": round(customers_change, 1),
+                "change_label": "from last month"
+            },
+            "active_products": {
+                "count": current_products,
+                "percentage_change": round(products_change, 1),
+                "change_label": "from last month"
+            }
+        }
+
+        return Response(response_data)
+
+class RevenueByProductView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = self.request.user
+
+        # Filter orders based on user role
+        if user.role == 'SuperAdmin':
+            orders = Order.objects.filter(order_status='Delivered')
+        elif user.role == 'Distributor':
+            franchises = Franchise.objects.filter(distributor=user.distributor)
+            orders = Order.objects.filter(
+                franchise__in=franchises,
+                order_status='Delivered'
+            )
+        elif user.role in ['Franchise', 'SalesPerson']:
+            orders = Order.objects.filter(
+                franchise=user.franchise,
+                order_status='Delivered'
+            )
+        else:
+            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get all order products and calculate revenue per product
+        product_revenue = (
+            OrderProduct.objects.filter(
+                order__in=orders
+            ).values(
+                'product__product__id',
+                'product__product__name'
+            ).annotate(
+                total_revenue=Sum(
+                    models.F('quantity') * models.F('order__total_amount') / 
+                    models.Subquery(
+                        OrderProduct.objects.filter(
+                            order=models.OuterRef('order')
+                        ).values('order').annotate(
+                            total_qty=Sum('quantity')
+                        ).values('total_qty')[:1]
+                    )
+                )
+            ).order_by('-total_revenue')
+        )
+
+        # Calculate total revenue
+        total_revenue = sum(item['total_revenue'] for item in product_revenue)
+
+        # Format the response with percentages
+        product_data = []
+        for item in product_revenue:
+            percentage = (item['total_revenue'] / total_revenue * 100) if total_revenue > 0 else 0
+            product_data.append({
+                'product_id': item['product__product__id'],
+                'product_name': item['product__product__name'],
+                'revenue': round(float(item['total_revenue']), 2),
+                'percentage': round(percentage, 1)
+            })
+
+        # Sort by revenue percentage in descending order
+        product_data.sort(key=lambda x: x['percentage'], reverse=True)
+
+        response_data = {
+            'total_revenue': round(float(total_revenue), 2),
+            'products': product_data,
+            'revenue_distribution': {
+                'labels': [item['product_name'] for item in product_data],
+                'percentages': [item['percentage'] for item in product_data]
+            }
+        }
+
+        return Response(response_data)
+
 
