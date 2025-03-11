@@ -820,9 +820,10 @@ class UserInventoryLogs(generics.ListAPIView):
         
         if user.role == 'SuperAdmin':
             # Get logs for factory inventory
-            return InventoryChangeLog.objects.filter(
-                inventory__factory=user.factory
-            ).order_by('-id')
+            # return InventoryChangeLog.objects.filter(
+            #     inventory__factory=user.factory
+            # ).order_by('-id')
+             return InventoryChangeLog.objects.all().order_by('-id')
             
         elif user.role == 'Distributor':
             # Get logs for distributor inventory
