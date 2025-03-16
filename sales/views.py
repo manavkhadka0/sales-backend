@@ -664,6 +664,7 @@ class InventoryChangeLogView(generics.ListAPIView):
 class Inventorylogs(generics.ListAPIView):
     serializer_class = InventoryChangeLogSerializer
     queryset = InventoryChangeLog.objects.all().order_by('-id')
+    pagination_class = CustomPagination
 
 class InventoryRequestView(generics.ListCreateAPIView):
     queryset = InventoryRequest.objects.all()
@@ -813,6 +814,7 @@ class LatestOrdersView(generics.ListAPIView):
 
 class UserInventoryLogs(generics.ListAPIView):
     serializer_class = InventoryChangeLogSerializer
+    pagination_class = CustomPagination
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
