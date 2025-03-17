@@ -361,54 +361,51 @@ class OrderListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         salesperson = self.request.user
         phone_number = self.request.data.get('phone_number')
-        
-        # Get the order products data
         order_products_data = self.request.data.get('order_products', [])
         
-        # Check for recent orders with same phone number and products
+        # First, check for recent orders with same phone number and products
         seven_days_ago = timezone.now() - timezone.timedelta(days=7)
+        recent_orders = Order.objects.filter(
+            phone_number=phone_number,
+            created_at__gte=seven_days_ago
+        )
         
+        # Get all inventory IDs ordered by this phone number in last 7 days
+        recent_inventory_ids = OrderProduct.objects.filter(
+            order__in=recent_orders
+        ).values_list('product_id', flat=True)  # Just get the inventory ID directly
+
+        # Validate all products exist in inventory before proceeding
         for order_product_data in order_products_data:
-            product_id = order_product_data['product_id']
-            product = Product.objects.get(id=product_id)
-            # Check if this phone number has ordered this product in the last 7 days
-            recent_orders = Order.objects.filter(
-                phone_number=phone_number,
-                created_at__gte=seven_days_ago
-            ).prefetch_related('order_products')
-            
-            for order in recent_orders:
-                if order.order_products.filter(product__product_id=product_id).exists():
-                    raise serializers.ValidationError(
-                        f"This phone number has already ordered {product.name} within the last 7 days. "
-                        "Please wait before ordering the same product again."
-                    )
-        
-        # Validate inventory before creating order
-        for order_product_data in order_products_data:
-            product_id = order_product_data['product_id']
+            inventory_id = order_product_data['product_id']  # This is actually inventory_id
             quantity = order_product_data['quantity']
 
             try:
-                # Find inventory item using product_id and franchise
+                # Get the inventory item
                 if salesperson.role == 'Franchise' or salesperson.role == 'SalesPerson':
-                    franchise = salesperson.franchise
                     inventory_item = Inventory.objects.get(
-                        product_id=product_id,
-                        franchise=franchise  # Ensure the inventory belongs to the franchise
+                        id=inventory_id,  # Using inventory_id directly
+                        franchise=salesperson.franchise
                     )
                 elif salesperson.role == 'Distributor':
-                    distributor = salesperson.distributor
                     inventory_item = Inventory.objects.get(
-                        product_id=product_id,
-                        distributor=distributor
+                        id=inventory_id,
+                        distributor=salesperson.distributor
                     )
                 elif salesperson.role == 'SuperAdmin':
-                    factory=salesperson.factory
                     inventory_item = Inventory.objects.get(
-                        product_id=product_id,
-                        factory=factory
+                        id=inventory_id,
+                        factory=salesperson.factory
                     )
+
+                # Check if this inventory was ordered in last 7 days
+                if inventory_id in recent_inventory_ids:  # Compare inventory IDs directly
+                    raise serializers.ValidationError(
+                        f"Customer with phone number {phone_number} has already ordered "
+                        f"from this inventory within the last 7 days"
+                    )
+
+                # Check if there's enough quantity
                 if inventory_item.quantity < quantity:
                     raise serializers.ValidationError(
                         f"Insufficient inventory for product {inventory_item.product.name}. "
@@ -416,59 +413,58 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     )
             except Inventory.DoesNotExist:
                 raise serializers.ValidationError(
-                    f"Product with ID {product_id} not found in franchise inventory"
+                    f"Inventory with ID {inventory_id} not found"
                 )
 
-        # Create order if validation passes
+        # Create the order
         if salesperson.role == 'Franchise' or salesperson.role == 'SalesPerson':
-            franchise = salesperson.franchise
-            order = serializer.save(sales_person=salesperson, franchise=franchise)
+            order = serializer.save(sales_person=salesperson, franchise=salesperson.franchise)
         elif salesperson.role == 'Distributor':
-            distributor = salesperson.distributor
-            order = serializer.save(distributor=distributor, sales_person=salesperson)
+            order = serializer.save(distributor=salesperson.distributor, sales_person=salesperson)
         elif salesperson.role == 'SuperAdmin':
-            factory=salesperson.factory
-            order = serializer.save(factory=factory, sales_person=salesperson)
+            order = serializer.save(factory=salesperson.factory, sales_person=salesperson)
 
-        # Update inventory quantities and create logs
+        # After order is created, update inventory
         for order_product_data in order_products_data:
             product_id = order_product_data['product_id']
             quantity = order_product_data['quantity']
 
+            # Get the inventory item again
             if salesperson.role == 'Franchise' or salesperson.role == 'SalesPerson':
-                    franchise = salesperson.franchise
-                    inventory_item = Inventory.objects.get(
-                        product_id=product_id,
-                        franchise=franchise  # Ensure the inventory belongs to the franchise
-                    )
+                inventory_item = Inventory.objects.get(
+                    id=product_id,
+                    franchise=salesperson.franchise
+                )
             elif salesperson.role == 'Distributor':
-                    distributor = salesperson.distributor
-                    inventory_item = Inventory.objects.get(
-                        product_id=product_id,
-                        distributor=distributor
-                    )
+                inventory_item = Inventory.objects.get(
+                    id=product_id,
+                    distributor=salesperson.distributor
+                )
             elif salesperson.role == 'SuperAdmin':
+                inventory_item = Inventory.objects.get(
+                    id=product_id,
                     factory=salesperson.factory
-                    inventory_item = Inventory.objects.get(
-                        product_id=product_id,
-                        factory=factory
-                    )
-            if inventory_item.quantity < quantity:
-                    raise serializers.ValidationError(
-                        f"Insufficient inventory for product {inventory_item.product.name}. "
-                        f"Available: {inventory_item.quantity}, Requested: {quantity}"
-                    )
+                )
+
+            # Update inventory
             old_quantity = inventory_item.quantity
             inventory_item.quantity -= quantity
             inventory_item.save()
 
-            # Create log for inventory update from order
+            # Create log
             InventoryChangeLog.objects.create(
                 inventory=inventory_item,
-                user=self.request.user,
+                user=salesperson,
                 old_quantity=old_quantity,
                 new_quantity=inventory_item.quantity,
                 action='order_created'
+            )
+
+            # Create OrderProduct
+            OrderProduct.objects.create(
+                order=order,
+                product=inventory_item,
+                quantity=quantity
             )
 
         return order
@@ -559,6 +555,7 @@ class ProductListView(generics.ListAPIView):
         base_fields = {
             'id', 
             'product', 
+            'product__id',  # Add this to get the actual product ID
             'product__name',
             'quantity'
         }
@@ -566,13 +563,13 @@ class ProductListView(generics.ListAPIView):
         if include_status:
             base_fields.add('status')
             
-        inventory_data = inventory_queryset.filter(status='ready_to_dispatch').values(*base_fields)
+        inventory_data = inventory_queryset.values(*base_fields)
         
         product_list = []
         for inv in inventory_data:
             product_dict = {
                 'inventory_id': inv['id'],
-                'product_id': inv['product'],
+                'product_id': inv['product__id'],  # Use the actual product ID
                 'product_name': inv['product__name'],
                 'quantity': inv['quantity']
             }
