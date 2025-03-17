@@ -315,12 +315,12 @@ class OrderFilter(django_filters.FilterSet):
     order_status = django_filters.CharFilter(field_name="order_status", lookup_expr='icontains')
     city=django_filters.CharFilter(field_name="city", lookup_expr='icontains')
     date=django_filters.DateFilter(field_name="date", lookup_expr='exact')
-    gte_date=django_filters.DateFilter(field_name="date", lookup_expr='gte')
-    lte_date=django_filters.DateFilter(field_name="date", lookup_expr='lte')
+    start_date=django_filters.DateFilter(field_name="date", lookup_expr='gte')
+    end_date=django_filters.DateFilter(field_name="date", lookup_expr='lte')
 
     class Meta:
         model = Order
-        fields = ['distributor', 'sales_person', 'order_status', 'date', 'gte_date', 'lte_date', 'city']
+        fields = ['distributor', 'sales_person', 'order_status', 'date', 'start_date', 'end_date', 'city']
 
 class OrderListCreateView(generics.ListCreateAPIView):
     queryset = Order.objects.all().order_by('-id')
