@@ -315,8 +315,8 @@ class OrderFilter(django_filters.FilterSet):
     order_status = django_filters.CharFilter(field_name="order_status", lookup_expr='icontains')
     city=django_filters.CharFilter(field_name="city", lookup_expr='icontains')
     date=django_filters.DateFilter(field_name="date", lookup_expr='exact')
-    start_date=django_filters.DateFilter(field_name="date", lookup_expr='gte')
-    end_date=django_filters.DateFilter(field_name="date", lookup_expr='lte')
+    gte_date=django_filters.DateFilter(field_name="date", lookup_expr='gte')
+    lte_date=django_filters.DateFilter(field_name="date", lookup_expr='lte')
 
     class Meta:
         model = Order
