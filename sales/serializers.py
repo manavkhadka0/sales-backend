@@ -100,26 +100,34 @@ class OrderSerializer(serializers.ModelSerializer):
                   'total_amount', 'remarks', 'sales_person']
 
     def create(self, validated_data):
-        # Extract order_products data from validated_data
+        # Extract and remove order_products data from validated_data
         order_products_data = validated_data.pop('order_products')
         
         # Get the user from the context
         user = self.context['request'].user
         
-        # Remove sales_person and franchise from validated_data if they exist
-        validated_data.pop('sales_person', None)
-        validated_data.pop('franchise', None)
+        # Create the order instance without order_products
+        order = Order.objects.create(**validated_data)
         
-        # Create the order instance
-        order = Order.objects.create(
-            sales_person=user,
-            franchise=user.franchise,
-            **validated_data
-        )
+        # Keep track of processed products to avoid duplicates
+        processed_products = {}
         
-        # Create each order product
+        # Create each order product, combining quantities for duplicate products
         for order_product_data in order_products_data:
-            OrderProduct.objects.create(order=order, **order_product_data)
+            product_id = order_product_data['product'].id
+            quantity = order_product_data['quantity']
+            
+            if product_id in processed_products:
+                # Update existing order product quantity
+                processed_products[product_id].quantity += quantity
+                processed_products[product_id].save()
+            else:
+                # Create new order product
+                order_product = OrderProduct.objects.create(
+                    order=order,
+                    **order_product_data
+                )
+                processed_products[product_id] = order_product
         
         return order
 

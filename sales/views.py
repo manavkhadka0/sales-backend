@@ -370,39 +370,39 @@ class OrderListCreateView(generics.ListCreateAPIView):
             created_at__gte=seven_days_ago
         )
         
-        # Get all inventory IDs ordered by this phone number in last 7 days
-        recent_inventory_ids = OrderProduct.objects.filter(
+        # Get all products ordered by this phone number in last 7 days
+        recent_product_ids = OrderProduct.objects.filter(
             order__in=recent_orders
-        ).values_list('product_id', flat=True)  # Just get the inventory ID directly
+        ).values_list('product__product__id', flat=True)
 
-        # Validate all products exist in inventory before proceeding
+        # First, validate all products exist in inventory before proceeding
         for order_product_data in order_products_data:
-            inventory_id = order_product_data['product_id']  # This is actually inventory_id
+            product_id = order_product_data['product_id']
             quantity = order_product_data['quantity']
 
             try:
-                # Get the inventory item
+                # First get the inventory item
                 if salesperson.role == 'Franchise' or salesperson.role == 'SalesPerson':
                     inventory_item = Inventory.objects.get(
-                        id=inventory_id,  # Using inventory_id directly
+                        id=product_id,
                         franchise=salesperson.franchise
                     )
                 elif salesperson.role == 'Distributor':
                     inventory_item = Inventory.objects.get(
-                        id=inventory_id,
+                        id=product_id,
                         distributor=salesperson.distributor
                     )
                 elif salesperson.role == 'SuperAdmin':
                     inventory_item = Inventory.objects.get(
-                        id=inventory_id,
+                        id=product_id,
                         factory=salesperson.factory
                     )
 
-                # Check if this inventory was ordered in last 7 days
-                if inventory_id in recent_inventory_ids:  # Compare inventory IDs directly
+                # Check if this product was ordered in last 7 days
+                if inventory_item.product.id in recent_product_ids:
                     raise serializers.ValidationError(
                         f"Customer with phone number {phone_number} has already ordered "
-                        f"from this inventory within the last 7 days"
+                        f"{inventory_item.product.name} within the last 7 days"
                     )
 
                 # Check if there's enough quantity
@@ -413,7 +413,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     )
             except Inventory.DoesNotExist:
                 raise serializers.ValidationError(
-                    f"Inventory with ID {inventory_id} not found"
+                    f"Inventory with ID {product_id} not found"
                 )
 
         # Create the order
@@ -459,14 +459,6 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 new_quantity=inventory_item.quantity,
                 action='order_created'
             )
-
-            # Create OrderProduct
-            OrderProduct.objects.create(
-                order=order,
-                product=inventory_item,
-                quantity=quantity
-            )
-
         return order
 
 class OrderUpdateView(generics.UpdateAPIView):
