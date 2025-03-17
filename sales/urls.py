@@ -1,6 +1,6 @@
 # sales-backend/sales/urls.py
 from django.urls import path
-from .views import FranchiseInventoryListView, InventoryListCreateView, LatestOrdersView, OrderListCreateView, OrderUpdateView,CommissionPaymentView,ProductListView,InventoryDetailView,InventoryChangeLogView,Inventorylogs,FactoryInventoryListView,DistributorInventoryListView,InventoryRequestView,InventoryRequestDetailView,AllProductsListView, RawMaterialListView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView
+from .views import FranchiseInventoryListView, InventoryListCreateView, LatestOrdersView, OrderListCreateView, OrderUpdateView,CommissionPaymentView,ProductListView,InventoryDetailView,InventoryChangeLogView,Inventorylogs,FactoryInventoryListView,DistributorInventoryListView,InventoryRequestView,InventoryRequestDetailView,AllProductsListView, RawMaterialListView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView,OrderCSVExportView
     
 urlpatterns = [
     path('inventory/', InventoryListCreateView.as_view(), name='inventory-list'),
@@ -29,4 +29,6 @@ urlpatterns = [
     path('raw-materials/', RawMaterialListView.as_view(), name='raw-materials'),
     path('dashboard-stats/', DashboardStatsView.as_view(), name='dashboard-stats'),
     path('revenue-by-product/', RevenueByProductView.as_view(), name='revenue-by-product'),
+
+    path('export-csv/', OrderCSVExportView.as_view(), name='export-csv'),
 ]

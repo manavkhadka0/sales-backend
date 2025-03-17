@@ -18,6 +18,9 @@ from django.utils import timezone
 from django.db.models import Count, Sum
 from django.db import models
 from django.db.models.functions import TruncMonth, TruncWeek, TruncYear
+from django.http import HttpResponse
+import csv
+from datetime import datetime
 
 
 # Create your views here.
@@ -313,14 +316,15 @@ class OrderFilter(django_filters.FilterSet):
     distributor = django_filters.CharFilter(field_name="distributor__id", lookup_expr='exact')
     sales_person = django_filters.CharFilter(field_name="sales_person__id", lookup_expr='exact')
     order_status = django_filters.CharFilter(field_name="order_status", lookup_expr='icontains')
-    city=django_filters.CharFilter(field_name="city", lookup_expr='icontains')
-    date=django_filters.DateFilter(field_name="date", lookup_expr='exact')
-    start_date=django_filters.DateFilter(field_name="date", lookup_expr='gte')
-    end_date=django_filters.DateFilter(field_name="date", lookup_expr='lte')
+    city = django_filters.CharFilter(field_name="city", lookup_expr='icontains')
+    date = django_filters.DateFilter(field_name="date", lookup_expr='exact')
+    start_date = django_filters.DateFilter(field_name="date", lookup_expr='gte')
+    end_date = django_filters.DateFilter(field_name="date", lookup_expr='lte')
+    oil_type = django_filters.CharFilter(field_name="order_products__product__product__name", lookup_expr='icontains')
 
     class Meta:
         model = Order
-        fields = ['distributor', 'sales_person', 'order_status', 'date', 'start_date', 'end_date', 'city']
+        fields = ['distributor', 'sales_person', 'order_status', 'date', 'start_date', 'end_date', 'city', 'oil_type']
 
 class OrderListCreateView(generics.ListCreateAPIView):
     queryset = Order.objects.all().order_by('-id')
@@ -1204,5 +1208,93 @@ class RevenueByProductView(generics.GenericAPIView):
         }
 
         return Response(response_data)
+
+class OrderCSVExportView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Get date range from query parameters
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+
+        try:
+            # Parse dates
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None
+            end_date = datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "Invalid date format. Use YYYY-MM-DD"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get orders based on user role
+        user = request.user
+        if user.role == 'SuperAdmin':
+            orders = Order.objects.all()
+        elif user.role == 'Distributor':
+            franchises = Franchise.objects.filter(distributor=user.distributor)
+            orders = Order.objects.filter(franchise__in=franchises)
+        elif user.role in ['Franchise', 'SalesPerson']:
+            orders = Order.objects.filter(franchise=user.franchise)
+        else:
+            return Response(
+                {"error": "Unauthorized to export orders"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Apply date filters
+        if start_date and end_date:
+            orders = orders.filter(date__range=(start_date, end_date))
+        elif start_date:
+            orders = orders.filter(date=start_date)
+
+        # Create the HttpResponse object with CSV header
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="orders_{start_date}_{end_date}.csv"'
+
+        # Create CSV writer
+        writer = csv.writer(response)
+
+        # Write header row
+        writer.writerow([
+            'Order ID',
+            'Date',
+            'Customer Name',
+            'Phone Number',
+            'Delivery Address',
+            'City',
+            'Products',
+            'Total Amount',
+            'Order Status',
+            'Sales Person',
+            'Franchise',
+            'Distributor'
+        ])
+
+        # Write data rows
+        for order in orders:
+            # Get products for this order
+            products = OrderProduct.objects.filter(order=order)
+            products_str = ', '.join([
+                f"{p.product.product.name} (x{p.quantity})"
+                for p in products
+            ])
+
+            writer.writerow([
+                order.id,
+                order.date.strftime('%Y-%m-%d'),
+                order.full_name,
+                order.phone_number,
+                order.delivery_address,
+                order.city,
+                products_str,
+                order.total_amount,
+                order.order_status,
+                order.sales_person.username if order.sales_person else 'N/A',
+                order.franchise.name if order.franchise else 'N/A',
+                order.franchise.distributor.name if order.franchise and order.franchise.distributor else 'N/A'
+            ])
+
+        return response
 
 
