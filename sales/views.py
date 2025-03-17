@@ -21,6 +21,7 @@ from django.db.models.functions import TruncMonth, TruncWeek, TruncYear
 from django.http import HttpResponse
 import csv
 from datetime import datetime
+from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 
 
 # Create your views here.
@@ -331,10 +332,11 @@ class OrderListCreateView(generics.ListCreateAPIView):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
     filterset_class = OrderFilter
-    filter_backends = [DjangoFilterBackend, rest_filters.SearchFilter,rest_filters.OrderingFilter]  # Added SearchFilter
-    search_fields = ['phone_number', 'sales_person__username','delivery_address','full_name']  # Specify the fields to search
+    filter_backends = [DjangoFilterBackend, rest_filters.SearchFilter,rest_filters.OrderingFilter]
+    search_fields = ['phone_number', 'sales_person__username','delivery_address','full_name']
     ordering_fields = ['-id',]
     pagination_class = CustomPagination
+    parser_classes = (JSONParser, FormParser, MultiPartParser)
 
     def get_queryset(self):
         user = self.request.user  
