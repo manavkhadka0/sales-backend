@@ -97,7 +97,7 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = ['id', 'full_name', 'city', 'delivery_address', 'landmark',
                   'phone_number', 'alternate_phone_number', 'payment_method',
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at', 'order_products',
-                  'total_amount', 'remarks', 'sales_person']
+                  'total_amount', 'delivery_charge', 'remarks', 'sales_person']
 
     def create(self, validated_data):
         # Extract and remove order_products data from validated_data

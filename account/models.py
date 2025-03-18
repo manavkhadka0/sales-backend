@@ -9,6 +9,7 @@ class Factory(models.Model):
         return self.name
 
 class Distributor(models.Model):
+    factory = models.ForeignKey(Factory, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=255,blank=True,null=True)
     short_form = models.CharField(max_length=255,blank=True,null=True)
 

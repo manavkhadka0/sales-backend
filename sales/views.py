@@ -420,9 +420,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
         # Create the order
         if salesperson.role == 'Franchise' or salesperson.role == 'SalesPerson':
-            order = serializer.save(sales_person=salesperson, franchise=salesperson.franchise)
+            order = serializer.save(sales_person=salesperson, franchise=salesperson.franchise, distributor=salesperson.distributor,factory=salesperson.factory)
         elif salesperson.role == 'Distributor':
-            order = serializer.save(distributor=salesperson.distributor, sales_person=salesperson)
+            order = serializer.save(distributor=salesperson.distributor, sales_person=salesperson,factory=salesperson.factory)
         elif salesperson.role == 'SuperAdmin':
             order = serializer.save(factory=salesperson.factory, sales_person=salesperson)
 
@@ -1255,6 +1255,7 @@ class OrderCSVExportView(generics.GenericAPIView):
             'Delivery Address',
             'City',
             'Products',
+            'Delivery Charge',
             'Total Amount',
             'Order Status',
             'Sales Person',
@@ -1264,7 +1265,6 @@ class OrderCSVExportView(generics.GenericAPIView):
 
         # Write data rows
         for order in orders:
-            # Get products for this order
             products = OrderProduct.objects.filter(order=order)
             products_str = ', '.join([
                 f"{p.product.product.name} (x{p.quantity})"
@@ -1279,6 +1279,7 @@ class OrderCSVExportView(generics.GenericAPIView):
                 order.delivery_address,
                 order.city,
                 products_str,
+                order.delivery_charge,
                 order.total_amount,
                 order.order_status,
                 order.sales_person.username if order.sales_person else 'N/A',
