@@ -1,7 +1,8 @@
+from django.utils import timezone
 from rest_framework import serializers
-from .models import Inventory, Order, OrderProduct, Product,InventoryChangeLog, InventoryRequest
+from .models import Inventory, Order, OrderProduct, Product,InventoryChangeLog, InventoryRequest, PromoCode
 from account.models import CustomUser
-from account.serializers import CustomUserSerializer, DistributorSerializer, FactorySerializer, UserSmallSerializer
+from account.serializers import UserSmallSerializer
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
@@ -71,6 +72,26 @@ class ProductSmallSerializer(serializers.ModelSerializer):
         model = Product
         fields = ['id', 'name']
 
+class PromoCodeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PromoCode
+        fields = ['id', 'code', 'discount_percentage', 'valid_from', 'valid_until', 'max_uses', 'times_used', 'is_active']
+        read_only_fields = ['times_used']
+
+    def validate(self, data):
+        if data.get('valid_from') and data.get('valid_until'):
+            if data['valid_until'] <= data['valid_from']:
+                raise serializers.ValidationError("Valid until date must be after valid from date")
+        if data.get('discount_percentage') and (data['discount_percentage'] <= 0 or data['discount_percentage'] > 100):
+            raise serializers.ValidationError("Discount percentage must be between 0 and 100")
+
+        return data
+
+class ValidatePromoCodeSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = PromoCode
+        fields = ['id', 'code']
 class OrderProductSerializer(serializers.ModelSerializer):
     product = serializers.SerializerMethodField()
     product_id = serializers.PrimaryKeyRelatedField(
@@ -88,53 +109,59 @@ class OrderProductSerializer(serializers.ModelSerializer):
             'id': obj.product.id,
             'name': obj.product.product.name
         }
+
+
 class OrderSerializer(serializers.ModelSerializer):
-    order_products = OrderProductSerializer(many=True)
-    sales_person = UserSmallSerializer(read_only=True)
-    
+    sales_person=UserSmallSerializer(read_only=True)
+    order_products = OrderProductSerializer(many=True, required=False)
+    promo_code = serializers.CharField(required=False, allow_null=True)
+    payment_screenshot = serializers.FileField(required=False, allow_null=True)
+
     class Meta:
         model = Order
-        fields = ['id', 'full_name', 'city', 'delivery_address', 'landmark',
+        fields = ['id', 'sales_person', 'full_name', 'city', 'delivery_address', 'landmark',
                   'phone_number', 'alternate_phone_number', 'payment_method',
-                  'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at', 'order_products',
-                  'total_amount', 'delivery_charge', 'remarks', 'sales_person']
+                  'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at',
+                  'order_products', 'total_amount', 'delivery_charge', 'remarks', 'promo_code']
 
     def create(self, validated_data):
-        # Extract and remove order_products data from validated_data
-        order_products_data = validated_data.pop('order_products')
-        
-        # Get the user from the context
-        user = self.context['request'].user
-        
-        # Create the order instance without order_products
-        order = Order.objects.create(**validated_data)
-        
-        # Keep track of processed products to avoid duplicates
-        processed_products = {}
-        
-        # Create each order product, combining quantities for duplicate products
-        for order_product_data in order_products_data:
-            product_id = order_product_data['product'].id
-            quantity = order_product_data['quantity']
-            
-            if product_id in processed_products:
-                # Update existing order product quantity
-                processed_products[product_id].quantity += quantity
-                processed_products[product_id].save()
-            else:
-                # Create new order product
-                order_product = OrderProduct.objects.create(
-                    order=order,
-                    **order_product_data
+        order_products_data = validated_data.pop('order_products', [])
+        promo_code = validated_data.pop('promo_code', None)
+        promo_code_instance = None
+
+        # ✅ Validate promo code
+        if promo_code:
+            try:
+                promo_code_instance = PromoCode.objects.get(
+                    code=promo_code,
+                    is_active=True,
+                    valid_from__lte=timezone.now(),
+                    valid_until__gte=timezone.now()
                 )
-                processed_products[product_id] = order_product
-        
+            except PromoCode.DoesNotExist:
+                raise serializers.ValidationError({"promo_code": "Invalid promo code"})
+
+        # ✅ Create Order
+        order = Order.objects.create(**validated_data, promo_code=promo_code_instance)
+
+        # ✅ Create Order Products
+        for order_product_data in order_products_data:
+            product = order_product_data['product']
+            quantity = order_product_data['quantity']
+            OrderProduct.objects.create(order=order, product=product, quantity=quantity)
+
+        # ✅ Update promo code usage count
+        if promo_code_instance:
+            promo_code_instance.times_used += 1
+            promo_code_instance.save()
+
         return order
 
     def update(self, instance, validated_data):
         order_products_data = validated_data.pop('order_products', None)
         instance = super().update(instance, validated_data)
 
+        # ✅ Update order products if provided
         if order_products_data is not None:
             instance.order_products.all().delete()
             for order_product_data in order_products_data:

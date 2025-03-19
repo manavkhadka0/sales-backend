@@ -95,6 +95,20 @@ class OrderProduct(models.Model):
     def __str__(self):
         return f"{self.product.product.name} - {self.quantity}"
 
+class PromoCode(models.Model):
+    code = models.CharField(max_length=20, unique=True)
+    description = models.TextField(blank=True, null=True)
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)  # e.g., 10.00 for 10%
+    valid_from = models.DateField(blank=True, null=True)
+    valid_until = models.DateField(blank=True, null=True)
+    max_uses = models.PositiveIntegerField(default=0, blank=True, null=True)  # 0 means unlimited
+    times_used = models.PositiveIntegerField(default=0, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.code} - {self.discount_percentage}%"
+
 class Order(models.Model):
     PAYMENT_CHOICES = [
         ('Cash on Delivery', 'Cash on Delivery'),
@@ -126,6 +140,7 @@ class Order(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     remarks = models.TextField(blank=True)
+    promo_code = models.ForeignKey(PromoCode, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f'{self.full_name} - {self.order_status}'

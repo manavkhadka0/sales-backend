@@ -3,9 +3,9 @@ from django.shortcuts import render
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 
-from .models import Inventory, Order,Commission,Product,InventoryChangeLog,InventoryRequest, OrderProduct
+from .models import Inventory, Order,Commission,Product,InventoryChangeLog,InventoryRequest, OrderProduct, PromoCode
 from account.models import CustomUser, Distributor, Franchise,Factory
-from .serializers import InventorySerializer, OrderSerializer,ProductSerializer,InventoryChangeLogSerializer,InventoryRequestSerializer, RawMaterialSerializer, TopSalespersonSerializer
+from .serializers import InventorySerializer, OrderSerializer,ProductSerializer,InventoryChangeLogSerializer,InventoryRequestSerializer, RawMaterialSerializer, TopSalespersonSerializer, PromoCodeSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
@@ -332,38 +332,91 @@ class OrderListCreateView(generics.ListCreateAPIView):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
     filterset_class = OrderFilter
-    filter_backends = [DjangoFilterBackend, rest_filters.SearchFilter,rest_filters.OrderingFilter]
-    search_fields = ['phone_number', 'sales_person__username','delivery_address','full_name']
-    ordering_fields = ['-id',]
+    filter_backends = [DjangoFilterBackend, rest_filters.SearchFilter, rest_filters.OrderingFilter]
+    search_fields = ['phone_number', 'sales_person__username', 'delivery_address', 'full_name']
+    ordering_fields = ['-id']
     pagination_class = CustomPagination
     parser_classes = (JSONParser, FormParser, MultiPartParser)
+
+    def create(self, request, *args, **kwargs):
+        try:
+            # Handle both form-data and raw JSON formats
+            data = request.data.copy()
+            order_products = []
+
+            # Check if it's form-data format
+            if hasattr(request.data, 'getlist'):
+                # Get all keys that match the order_products pattern
+                product_keys = [k for k in request.data.keys() if k.startswith('order_products[')]
+                
+                # Group the order_products data from form-data
+                for i in range(len(product_keys) // 2):
+                    product_id = request.data.get(f'order_products[{i}][product_id]')
+                    quantity = request.data.get(f'order_products[{i}][quantity]')
+                    if product_id and quantity:
+                        order_products.append({
+                            'product_id': product_id,
+                            'quantity': quantity
+                        })
+            else:
+                # Handle raw JSON format
+                order_products = request.data.get('order_products', [])
+
+            # Validate order products
+            if not order_products:
+                return Response(
+                    {"error": "At least one product is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Create the modified data dictionary
+            modified_data = {
+                'full_name': request.data.get('full_name'),
+                'city': request.data.get('city'),
+                'delivery_address': request.data.get('delivery_address'),
+                'landmark': request.data.get('landmark'),
+                'phone_number': request.data.get('phone_number'),
+                'alternate_phone_number': request.data.get('alternate_phone_number'),
+                'delivery_charge': request.data.get('delivery_charge'),
+                'payment_method': request.data.get('payment_method'),
+                'total_amount': request.data.get('total_amount'),
+                'promo_code': request.data.get('promo_code'),
+                'remarks': request.data.get('remarks'),
+                'order_products': order_products
+            }
+
+            # Handle payment screenshot file
+            if 'payment_screenshot' in request.FILES:
+                modified_data['payment_screenshot'] = request.FILES['payment_screenshot']
+
+            # Update the request data
+            request._full_data = modified_data
+
+            # Call the parent create method
+            return super().create(request, *args, **kwargs)
+
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to create order: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     def get_queryset(self):
         user = self.request.user  
         if user.role == 'Distributor':  
-            # Get orders from all franchises under this distributor
-            franchises = Franchise.objects.filter(distributor=user.distributor)
-            queryset = Order.objects.filter(franchise__in=franchises).order_by('-id')
-            return queryset 
+            return Order.objects.filter(distributor=user.distributor).order_by('-id')
         elif user.role == 'SalesPerson': 
-            # Get orders where the user is the sales person
-            queryset = Order.objects.filter(sales_person=user).order_by('-id')
-            return queryset  
+            return Order.objects.filter(sales_person=user).order_by('-id')
         elif user.role == 'Franchise':
-            # Get orders for this franchise
-            queryset = Order.objects.filter(franchise=user.franchise).order_by('-id')
-            return queryset
+            return Order.objects.filter(franchise=user.franchise).order_by('-id')
         elif user.role == 'SuperAdmin':  
-            # SuperAdmin can see all orders
-            queryset = Order.objects.all().order_by('-id')
-            return queryset
-        else:
-            return Order.objects.none()  # Return empty queryset for unknown roles
+            return Order.objects.all().order_by('-id')
+        return Order.objects.none()
 
     def perform_create(self, serializer):
         salesperson = self.request.user
         phone_number = self.request.data.get('phone_number')
-        order_products_data = self.request.data.get('order_products', [])
+        order_products_data = self.request._full_data.get('order_products', [])
         
         # First, check for recent orders with same phone number and products
         seven_days_ago = timezone.now() - timezone.timedelta(days=7)
@@ -377,14 +430,17 @@ class OrderListCreateView(generics.ListCreateAPIView):
             order__in=recent_orders
         ).values_list('product__product__id', flat=True)
 
-        # First, validate all products exist in inventory before proceeding
+        # Validate all products exist in inventory before proceeding
         for order_product_data in order_products_data:
-            product_id = order_product_data['product_id']
-            quantity = order_product_data['quantity']
+            product_id = order_product_data.get('product_id')
+            try:
+                quantity = int(order_product_data.get('quantity', 0))
+            except (ValueError, TypeError):
+                raise serializers.ValidationError(f"Invalid quantity format for product ID {product_id}")
 
             try:
-                # First get the inventory item
-                if salesperson.role == 'Franchise' or salesperson.role == 'SalesPerson':
+                # Get the inventory item based on user role
+                if salesperson.role in ['Franchise', 'SalesPerson']:
                     inventory_item = Inventory.objects.get(
                         id=product_id,
                         franchise=salesperson.franchise
@@ -413,26 +469,37 @@ class OrderListCreateView(generics.ListCreateAPIView):
                         f"Insufficient inventory for product {inventory_item.product.name}. "
                         f"Available: {inventory_item.quantity}, Requested: {quantity}"
                     )
+
             except Inventory.DoesNotExist:
-                raise serializers.ValidationError(
-                    f"Inventory with ID {product_id} not found"
-                )
+                raise serializers.ValidationError(f"Product with ID {product_id} not found")
 
-        # Create the order
-        if salesperson.role == 'Franchise' or salesperson.role == 'SalesPerson':
-            order = serializer.save(sales_person=salesperson, franchise=salesperson.franchise, distributor=salesperson.distributor,factory=salesperson.factory)
+        # Create the order based on user role
+        if salesperson.role in ['Franchise', 'SalesPerson']:
+            order = serializer.save(
+                sales_person=salesperson,
+                franchise=salesperson.franchise,
+                distributor=salesperson.distributor,
+                factory=salesperson.factory
+            )
         elif salesperson.role == 'Distributor':
-            order = serializer.save(distributor=salesperson.distributor, sales_person=salesperson,factory=salesperson.factory)
+            order = serializer.save(
+                distributor=salesperson.distributor,
+                sales_person=salesperson,
+                factory=salesperson.factory
+            )
         elif salesperson.role == 'SuperAdmin':
-            order = serializer.save(factory=salesperson.factory, sales_person=salesperson)
+            order = serializer.save(
+                factory=salesperson.factory,
+                sales_person=salesperson
+            )
 
-        # After order is created, update inventory
+        # Update inventory after order creation
         for order_product_data in order_products_data:
-            product_id = order_product_data['product_id']
-            quantity = order_product_data['quantity']
+            product_id = order_product_data.get('product_id')
+            quantity = int(order_product_data.get('quantity'))
 
             # Get the inventory item again
-            if salesperson.role == 'Franchise' or salesperson.role == 'SalesPerson':
+            if salesperson.role in ['Franchise', 'SalesPerson']:
                 inventory_item = Inventory.objects.get(
                     id=product_id,
                     franchise=salesperson.franchise
@@ -461,6 +528,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 new_quantity=inventory_item.quantity,
                 action='order_created'
             )
+
         return order
 
 class OrderUpdateView(generics.UpdateAPIView):
@@ -1289,4 +1357,48 @@ class OrderCSVExportView(generics.GenericAPIView):
 
         return response
 
+class PromoCodeListCreateView(generics.ListCreateAPIView):
+    queryset = PromoCode.objects.all()
+    serializer_class = PromoCodeSerializer
+
+    def get_queryset(self):
+        # user = self.request.user
+        user = CustomUser.objects.get(id=1)
+        if user.role == 'SuperAdmin':
+            return PromoCode.objects.all()
+        return PromoCode.objects.filter(is_active=True, valid_from__lte=timezone.now(), valid_until__gte=timezone.now())
+
+class PromoCodeDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = PromoCode.objects.all()
+    serializer_class = PromoCodeSerializer
+
+    
+class ValidatePromoCodeView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        promo_code = request.data.get('promo_code')
+        if not promo_code:
+            return Response({"error": "Promo code is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            promo_code_instance = PromoCode.objects.get(
+                code=promo_code,
+                is_active=True,
+                valid_from__lte=timezone.now(),
+                valid_until__gte=timezone.now()
+            )
+            if promo_code_instance.max_uses and promo_code_instance.times_used >= promo_code_instance.max_uses:
+                return Response({"error": "Promo code has reached its maximum usage limit"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response({
+                'valid': True,
+                'code': promo_code_instance.code,
+                'discount_percentage': promo_code_instance.discount_percentage,
+                'message': 'Promo code applied successfully'
+            })
+
+        except PromoCode.DoesNotExist:
+            return Response({"error": "Invalid promo code"}, status=status.HTTP_400_BAD_REQUEST)
+        
 
