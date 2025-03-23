@@ -344,23 +344,23 @@ class OrderListCreateView(generics.ListCreateAPIView):
             data = request.data.copy()
             order_products = []
 
+            # Check if order_products is already a list (JSON payload)
+            if isinstance(request.data.get('order_products'), list):
+                order_products = request.data.get('order_products')
             # Check if it's form-data format
-            if hasattr(request.data, 'getlist'):
-                # Get all keys that match the order_products pattern
-                product_keys = [k for k in request.data.keys() if k.startswith('order_products[')]
-                
-                # Group the order_products data from form-data
-                for i in range(len(product_keys) // 2):
-                    product_id = request.data.get(f'order_products[{i}][product_id]')
-                    quantity = request.data.get(f'order_products[{i}][quantity]')
-                    if product_id and quantity:
-                        order_products.append({
-                            'product_id': product_id,
-                            'quantity': quantity
-                        })
-            else:
-                # Handle raw JSON format
-                order_products = request.data.get('order_products', [])
+            elif hasattr(request.data, 'getlist'):
+                # Get the order_products string and convert it to list
+                order_products_str = request.data.get('order_products')
+                if order_products_str:
+                    try:
+                        # Handle string format "[{"product_id": 39, "quantity": 1}]"
+                        import json
+                        order_products = json.loads(order_products_str)
+                    except json.JSONDecodeError:
+                        return Response(
+                            {"error": "Invalid order_products format"},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
 
             # Validate order products
             if not order_products:
@@ -388,6 +388,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
             # Handle payment screenshot file
             if 'payment_screenshot' in request.FILES:
                 modified_data['payment_screenshot'] = request.FILES['payment_screenshot']
+            elif request.data.get('payment_screenshot'):
+                # Handle base64 image data
+                modified_data['payment_screenshot'] = request.data.get('payment_screenshot')
 
             # Update the request data
             request._full_data = modified_data
