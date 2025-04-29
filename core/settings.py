@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 from datetime import timedelta
 
@@ -138,7 +139,6 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
-import os
 STATIC_URL = "/static/"
 STATICFILES_DIRS = []
 STATIC_ROOT = os.path.join(BASE_DIR, "static")
@@ -170,8 +170,8 @@ SIMPLE_JWT = {
 }
 
 TINYMCE_DEFAULT_CONFIG = {
-    "height" : "780",
-    "width" : "780",
+    "height": "780",
+    "width": "780",
     "entity_encoding": "raw",
     "menubar": "file edit view insert format tools table help",
     "plugins": 'print preview paste importcss searchreplace autolink autosave save code visualblocks visualchars fullscreen image link media template codesample table charmap hr pagebreak nonbreaking anchor toc insertdatetime advlist lists wordcount imagetools textpattern noneditable help charmap emoticons quickbars',
