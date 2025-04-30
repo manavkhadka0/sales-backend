@@ -986,34 +986,40 @@ class UserInventoryLogs(generics.ListAPIView):
 
 class TopSalespersonView(generics.ListAPIView):
     serializer_class = TopSalespersonSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        filter_type = self.request.GET.get('filter')  # Get filter parameter
+        user = self.request.user
+        filter_type = self.request.GET.get('filter')
         current_date = timezone.now()
 
-        # Base queryset for salespersons
-        salespersons = CustomUser.objects.filter(role='SalesPerson')
+        if user.role == 'SuperAdmin':
+            salespersons = CustomUser.objects.filter(role='SalesPerson')
+        elif user.role == 'Distributor':
+            franchises = Franchise.objects.filter(distributor=user.distributor)
+            salespersons = CustomUser.objects.filter(
+                role='SalesPerson', franchise__in=franchises)
+        elif user.role in ['Franchise', 'SalesPerson']:
+            salespersons = CustomUser.objects.filter(
+                role='SalesPerson', franchise=user.franchise)
+        else:
+            return CustomUser.objects.none()
 
-        # Apply time filter if specified
         if filter_type:
             if filter_type == 'daily':
-                # Filter for today
                 start_date = current_date.date()
                 orders_filter = {'orders__created_at__date': start_date}
             elif filter_type == 'weekly':
-                # Filter for the last 7 days
                 start_date = current_date - timezone.timedelta(days=7)
                 orders_filter = {'orders__created_at__gte': start_date}
             elif filter_type == 'monthly':
-                # Filter for the last 30 days
                 start_date = current_date - timezone.timedelta(days=30)
                 orders_filter = {'orders__created_at__gte': start_date}
             else:
                 orders_filter = {}
         else:
-            orders_filter = {}  # No time filter, get all-time data
+            orders_filter = {}
 
-        # Annotate and filter salespersons
         salespersons = salespersons.annotate(
             sales_count=Count('orders', filter=models.Q(**orders_filter)),
             total_sales=Sum('orders__total_amount',
@@ -1030,17 +1036,13 @@ class TopSalespersonView(generics.ListAPIView):
         serializer = self.get_serializer(queryset, many=True)
         data = serializer.data
 
-        # Get filter type for time period
         filter_type = request.GET.get('filter', 'all')
 
-        # Get product sales details for each salesperson
         for index, item in enumerate(data):
             salesperson = queryset[index]
 
-            # Base query for orders
             orders_query = Order.objects.filter(sales_person=salesperson)
 
-            # Apply time filter to orders
             if filter_type == 'daily':
                 orders_query = orders_query.filter(
                     created_at__date=timezone.now().date())
@@ -1053,7 +1055,6 @@ class TopSalespersonView(generics.ListAPIView):
                     created_at__gte=timezone.now() - timezone.timedelta(days=30)
                 )
 
-            # Get product sales details
             product_sales = (
                 OrderProduct.objects.filter(order__in=orders_query)
                 .values(
@@ -1076,7 +1077,6 @@ class TopSalespersonView(generics.ListAPIView):
                 .order_by('-total_quantity')
             )
 
-            # Add sales details to response
             item['sales_count'] = queryset[index].sales_count
             item['total_sales'] = float(queryset[index].total_sales)
             item['product_sales'] = [{
