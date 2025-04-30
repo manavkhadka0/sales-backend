@@ -1089,7 +1089,8 @@ class TopProductsView(generics.ListAPIView):
             # Get all order products and aggregate their quantities and amounts
             top_products = (
                 OrderProduct.objects.filter(
-                    order__order_status='Delivered'  # Only count delivered orders
+                    # Only count delivered orders
+                    order__order_status__in=['Delivered', 'Pending']
                 ).values(
                     'product__product__id',  # Get the actual product ID
                     'product__product__name'  # Get the product name
@@ -1213,7 +1214,8 @@ class DashboardStatsView(generics.GenericAPIView):
         # Calculate current period stats
         current_revenue = orders.filter(
             created_at__gte=last_month,
-            order_status='Delivered'  # Only count delivered orders for revenue
+            # Only count delivered orders for revenue
+            order_status__in=['Delivered', 'Pending']
         ).aggregate(total=Sum('total_amount'))['total'] or 0
 
         current_orders = orders.filter(created_at__gte=last_month).count()
@@ -1226,7 +1228,7 @@ class DashboardStatsView(generics.GenericAPIView):
         previous_revenue = orders.filter(
             created_at__gte=previous_month,
             created_at__lt=last_month,
-            order_status='Delivered'
+            order_status__in=['Delivered', 'Pending']
         ).aggregate(total=Sum('total_amount'))['total'] or 0
 
         previous_orders = orders.filter(
@@ -1293,17 +1295,18 @@ class RevenueByProductView(generics.GenericAPIView):
 
         # Filter orders based on user role
         if user.role == 'SuperAdmin':
-            orders = Order.objects.filter(order_status='Delivered')
+            orders = Order.objects.filter(
+                order_status__in=['Delivered', 'Pending'])
         elif user.role == 'Distributor':
             franchises = Franchise.objects.filter(distributor=user.distributor)
             orders = Order.objects.filter(
                 franchise__in=franchises,
-                order_status='Delivered'
+                order_status__in=['Delivered', 'Pending']
             )
         elif user.role in ['Franchise', 'SalesPerson']:
             orders = Order.objects.filter(
                 franchise=user.franchise,
-                order_status='Delivered'
+                order_status__in=['Delivered', 'Pending']
             )
         else:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
