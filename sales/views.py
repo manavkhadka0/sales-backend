@@ -1100,12 +1100,33 @@ class RevenueView(generics.ListAPIView):
 class TopProductsView(generics.ListAPIView):
     def get(self, request, *args, **kwargs):
         try:
-            # Get all order products and aggregate their quantities and amounts
+            # Get filter parameter from query
+            filter_type = request.GET.get('filter')
+
+            # Base query for order products
+            base_query = OrderProduct.objects.filter(
+                order__order_status__in=['Delivered', 'Pending']
+            )
+
+            # Apply time filter if specified
+            if filter_type:
+                current_date = timezone.now()
+
+                if filter_type == 'weekly':
+                    # Filter for the last 7 days
+                    start_date = current_date - timezone.timedelta(days=7)
+                    base_query = base_query.filter(
+                        order__created_at__gte=start_date)
+
+                elif filter_type == 'monthly':
+                    # Filter for the last 30 days
+                    start_date = current_date - timezone.timedelta(days=30)
+                    base_query = base_query.filter(
+                        order__created_at__gte=start_date)
+
+            # Get top products with aggregated data
             top_products = (
-                OrderProduct.objects.filter(
-                    # Only count delivered orders
-                    order__order_status__in=['Delivered', 'Pending']
-                ).values(
+                base_query.values(
                     'product__product__id',  # Get the actual product ID
                     'product__product__name'  # Get the product name
                 ).annotate(
@@ -1132,6 +1153,7 @@ class TopProductsView(generics.ListAPIView):
             } for item in top_products]
 
             return Response({
+                'filter_type': filter_type or 'all',
                 'count': len(response_data),
                 'data': response_data
             })
@@ -1562,7 +1584,8 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
             fields_to_check = [
                 'full_name', 'city', 'delivery_address', 'landmark',
                 'phone_number', 'alternate_phone_number', 'delivery_charge',
-                'payment_method', 'total_amount', 'promo_code', 'remarks'
+                'payment_method', 'total_amount', 'promo_code', 'remarks',
+                'prepaid_amount'
             ]
 
             for field in fields_to_check:
