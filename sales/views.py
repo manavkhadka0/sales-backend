@@ -1402,7 +1402,6 @@ class RevenueByProductView(generics.GenericAPIView):
         product_data.sort(key=lambda x: x['percentage'], reverse=True)
 
         response_data = {
-            'filter_type': filter_type or 'all',
             'total_revenue': round(float(total_revenue), 2),
             'products': product_data,
             'revenue_distribution': {
