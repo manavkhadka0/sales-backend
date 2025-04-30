@@ -888,11 +888,22 @@ class SalesStatisticsView(generics.GenericAPIView):
 
     def get_stats_for_queryset(self, queryset, today):
         """Helper method to get statistics for a queryset"""
+        # Calculate yesterday's date
+        yesterday = today - timezone.timedelta(days=1)
+
+        # Get today's stats
         daily_stats = queryset.filter(date=today).aggregate(
             total_orders=Count('id'),
             total_sales=Sum('total_amount')
         )
 
+        # Get yesterday's stats
+        yesterday_stats = queryset.filter(date=yesterday).aggregate(
+            total_orders=Count('id'),
+            total_sales=Sum('total_amount')
+        )
+
+        # Get all-time stats
         all_time_stats = queryset.aggregate(
             total_orders=Count('id'),
             total_sales=Sum('total_amount')
@@ -902,6 +913,8 @@ class SalesStatisticsView(generics.GenericAPIView):
             'date': today,
             'total_orders': daily_stats['total_orders'] or 0,
             'total_sales': daily_stats['total_sales'] or 0,
+            'total_orders_yesterday': yesterday_stats['total_orders'] or 0,
+            'total_sales_yesterday': yesterday_stats['total_sales'] or 0,
             'all_time_orders': all_time_stats['total_orders'] or 0,
             'all_time_sales': all_time_stats['total_sales'] or 0
         }
