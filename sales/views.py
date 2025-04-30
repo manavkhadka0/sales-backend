@@ -1533,56 +1533,49 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
     def update(self, request, *args, **kwargs):
         try:
             instance = self.get_object()
-            # Handle both form-data and raw JSON formats
-            data = request.data.copy()
-            order_products = []
+            # Create a dictionary only with fields that are actually provided in the request
+            modified_data = {}
 
-            # Check if order_products is already a list (JSON payload)
-            if isinstance(request.data.get('order_products'), list):
-                order_products = request.data.get('order_products')
-            # Check if it's form-data format
-            elif hasattr(request.data, 'getlist'):
-                # Get the order_products string and convert it to list
-                order_products_str = request.data.get('order_products')
-                if order_products_str:
-                    try:
-                        # Handle string format "[{"product_id": 39, "quantity": 1}]"
-                        import json
-                        order_products = json.loads(order_products_str)
-                    except json.JSONDecodeError:
-                        return Response(
-                            {"error": "Invalid order_products format"},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
+            # Handle order products separately
+            order_products = None
 
-            # Create the modified data dictionary
-            modified_data = {
-                'full_name': request.data.get('full_name'),
-                'city': request.data.get('city'),
-                'delivery_address': request.data.get('delivery_address'),
-                'landmark': request.data.get('landmark'),
-                'phone_number': request.data.get('phone_number'),
-                'alternate_phone_number': request.data.get('alternate_phone_number'),
-                'delivery_charge': request.data.get('delivery_charge'),
-                'payment_method': request.data.get('payment_method'),
-                'total_amount': request.data.get('total_amount'),
-                'promo_code': request.data.get('promo_code'),
-                'remarks': request.data.get('remarks'),
-                'order_status': request.data.get('order_status'),
-                'order_products': order_products
-            }
+            # Check if order_products is provided and parse it
+            if 'order_products' in request.data:
+                if isinstance(request.data.get('order_products'), list):
+                    order_products = request.data.get('order_products')
+                elif hasattr(request.data, 'getlist'):
+                    order_products_str = request.data.get('order_products')
+                    if order_products_str:
+                        try:
+                            import json
+                            order_products = json.loads(order_products_str)
+                        except json.JSONDecodeError:
+                            return Response(
+                                {"error": "Invalid order_products format"},
+                                status=status.HTTP_400_BAD_REQUEST
+                            )
 
-            # Handle payment screenshot file
+            # Only include fields that are actually provided in the request
+            fields_to_check = [
+                'full_name', 'city', 'delivery_address', 'landmark',
+                'phone_number', 'alternate_phone_number', 'delivery_charge',
+                'payment_method', 'total_amount', 'promo_code', 'remarks'
+            ]
+
+            for field in fields_to_check:
+                if field in request.data:
+                    modified_data[field] = request.data.get(field)
+
+            # Handle payment screenshot if provided
             if 'payment_screenshot' in request.FILES:
                 modified_data['payment_screenshot'] = request.FILES['payment_screenshot']
             elif request.data.get('payment_screenshot'):
-                # Handle base64 image data
                 modified_data['payment_screenshot'] = request.data.get(
                     'payment_screenshot')
 
             # Validate promo code if provided
-            promo_code = modified_data.get('promo_code')
-            if promo_code:
+            if 'promo_code' in modified_data:
+                promo_code = modified_data['promo_code']
                 try:
                     promo_code_instance = PromoCode.objects.get(
                         code=promo_code,
@@ -1601,25 +1594,26 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
-            # Update the instance
+            # If someone tries to update the status, return an error
+            if 'order_status' in request.data:
+                return Response(
+                    {"error": "Order status cannot be updated through this endpoint"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update the instance with only the modified fields
             serializer = self.get_serializer(
                 instance,
                 data=modified_data,
                 partial=True
             )
             serializer.is_valid(raise_exception=True)
-
-            # Save the previous status for cancellation check
-            previous_status = instance.order_status
-
-            # Perform the update
             order = serializer.save()
 
             # Handle order products if provided
-            if order_products:
+            if order_products is not None:
                 # Delete existing order products
                 instance.order_products.all().delete()
-
                 # Create new order products
                 for product_data in order_products:
                     OrderProduct.objects.create(
@@ -1628,8 +1622,8 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                         quantity=product_data['quantity']
                     )
 
-            # Update promo code usage if changed
-            if promo_code and instance.promo_code != promo_code_instance:
+            # Update promo code usage if changed and provided
+            if 'promo_code' in modified_data and instance.promo_code != promo_code_instance:
                 if instance.promo_code:
                     # Decrease usage count of old promo code
                     instance.promo_code.times_used -= 1
@@ -1642,29 +1636,6 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 # Update order's promo code
                 instance.promo_code = promo_code_instance
                 instance.save()
-
-            # Handle order cancellation
-            if order.order_status == "Cancelled" and previous_status != "Cancelled":
-                # Restore inventory quantities
-                order_products = order.order_products.all()
-                for order_product in order_products:
-                    try:
-                        inventory = order_product.product
-                        old_quantity = inventory.quantity
-                        inventory.quantity += order_product.quantity
-                        inventory.save()
-
-                        # Log the inventory change
-                        InventoryChangeLog.objects.create(
-                            inventory=inventory,
-                            user=self.request.user,
-                            old_quantity=old_quantity,
-                            new_quantity=inventory.quantity,
-                            action='order_cancelled'
-                        )
-                    except Exception as e:
-                        # Log the error but don't stop the cancellation
-                        print(f"Error restoring inventory: {str(e)}")
 
             return Response(serializer.data)
 
