@@ -1153,7 +1153,6 @@ class TopProductsView(generics.ListAPIView):
             } for item in top_products]
 
             return Response({
-                'filter_type': filter_type or 'all',
                 'count': len(response_data),
                 'data': response_data
             })
