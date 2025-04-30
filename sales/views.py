@@ -1327,6 +1327,8 @@ class RevenueByProductView(generics.GenericAPIView):
 
     def get(self, request):
         user = self.request.user
+        # Get filter parameter from query
+        filter_type = request.GET.get('filter')
 
         # Filter orders based on user role
         if user.role == 'SuperAdmin':
@@ -1345,6 +1347,20 @@ class RevenueByProductView(generics.GenericAPIView):
             )
         else:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+
+        # Apply time filter if specified
+        if filter_type:
+            current_date = timezone.now()
+
+            if filter_type == 'weekly':
+                # Filter for the last 7 days
+                start_date = current_date - timezone.timedelta(days=7)
+                orders = orders.filter(created_at__gte=start_date)
+
+            elif filter_type == 'monthly':
+                # Filter for the last 30 days
+                start_date = current_date - timezone.timedelta(days=30)
+                orders = orders.filter(created_at__gte=start_date)
 
         # Get all order products and calculate revenue per product
         product_revenue = (
@@ -1386,6 +1402,7 @@ class RevenueByProductView(generics.GenericAPIView):
         product_data.sort(key=lambda x: x['percentage'], reverse=True)
 
         response_data = {
+            'filter_type': filter_type or 'all',
             'total_revenue': round(float(total_revenue), 2),
             'products': product_data,
             'revenue_distribution': {
