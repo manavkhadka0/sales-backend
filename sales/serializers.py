@@ -311,11 +311,10 @@ class InventoryRequestSerializer(serializers.ModelSerializer):
 
 
 class TopSalespersonSerializer(serializers.ModelSerializer):
-    franchise = serializers.StringRelatedField(read_only=True)
     total_sales = serializers.FloatField(read_only=True)
     sales_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = CustomUser
-        fields = ('first_name', 'last_name', 'phone_number',
-                  'franchise', 'total_sales', 'sales_count')
+        fields = ('first_name', 'last_name',
+                  'total_sales', 'sales_count')

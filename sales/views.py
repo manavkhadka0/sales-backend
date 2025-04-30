@@ -988,17 +988,39 @@ class TopSalespersonView(generics.ListAPIView):
     serializer_class = TopSalespersonSerializer
 
     def get_queryset(self):
-        # Get all users with role 'SalesPerson' and annotate with sales data
+        filter_type = self.request.GET.get('filter')  # Get filter parameter
+        current_date = timezone.now()
+
+        # Base queryset for salespersons
         salespersons = CustomUser.objects.filter(role='SalesPerson')
 
-        # Annotate and filter out those with no sales
+        # Apply time filter if specified
+        if filter_type:
+            if filter_type == 'daily':
+                # Filter for today
+                start_date = current_date.date()
+                orders_filter = {'orders__created_at__date': start_date}
+            elif filter_type == 'weekly':
+                # Filter for the last 7 days
+                start_date = current_date - timezone.timedelta(days=7)
+                orders_filter = {'orders__created_at__gte': start_date}
+            elif filter_type == 'monthly':
+                # Filter for the last 30 days
+                start_date = current_date - timezone.timedelta(days=30)
+                orders_filter = {'orders__created_at__gte': start_date}
+            else:
+                orders_filter = {}
+        else:
+            orders_filter = {}  # No time filter, get all-time data
+
+        # Annotate and filter salespersons
         salespersons = salespersons.annotate(
-            sales_count=Count('orders'),
-            total_sales=Sum('orders__total_amount')
+            sales_count=Count('orders', filter=models.Q(**orders_filter)),
+            total_sales=Sum('orders__total_amount',
+                            filter=models.Q(**orders_filter))
         ).filter(
-            sales_count__gt=0,  # Only include those with sales count greater than 0
-            total_sales__gt=0   # Only include those with total sales greater than 0
-            # Get top 5 by sales count, then by amount
+            sales_count__gt=0,
+            total_sales__gt=0
         ).order_by('-sales_count', '-total_sales')[:5]
 
         return salespersons
@@ -1006,13 +1028,68 @@ class TopSalespersonView(generics.ListAPIView):
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         serializer = self.get_serializer(queryset, many=True)
-
         data = serializer.data
+
+        # Get filter type for time period
+        filter_type = request.GET.get('filter', 'all')
+
+        # Get product sales details for each salesperson
         for index, item in enumerate(data):
+            salesperson = queryset[index]
+
+            # Base query for orders
+            orders_query = Order.objects.filter(sales_person=salesperson)
+
+            # Apply time filter to orders
+            if filter_type == 'daily':
+                orders_query = orders_query.filter(
+                    created_at__date=timezone.now().date())
+            elif filter_type == 'weekly':
+                orders_query = orders_query.filter(
+                    created_at__gte=timezone.now() - timezone.timedelta(days=7)
+                )
+            elif filter_type == 'monthly':
+                orders_query = orders_query.filter(
+                    created_at__gte=timezone.now() - timezone.timedelta(days=30)
+                )
+
+            # Get product sales details
+            product_sales = (
+                OrderProduct.objects.filter(order__in=orders_query)
+                .values(
+                    'product__product__id',
+                    'product__product__name'
+                )
+                .annotate(
+                    total_quantity=Sum('quantity'),
+                    total_amount=Sum(
+                        models.F('quantity') * models.F('order__total_amount') /
+                        models.Subquery(
+                            OrderProduct.objects.filter(
+                                order=models.OuterRef('order')
+                            ).values('order')
+                            .annotate(total_qty=Sum('quantity'))
+                            .values('total_qty')[:1]
+                        )
+                    )
+                )
+                .order_by('-total_quantity')
+            )
+
+            # Add sales details to response
             item['sales_count'] = queryset[index].sales_count
             item['total_sales'] = float(queryset[index].total_sales)
+            item['product_sales'] = [{
+                'product_name': p['product__product__name'],
+                'quantity_sold': p['total_quantity'],
+            } for p in product_sales]
 
-        return Response(data)
+        response_data = {
+            'filter_type': filter_type,
+            'results': data
+        }
+
+        return Response(response_data)
 
 
 class RevenueView(generics.ListAPIView):
