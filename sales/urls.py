@@ -1,6 +1,6 @@
 # sales-backend/sales/urls.py
 from django.urls import path
-from .views import FranchiseInventoryListView, InventoryListCreateView, LatestOrdersView, OrderListCreateView, OrderUpdateView,CommissionPaymentView,ProductListView,InventoryDetailView,InventoryChangeLogView,Inventorylogs,FactoryInventoryListView,DistributorInventoryListView,InventoryRequestView,InventoryRequestDetailView,AllProductsListView, RawMaterialListView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView,OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView
+from .views import FranchiseInventoryListView, InventoryListCreateView, LatestOrdersView, OrderDetailUpdateView, OrderListCreateView, OrderUpdateView,CommissionPaymentView,ProductListView,InventoryDetailView,InventoryChangeLogView,Inventorylogs,FactoryInventoryListView,DistributorInventoryListView,InventoryRequestView,InventoryRequestDetailView,AllProductsListView, RawMaterialListView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView,OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView
     
 urlpatterns = [
     path('inventory/', InventoryListCreateView.as_view(), name='inventory-list'),
@@ -16,6 +16,7 @@ urlpatterns = [
     path('user-inventory-logs/', UserInventoryLogs.as_view(), name='user-inventory-logs'),
 
     path('orders/', OrderListCreateView.as_view(), name='order-create'),  # URL for creating orders
+    path('orders/<int:pk>/update/', OrderDetailUpdateView.as_view(), name='order-update'),
     path('orders/<int:pk>/', OrderUpdateView.as_view(), name='order-update'),  # URL for updating orders
     path('latest-orders/',LatestOrdersView.as_view(),name='latest-orders'),
 

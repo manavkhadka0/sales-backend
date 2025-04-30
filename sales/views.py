@@ -1511,3 +1511,165 @@ class ValidatePromoCodeView(generics.GenericAPIView):
 
         except PromoCode.DoesNotExist:
             return Response({"error": "Invalid promo code"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
+    queryset = Order.objects.all()
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = (JSONParser, FormParser, MultiPartParser)
+
+    def get_queryset(self):
+        """Filter orders based on user role"""
+        user = self.request.user
+        if user.role == 'SuperAdmin':
+            return Order.objects.all()
+        elif user.role == 'Distributor':
+            return Order.objects.filter(distributor=user.distributor)
+        elif user.role in ['Franchise', 'SalesPerson']:
+            return Order.objects.filter(franchise=user.franchise)
+        return Order.objects.none()
+
+    def update(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            # Handle both form-data and raw JSON formats
+            data = request.data.copy()
+            order_products = []
+
+            # Check if order_products is already a list (JSON payload)
+            if isinstance(request.data.get('order_products'), list):
+                order_products = request.data.get('order_products')
+            # Check if it's form-data format
+            elif hasattr(request.data, 'getlist'):
+                # Get the order_products string and convert it to list
+                order_products_str = request.data.get('order_products')
+                if order_products_str:
+                    try:
+                        # Handle string format "[{"product_id": 39, "quantity": 1}]"
+                        import json
+                        order_products = json.loads(order_products_str)
+                    except json.JSONDecodeError:
+                        return Response(
+                            {"error": "Invalid order_products format"},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
+            # Create the modified data dictionary
+            modified_data = {
+                'full_name': request.data.get('full_name'),
+                'city': request.data.get('city'),
+                'delivery_address': request.data.get('delivery_address'),
+                'landmark': request.data.get('landmark'),
+                'phone_number': request.data.get('phone_number'),
+                'alternate_phone_number': request.data.get('alternate_phone_number'),
+                'delivery_charge': request.data.get('delivery_charge'),
+                'payment_method': request.data.get('payment_method'),
+                'total_amount': request.data.get('total_amount'),
+                'promo_code': request.data.get('promo_code'),
+                'remarks': request.data.get('remarks'),
+                'order_status': request.data.get('order_status'),
+                'order_products': order_products
+            }
+
+            # Handle payment screenshot file
+            if 'payment_screenshot' in request.FILES:
+                modified_data['payment_screenshot'] = request.FILES['payment_screenshot']
+            elif request.data.get('payment_screenshot'):
+                # Handle base64 image data
+                modified_data['payment_screenshot'] = request.data.get(
+                    'payment_screenshot')
+
+            # Validate promo code if provided
+            promo_code = modified_data.get('promo_code')
+            if promo_code:
+                try:
+                    promo_code_instance = PromoCode.objects.get(
+                        code=promo_code,
+                        is_active=True,
+                        valid_from__lte=timezone.now(),
+                        valid_until__gte=timezone.now()
+                    )
+                    if promo_code_instance.max_uses and promo_code_instance.times_used >= promo_code_instance.max_uses:
+                        return Response(
+                            {"error": "Promo code has reached its maximum usage limit"},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                except PromoCode.DoesNotExist:
+                    return Response(
+                        {"error": "Invalid promo code"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Update the instance
+            serializer = self.get_serializer(
+                instance,
+                data=modified_data,
+                partial=True
+            )
+            serializer.is_valid(raise_exception=True)
+
+            # Save the previous status for cancellation check
+            previous_status = instance.order_status
+
+            # Perform the update
+            order = serializer.save()
+
+            # Handle order products if provided
+            if order_products:
+                # Delete existing order products
+                instance.order_products.all().delete()
+
+                # Create new order products
+                for product_data in order_products:
+                    OrderProduct.objects.create(
+                        order=instance,
+                        product_id=product_data['product_id'],
+                        quantity=product_data['quantity']
+                    )
+
+            # Update promo code usage if changed
+            if promo_code and instance.promo_code != promo_code_instance:
+                if instance.promo_code:
+                    # Decrease usage count of old promo code
+                    instance.promo_code.times_used -= 1
+                    instance.promo_code.save()
+
+                # Increase usage count of new promo code
+                promo_code_instance.times_used += 1
+                promo_code_instance.save()
+
+                # Update order's promo code
+                instance.promo_code = promo_code_instance
+                instance.save()
+
+            # Handle order cancellation
+            if order.order_status == "Cancelled" and previous_status != "Cancelled":
+                # Restore inventory quantities
+                order_products = order.order_products.all()
+                for order_product in order_products:
+                    try:
+                        inventory = order_product.product
+                        old_quantity = inventory.quantity
+                        inventory.quantity += order_product.quantity
+                        inventory.save()
+
+                        # Log the inventory change
+                        InventoryChangeLog.objects.create(
+                            inventory=inventory,
+                            user=self.request.user,
+                            old_quantity=old_quantity,
+                            new_quantity=inventory.quantity,
+                            action='order_cancelled'
+                        )
+                    except Exception as e:
+                        # Log the error but don't stop the cancellation
+                        print(f"Error restoring inventory: {str(e)}")
+
+            return Response(serializer.data)
+
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to update order: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
