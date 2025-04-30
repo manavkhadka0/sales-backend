@@ -70,7 +70,7 @@ class InventoryChangeLog(models.Model):
         elif hasattr(self.user, 'franchise'):
             user_org = f"Franchise: {self.user.franchise}"
 
-        return f"{self.action.title()} - {product_name}{org_str}: {self.old_quantity} → {self.new_quantity} by {self.user.username} ({user_role} at {user_org})"
+        return f"{self.action.title()} - {product_name}{org_str}: {self.old_quantity} → {self.new_quantity} by {self.user.first_name} ({user_role} at {user_org})"
 
 
 class InventoryRequest(models.Model):
