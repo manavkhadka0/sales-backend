@@ -412,6 +412,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 'total_amount': request.data.get('total_amount'),
                 'promo_code': request.data.get('promo_code'),
                 'remarks': request.data.get('remarks'),
+                'prepaid_amount': request.data.get('prepaid_amount'),
                 'order_products': order_products
             }
 
@@ -1434,6 +1435,7 @@ class OrderCSVExportView(generics.GenericAPIView):
             'Products',
             'Delivery Charge',
             'Total Amount',
+            'Prepaid Amount',
             'Order Status',
             'Sales Person',
             'Franchise',
@@ -1458,6 +1460,7 @@ class OrderCSVExportView(generics.GenericAPIView):
                 products_str,
                 order.delivery_charge,
                 order.total_amount,
+                order.prepaid_amount,
                 order.order_status,
                 order.sales_person.username if order.sales_person else 'N/A',
                 order.franchise.name if order.franchise else 'N/A',

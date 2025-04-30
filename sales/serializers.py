@@ -1,19 +1,23 @@
 from django.utils import timezone
 from rest_framework import serializers
-from .models import Inventory, Order, OrderProduct, Product,InventoryChangeLog, InventoryRequest, PromoCode
+from .models import Inventory, Order, OrderProduct, Product, InventoryChangeLog, InventoryRequest, PromoCode
 from account.models import CustomUser
 from account.serializers import UserSmallSerializer
+
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
-        fields = ['id', 'name', 'description','image']
+        fields = ['id', 'name', 'description', 'image']
+
 
 class RawMaterialSerializer(serializers.ModelSerializer):
-    product=ProductSerializer(read_only=True)
+    product = ProductSerializer(read_only=True)
+
     class Meta:
         model = Inventory
         fields = ['id', 'product', 'quantity', 'status']
+
 
 class InventorySerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
@@ -25,8 +29,11 @@ class InventorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Inventory
-        fields = ['id', 'distributor', 'franchise', 'factory', 'product', 'product_id', 'quantity', 'status']
-        read_only_fields = ['distributor', 'franchise', 'factory']  # These will be set in the view
+        fields = ['id', 'distributor', 'franchise', 'factory',
+                  'product', 'product_id', 'quantity', 'status']
+        read_only_fields = ['distributor', 'franchise',
+                            'factory']  # These will be set in the view
+
 
 class InventoryChangeLogSerializer(serializers.ModelSerializer):
     product_name = serializers.SerializerMethodField()
@@ -35,19 +42,19 @@ class InventoryChangeLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = InventoryChangeLog
-        fields = ['id', 'product_name', 'old_quantity', 'new_quantity', 
-                 'action', 'user_name', 'organization', 'changed_at']
+        fields = ['id', 'product_name', 'old_quantity', 'new_quantity',
+                  'action', 'user_name', 'organization', 'changed_at']
 
     def get_product_name(self, obj):
         return obj.inventory.product.name if obj.inventory else "Unknown Product"
 
     def get_user_name(self, obj):
         return obj.user.username if obj.user else "Unknown User"
-    
+
     def get_organization(self, obj):
         if not obj.inventory:
             return "Unknown Organization"
-        
+
         if obj.inventory.factory:
             return f"Factory: {obj.inventory.factory}"
         elif obj.inventory.distributor:
@@ -56,8 +63,10 @@ class InventoryChangeLogSerializer(serializers.ModelSerializer):
             return f"Franchise: {obj.inventory.franchise}"
         return "No Organization"
 
+
 class InventorySmallSerializer(serializers.ModelSerializer):
     product = serializers.SerializerMethodField()
+
     class Meta:
         model = Inventory
         fields = ['id', 'product', 'quantity', 'status']
@@ -67,31 +76,40 @@ class InventorySmallSerializer(serializers.ModelSerializer):
             'id': obj.product.id,
             'name': obj.product.name
         }
+
+
 class ProductSmallSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = ['id', 'name']
 
+
 class PromoCodeSerializer(serializers.ModelSerializer):
     class Meta:
         model = PromoCode
-        fields = ['id', 'code', 'discount_percentage', 'valid_from', 'valid_until', 'max_uses', 'times_used', 'is_active']
+        fields = ['id', 'code', 'discount_percentage', 'valid_from',
+                  'valid_until', 'max_uses', 'times_used', 'is_active']
         read_only_fields = ['times_used']
 
     def validate(self, data):
         if data.get('valid_from') and data.get('valid_until'):
             if data['valid_until'] <= data['valid_from']:
-                raise serializers.ValidationError("Valid until date must be after valid from date")
+                raise serializers.ValidationError(
+                    "Valid until date must be after valid from date")
         if data.get('discount_percentage') and (data['discount_percentage'] <= 0 or data['discount_percentage'] > 100):
-            raise serializers.ValidationError("Discount percentage must be between 0 and 100")
+            raise serializers.ValidationError(
+                "Discount percentage must be between 0 and 100")
 
         return data
+
 
 class ValidatePromoCodeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PromoCode
         fields = ['id', 'code']
+
+
 class OrderProductSerializer(serializers.ModelSerializer):
     product = serializers.SerializerMethodField()
     product_id = serializers.PrimaryKeyRelatedField(
@@ -112,7 +130,7 @@ class OrderProductSerializer(serializers.ModelSerializer):
 
 
 class OrderSerializer(serializers.ModelSerializer):
-    sales_person=UserSmallSerializer(read_only=True)
+    sales_person = UserSmallSerializer(read_only=True)
     order_products = OrderProductSerializer(many=True, required=False)
     promo_code = serializers.CharField(required=False, allow_null=True)
     payment_screenshot = serializers.FileField(required=False, allow_null=True)
@@ -122,7 +140,8 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = ['id', 'sales_person', 'full_name', 'city', 'delivery_address', 'landmark',
                   'phone_number', 'alternate_phone_number', 'payment_method',
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at',
-                  'order_products', 'total_amount', 'delivery_charge', 'remarks', 'promo_code']
+                  'order_products', 'total_amount', 'delivery_charge', 'remarks', 'promo_code',
+                  'prepaid_amount']
 
     def create(self, validated_data):
         order_products_data = validated_data.pop('order_products', [])
@@ -139,16 +158,19 @@ class OrderSerializer(serializers.ModelSerializer):
                     valid_until__gte=timezone.now()
                 )
             except PromoCode.DoesNotExist:
-                raise serializers.ValidationError({"promo_code": "Invalid promo code"})
+                raise serializers.ValidationError(
+                    {"promo_code": "Invalid promo code"})
 
         # ✅ Create Order
-        order = Order.objects.create(**validated_data, promo_code=promo_code_instance)
+        order = Order.objects.create(
+            **validated_data, promo_code=promo_code_instance)
 
         # ✅ Create Order Products
         for order_product_data in order_products_data:
             product = order_product_data['product']
             quantity = order_product_data['quantity']
-            OrderProduct.objects.create(order=order, product=product, quantity=quantity)
+            OrderProduct.objects.create(
+                order=order, product=product, quantity=quantity)
 
         # ✅ Update promo code usage count
         if promo_code_instance:
@@ -165,28 +187,33 @@ class OrderSerializer(serializers.ModelSerializer):
         if order_products_data is not None:
             instance.order_products.all().delete()
             for order_product_data in order_products_data:
-                OrderProduct.objects.create(order=instance, **order_product_data)
+                OrderProduct.objects.create(
+                    order=instance, **order_product_data)
 
         return instance
-    
+
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
-        fields = ['id', 'name', 'description','image']
+        fields = ['id', 'name', 'description', 'image']
+
 
 class SalesPersonSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['id', 'username', 'email']  # Add more fields as needed
 
+
 class OrderDetailSerializer(serializers.ModelSerializer):
     sales_person = SalesPersonSerializer()
-    order_products = OrderProductSerializer(many=True)  # Include order products
+    order_products = OrderProductSerializer(
+        many=True)  # Include order products
 
     class Meta:
         model = Order
-        fields = ['id', 'order_status', 'total_amount', 'created_at', 'sales_person', 'order_products']  # Add more fields as needed
+        fields = ['id', 'order_status', 'total_amount', 'created_at',
+                  'sales_person', 'order_products']  # Add more fields as needed
 
 
 class InventoryRequestSerializer(serializers.ModelSerializer):
@@ -198,15 +225,17 @@ class InventoryRequestSerializer(serializers.ModelSerializer):
         required=False
     )
 
-    user=UserSmallSerializer(read_only=True)
+    user = UserSmallSerializer(read_only=True)
+
     class Meta:
         model = InventoryRequest
-        fields = ['id', 'user','product', 'product_id', 'quantity', 'factory', 'distributor', 'status', 'total_amount', 'created_at']
+        fields = ['id', 'user', 'product', 'product_id', 'quantity',
+                  'factory', 'distributor', 'status', 'total_amount', 'created_at']
         read_only_fields = ['total_amount', 'user']
 
     def validate(self, data):
         user = self.context['request'].user
-        
+
         # Skip validation for updates (PATCH/PUT requests)
         if self.instance is not None:
             return data
@@ -218,36 +247,45 @@ class InventoryRequestSerializer(serializers.ModelSerializer):
         if not self.instance:
             # Check that only one destination is specified
             if factory and distributor:
-                raise serializers.ValidationError("Cannot request from both factory and distributor")
+                raise serializers.ValidationError(
+                    "Cannot request from both factory and distributor")
             if not factory and not distributor:
-                raise serializers.ValidationError("Must specify either factory or distributor")
+                raise serializers.ValidationError(
+                    "Must specify either factory or distributor")
 
             # Franchise validation
             if user.role == 'Franchise':
                 if not hasattr(user, 'franchise'):
-                    raise serializers.ValidationError("User is not associated with a franchise")
-                
+                    raise serializers.ValidationError(
+                        "User is not associated with a franchise")
+
                 if factory:
-                    raise serializers.ValidationError("Franchise can only request from distributor")
-                
+                    raise serializers.ValidationError(
+                        "Franchise can only request from distributor")
+
                 # Validate requesting from assigned distributor
                 if distributor != user.franchise.distributor:
-                    raise serializers.ValidationError("Can only request from your assigned distributor")
+                    raise serializers.ValidationError(
+                        "Can only request from your assigned distributor")
 
             # Distributor validation
             elif user.role == 'Distributor':
                 if not hasattr(user, 'distributor'):
-                    raise serializers.ValidationError("User is not associated with a distributor")
-                
+                    raise serializers.ValidationError(
+                        "User is not associated with a distributor")
+
                 if distributor:
-                    raise serializers.ValidationError("Distributor cannot request from another distributor")
-                
+                    raise serializers.ValidationError(
+                        "Distributor cannot request from another distributor")
+
                 # Validate requesting from factory
                 if not factory:
-                    raise serializers.ValidationError("Distributor must request from factory")
+                    raise serializers.ValidationError(
+                        "Distributor must request from factory")
 
             else:
-                raise serializers.ValidationError(f"Users with role {user.role} cannot make inventory requests")
+                raise serializers.ValidationError(
+                    f"Users with role {user.role} cannot make inventory requests")
 
             # Check for existing pending requests for the same product
             existing_request = InventoryRequest.objects.filter(
@@ -258,16 +296,19 @@ class InventoryRequestSerializer(serializers.ModelSerializer):
             if factory:
                 existing_request = existing_request.filter(factory=factory)
             if distributor:
-                existing_request = existing_request.filter(distributor=distributor)
-                
+                existing_request = existing_request.filter(
+                    distributor=distributor)
+
             if existing_request.exists():
-                raise serializers.ValidationError("You already have a pending request for this product")
+                raise serializers.ValidationError(
+                    "You already have a pending request for this product")
 
         return data
 
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
+
 
 class TopSalespersonSerializer(serializers.ModelSerializer):
     franchise = serializers.StringRelatedField(read_only=True)
@@ -276,4 +317,5 @@ class TopSalespersonSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ('first_name', 'last_name', 'phone_number', 'franchise', 'total_sales', 'sales_count')
+        fields = ('first_name', 'last_name', 'phone_number',
+                  'franchise', 'total_sales', 'sales_count')
