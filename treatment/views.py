@@ -1,11 +1,47 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .models import CustomerTreatment, Image
 from .serializers import CustomerTreatmentSerializer, ImageSerializer
+import json
 
-# Create your views here.
+
+def parse_json_data(data, field_name):
+    """Helper function to parse JSON data from request"""
+    if isinstance(data.get(field_name), list):
+        return data.get(field_name)
+    elif hasattr(data, 'getlist'):
+        data_str = data.get(field_name)
+        if data_str:
+            try:
+                return json.loads(data_str)
+            except json.JSONDecodeError:
+                raise ValueError(f"Invalid {field_name} format")
+    return None
+
+
+def validate_image_data(image_data):
+    """Helper function to validate image data"""
+    if not isinstance(image_data, dict):
+        raise ValueError('Each image item must be a dictionary')
+    if 'image' not in image_data or 'status' not in image_data:
+        raise ValueError('Each image item must contain both image and status')
+    return True
+
+
+def create_images_for_customer(customer, images_data):
+    """Helper function to create images for a customer"""
+    if not images_data:
+        return
+
+    for image_data in images_data:
+        validate_image_data(image_data)
+        Image.objects.create(
+            customer_treatment=customer,
+            image=image_data['image'],
+            status=image_data['status']
+        )
 
 
 class CustomerTreatmentListCreateView(generics.ListCreateAPIView):
@@ -14,47 +50,39 @@ class CustomerTreatmentListCreateView(generics.ListCreateAPIView):
     parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def create(self, request, *args, **kwargs):
-        # Handle both form-data and JSON requests
-        if request.content_type == 'application/json':
-            return super().create(request, *args, **kwargs)
+        try:
+            data = request.data.copy()
+            images_data = parse_json_data(request.data, 'images_data')
 
-        # Handle multipart form-data
-        customer_data = {
-            'name': request.data.get('name'),
-            'address': request.data.get('address'),
-            'phone_number': request.data.get('phone_number'),
-            'email': request.data.get('email'),
-        }
+            # Create customer data dictionary
+            customer_data = {
+                field: request.data.get(field)
+                for field in ['name', 'address', 'phone_number', 'email']
+            }
 
-        # Create customer first
-        customer_serializer = self.get_serializer(data=customer_data)
-        customer_serializer.is_valid(raise_exception=True)
-        customer = customer_serializer.save()
+            # Create customer
+            customer_serializer = self.get_serializer(data=customer_data)
+            customer_serializer.is_valid(raise_exception=True)
+            customer = customer_serializer.save()
 
-        # Handle multiple images
-        images = request.FILES.getlist('images')
-        # List of 'Before' or 'After'
-        statuses = request.data.getlist('statuses')
+            # Handle images
+            create_images_for_customer(customer, images_data)
 
-        if len(images) != len(statuses):
             return Response(
-                {'error': 'Number of images and statuses must match'},
+                self.get_serializer(customer).data,
+                status=status.HTTP_201_CREATED
+            )
+
+        except ValueError as e:
+            return Response(
+                {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        # Create images
-        for image, status in zip(images, statuses):
-            Image.objects.create(
-                customer_treatment=customer,
-                image=image,
-                status=status
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to create customer treatment: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
             )
-
-        # Return the complete customer data with images
-        return Response(
-            self.get_serializer(customer).data,
-            status=status.HTTP_201_CREATED
-        )
 
 
 class CustomerTreatmentDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -63,50 +91,48 @@ class CustomerTreatmentDetailView(generics.RetrieveUpdateDestroyAPIView):
     parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
+        try:
+            instance = self.get_object()
 
-        if request.content_type == 'application/json':
-            return super().update(request, *args, **kwargs)
+            # Parse images data and deletions
+            images_data = parse_json_data(request.data, 'images_data')
+            images_to_delete = parse_json_data(request.data, 'delete_images')
 
-        # Handle multipart form-data update
-        customer_data = {
-            'name': request.data.get('name', instance.name),
-            'address': request.data.get('address', instance.address),
-            'phone_number': request.data.get('phone_number', instance.phone_number),
-            'email': request.data.get('email', instance.email),
-        }
+            # Get modified fields
+            modified_data = {
+                field: request.data.get(field)
+                for field in ['name', 'address', 'phone_number', 'email']
+                if field in request.data
+            }
 
-        # Update customer data
-        serializer = self.get_serializer(
-            instance, data=customer_data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
+            # Update instance
+            serializer = self.get_serializer(
+                instance,
+                data=modified_data,
+                partial=True
+            )
+            serializer.is_valid(raise_exception=True)
+            customer = serializer.save()
 
-        # Handle image deletions
-        images_to_delete = request.data.getlist('delete_images')
-        if images_to_delete:
-            instance.images.filter(id__in=images_to_delete).delete()
+            # Handle deletions
+            if images_to_delete:
+                instance.images.filter(id__in=images_to_delete).delete()
 
-        # Handle new images
-        new_images = request.FILES.getlist('new_images')
-        new_statuses = request.data.getlist('new_statuses')
+            # Handle new images
+            create_images_for_customer(customer, images_data)
 
-        if len(new_images) != len(new_statuses):
+            return Response(serializer.data)
+
+        except ValueError as e:
             return Response(
-                {'error': 'Number of new images and statuses must match'},
+                {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        # Add new images
-        for image, status in zip(new_images, new_statuses):
-            Image.objects.create(
-                customer_treatment=instance,
-                image=image,
-                status=status
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to update customer treatment: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
             )
-
-        return Response(self.get_serializer(instance).data)
 
 
 class ImageListCreateView(generics.ListCreateAPIView):
@@ -115,15 +141,10 @@ class ImageListCreateView(generics.ListCreateAPIView):
     parser_classes = (MultiPartParser, FormParser)
 
     def create(self, request, *args, **kwargs):
-        customer_treatment_id = request.data.get('customer_treatment')
-        try:
-            customer_treatment = CustomerTreatment.objects.get(
-                id=customer_treatment_id)
-        except CustomerTreatment.DoesNotExist:
-            return Response(
-                {'error': 'Customer treatment not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        customer_treatment = get_object_or_404(
+            CustomerTreatment,
+            id=request.data.get('customer_treatment')
+        )
 
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
