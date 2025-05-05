@@ -467,13 +467,12 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 created_at__gte=seven_days_ago
             )
 
-            # Get all products ordered by this phone number in last 7 days
-            recent_order_products = OrderProduct.objects.filter(
+            # Get all product IDs ordered by this phone number in last 7 days
+            recent_product_ids = set(OrderProduct.objects.filter(
                 order__in=recent_orders
-            ).select_related('order', 'product__product')
+            ).values_list('product__product__id', flat=True))
         else:
-            # If force_order is True, skip recent order checks
-            recent_order_products = []
+            recent_product_ids = set()
 
         # Validate all products exist in inventory before proceeding
         for order_product_data in order_products_data:
@@ -503,22 +502,16 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     )
 
                 # Only check for recent orders if force_order is False
-                if not force_order:
-                    for recent_op in recent_order_products:
-                        if (
-                            recent_op.product.product.id == inventory_item.product.id and
-                            recent_op.order.order_status not in [
-                                "Cancelled", "Returned By Customer", "Cancelled By Dash", "Return Pending"]
-                        ):
-                            return Response(
-                                {
-                                    "error": (
-                                        f"Customer with phone number {phone_number} has already ordered "
-                                        f"{inventory_item.product.name} within the last 7 days (Order status: {recent_op.order.order_status})"
-                                    )
-                                },
-                                status=status.HTTP_403_FORBIDDEN
+                if not force_order and inventory_item.product.id in recent_product_ids:
+                    return Response(
+                        {
+                            "error": (
+                                f"Customer with phone number {phone_number} has already ordered "
+                                f"{inventory_item.product.name} within the last 7 days"
                             )
+                        },
+                        status=status.HTTP_403_FORBIDDEN
+                    )
 
                 # Check if there's enough quantity
                 if inventory_item.quantity < quantity:
