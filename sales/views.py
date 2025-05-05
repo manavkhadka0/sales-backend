@@ -429,12 +429,16 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
             # Call the parent create method
             return super().create(request, *args, **kwargs)
-
-        except Exception as e:
-            return Response(
-                {"error": f"Failed to create order: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        except serializers.ValidationError as exc:
+            # Check for your specific error
+            error_detail = exc.detail
+            if (
+                isinstance(error_detail, dict)
+                and error_detail.get("status") == status.HTTP_403_FORBIDDEN
+            ):
+                return Response(error_detail, status=status.HTTP_403_FORBIDDEN)
+            # Otherwise, return as 400
+            return Response(error_detail, status=status.HTTP_400_BAD_REQUEST)
 
     def get_queryset(self):
         user = self.request.user
