@@ -503,14 +503,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
                 # Only check for recent orders if force_order is False
                 if not force_order and inventory_item.product.id in recent_product_ids:
-                    return Response(
-                        {
-                            "error": (
-                                f"Customer with phone number {phone_number} has already ordered "
-                                f"{inventory_item.product.name} within the last 7 days"
-                            )
-                        },
-                        status=status.HTTP_403_FORBIDDEN
+                    raise serializers.ValidationError(
+                        f"Customer with phone number {phone_number} has already ordered "
+                        f"{inventory_item.product.name} within the last 7 days"
                     )
 
                 # Check if there's enough quantity
