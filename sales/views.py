@@ -453,17 +453,27 @@ class OrderListCreateView(generics.ListCreateAPIView):
         phone_number = self.request.data.get('phone_number')
         order_products_data = self.request._full_data.get('order_products', [])
 
-        # First, check for recent orders with same phone number and products
-        seven_days_ago = timezone.now() - timezone.timedelta(days=7)
-        recent_orders = Order.objects.filter(
-            phone_number=phone_number,
-            created_at__gte=seven_days_ago
-        )
+        # Get force_order flag from request data (default to False if not provided)
+        force_order = self.request.data.get('force_order', False)
+        if isinstance(force_order, str):
+            # Convert string to bool if needed (e.g., from form-data)
+            force_order = force_order.lower() == 'true'
 
-        # Get all products ordered by this phone number in last 7 days
-        recent_product_ids = OrderProduct.objects.filter(
-            order__in=recent_orders
-        ).values_list('product__product__id', flat=True)
+        if not force_order:
+            # First, check for recent orders with same phone number and products
+            seven_days_ago = timezone.now() - timezone.timedelta(days=7)
+            recent_orders = Order.objects.filter(
+                phone_number=phone_number,
+                created_at__gte=seven_days_ago
+            )
+
+            # Get all products ordered by this phone number in last 7 days
+            recent_order_products = OrderProduct.objects.filter(
+                order__in=recent_orders
+            ).select_related('order', 'product__product')
+        else:
+            # If force_order is True, skip recent order checks
+            recent_order_products = []
 
         # Validate all products exist in inventory before proceeding
         for order_product_data in order_products_data:
@@ -492,12 +502,23 @@ class OrderListCreateView(generics.ListCreateAPIView):
                         factory=salesperson.factory
                     )
 
-                # Check if this product was ordered in last 7 days
-                if inventory_item.product.id in recent_product_ids:
-                    raise serializers.ValidationError(
-                        f"Customer with phone number {phone_number} has already ordered "
-                        f"{inventory_item.product.name} within the last 7 days"
-                    )
+                # Only check for recent orders if force_order is False
+                if not force_order:
+                    for recent_op in recent_order_products:
+                        if (
+                            recent_op.product.product.id == inventory_item.product.id and
+                            recent_op.order.order_status not in [
+                                "Cancelled", "Returned By Customer", "Cancelled By Dash", "Return Pending"]
+                        ):
+                            return Response(
+                                {
+                                    "error": (
+                                        f"Customer with phone number {phone_number} has already ordered "
+                                        f"{inventory_item.product.name} within the last 7 days (Order status: {recent_op.order.order_status})"
+                                    )
+                                },
+                                status=status.HTTP_403_FORBIDDEN
+                            )
 
                 # Check if there's enough quantity
                 if inventory_item.quantity < quantity:
@@ -581,8 +602,12 @@ class OrderUpdateView(generics.UpdateAPIView):
         response = super().update(request, *args, **kwargs)
         order.refresh_from_db()
 
-        # Handle order cancellation
-        if order.order_status == "Cancelled" and previous_status != "Cancelled":
+        # Handle order cancellation and returns
+        if (
+            order.order_status in ["Cancelled",
+                                   "Returned By Customer", "Cancelled By Dash"]
+            and previous_status != order.order_status
+        ):
             # Restore inventory quantities for each product in the order
             order_products = OrderProduct.objects.filter(
                 order=order).select_related('product__product')

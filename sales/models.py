@@ -141,8 +141,13 @@ class Order(models.Model):
 
     ORDER_STATUS_CHOICES = [
         ('Pending', 'Pending'),
+        ('Processing', 'Processing'),
+        ('Sent to Dash', 'Sent to Dash'),
         ('Delivered', 'Delivered'),
-        ('Cancelled', 'Cancelled')
+        ('Cancelled', 'Cancelled'),
+        ('Returned By Customer', 'Returned By Customer'),
+        ('Returned By Dash', 'Returned By Dash'),
+        ('Return Pending', 'Return Pending'),
     ]
     franchise = models.ForeignKey(
         'account.Franchise', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
