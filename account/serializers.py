@@ -93,3 +93,7 @@ class LoginSerializer(serializers.Serializer):
 class ChangePasswordSerializer(serializers.ModelSerializer):
     phone_number = serializers.CharField(required=True)
     new_password = serializers.CharField(required=True)
+
+    class Meta:
+        model = CustomUser
+        fields = ['phone_number', 'new_password']
