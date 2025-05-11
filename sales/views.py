@@ -28,7 +28,7 @@ from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 
 class InventoryListCreateView(generics.ListCreateAPIView):
     serializer_class = InventorySerializer
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def _format_inventory_data(self, inventory_queryset):
         """Helper method to format inventory data consistently"""
@@ -110,37 +110,17 @@ class InventoryListCreateView(generics.ListCreateAPIView):
         status = serializer.validated_data.get('status', None)
 
         def get_inventory_owner():
-            """Helper method to determine inventory owner based on user role and request data"""
-            distributor_id = self.request.data.get('distributor_id')
-            franchise_id = self.request.data.get('franchise_id')
-
+            """Helper method to determine inventory owner based on user role"""
             if user.role == 'SuperAdmin':
-                if distributor_id:
-                    try:
-                        return Distributor.objects.get(id=distributor_id), 'distributor'
-                    except Distributor.DoesNotExist:
-                        raise serializers.ValidationError(
-                            "Distributor not found")
-                elif franchise_id:
-                    try:
-                        return Franchise.objects.get(id=franchise_id), 'franchise'
-                    except Franchise.DoesNotExist:
-                        raise serializers.ValidationError(
-                            "Franchise not found")
+                # SuperAdmin can only add inventory to their own factory
                 return user.factory, 'factory'
 
             elif user.role == 'Distributor':
-                if franchise_id:
-                    try:
-                        franchise = Franchise.objects.get(
-                            id=franchise_id, distributor=user.distributor)
-                        return franchise, 'franchise'
-                    except Franchise.DoesNotExist:
-                        raise serializers.ValidationError(
-                            "Franchise not found or does not belong to your distributorship")
+                # Distributor can only add inventory to their own distributor account
                 return user.distributor, 'distributor'
 
             elif user.role == 'Franchise':
+                # Franchise can only add inventory to their own franchise
                 return user.franchise, 'franchise'
 
             raise serializers.ValidationError(
@@ -189,6 +169,7 @@ class InventoryListCreateView(generics.ListCreateAPIView):
 
 class FactoryInventoryListView(generics.ListAPIView):
     serializer_class = InventorySerializer
+
     queryset = Inventory.objects.filter(status='ready_to_dispatch')
 
     def list(self, request, *args, **kwargs):
@@ -449,7 +430,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
         elif user.role == 'Franchise':
             return Order.objects.filter(franchise=user.franchise).order_by('-id')
         elif user.role == 'SuperAdmin':
-            return Order.objects.all().order_by('-id')
+            return Order.objects.filter(factory=user.factory).order_by('-id')
         return Order.objects.none()
 
     def perform_create(self, serializer):
@@ -945,7 +926,7 @@ class SalesStatisticsView(generics.GenericAPIView):
         today = timezone.now().date()
 
         if user.role == 'SuperAdmin':
-            queryset = Order.objects.all()
+            queryset = Order.objects.filter(factory=user.factory)
         elif user.role == 'Distributor':
             franchises = Franchise.objects.filter(distributor=user.distributor)
             queryset = Order.objects.filter(franchise__in=franchises)
@@ -980,7 +961,9 @@ class UserInventoryLogs(generics.ListAPIView):
             # return InventoryChangeLog.objects.filter(
             #     inventory__factory=user.factory
             # ).order_by('-id')
-            return InventoryChangeLog.objects.all().order_by('-id')
+            return InventoryChangeLog.objects.filter(
+                inventory__factory=user.factory
+            ).order_by('-id')
 
         elif user.role == 'Distributor':
             # Get logs for distributor inventory
@@ -1014,7 +997,8 @@ class TopSalespersonView(generics.ListAPIView):
         current_date = timezone.now()
 
         if user.role == 'SuperAdmin':
-            salespersons = CustomUser.objects.filter(role='SalesPerson')
+            salespersons = CustomUser.objects.filter(
+                factory=user.factory, role='SalesPerson')
         elif user.role == 'Distributor':
             franchises = Franchise.objects.filter(distributor=user.distributor)
             salespersons = CustomUser.objects.filter(
@@ -1124,7 +1108,7 @@ class RevenueView(generics.ListAPIView):
         try:
             # Base queryset based on user role
             if user.role == 'SuperAdmin':
-                base_queryset = Order.objects.all()
+                base_queryset = Order.objects.filter(factory=user.factory)
             elif user.role == 'Distributor':
                 franchises = Franchise.objects.filter(
                     distributor=user.distributor)
@@ -1225,6 +1209,7 @@ class TopProductsView(generics.ListAPIView):
             # Base query for order products based on user role
             if user.role == 'SuperAdmin':
                 base_query = OrderProduct.objects.filter(
+                    order__factory=user.factory,
                     order__order_status__in=['Delivered', 'Pending']
                 )
             elif user.role == 'Distributor':
@@ -1351,7 +1336,7 @@ class DashboardStatsView(generics.GenericAPIView):
         # Base queryset filters based on user role
         if user.role == 'SuperAdmin':
             # For SuperAdmin: all orders, all distributors/franchises as customers, all products
-            orders = Order.objects.all()
+            orders = Order.objects.filter(factory=user.factory)
             customers = CustomUser.objects.filter(
                 role__in=['Distributor', 'Franchise', 'SalesPerson'],
                 is_active=True
@@ -1579,7 +1564,7 @@ class OrderCSVExportView(generics.GenericAPIView):
         # Get orders based on user role
         user = request.user
         if user.role == 'SuperAdmin':
-            orders = Order.objects.all()
+            orders = Order.objects.filter(factory=user.factory)
         elif user.role == 'Distributor':
             franchises = Franchise.objects.filter(distributor=user.distributor)
             orders = Order.objects.filter(franchise__in=franchises)
@@ -1706,7 +1691,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
         """Filter orders based on user role"""
         user = self.request.user
         if user.role == 'SuperAdmin':
-            return Order.objects.all()
+            return Order.objects.filter(factory=user.factory)
         elif user.role == 'Distributor':
             return Order.objects.filter(distributor=user.distributor)
         elif user.role in ['Franchise', 'SalesPerson']:
