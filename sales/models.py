@@ -136,7 +136,8 @@ class PromoCode(models.Model):
 class Order(models.Model):
     PAYMENT_CHOICES = [
         ('Cash on Delivery', 'Cash on Delivery'),
-        ('Prepaid', 'Prepaid')
+        ('Prepaid', 'Prepaid'),
+        ('Office Visit', 'Office Visit')
     ]
 
     ORDER_STATUS_CHOICES = [
