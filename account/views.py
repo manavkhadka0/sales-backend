@@ -17,6 +17,7 @@ from .serializers import ChangePasswordSerializer
 
 class UserListView(APIView):
     serializer_class = CustomUserSerializer
+    permission_classes = [IsAuthenticated]  # This ensures token authentication
 
     def get(self, request):
         users = CustomUser.objects.all()
@@ -24,7 +25,14 @@ class UserListView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        serializer = CustomUserSerializer(data=request.data)
+        # Create a copy of the request data to modify
+        data = request.data.copy()
+
+        # Only set franchise if request.user exists and has a franchise
+        if request.user and request.user.role == 'Franchise':
+            data['franchise'] = request.user.franchise.id
+
+        serializer = CustomUserSerializer(data=data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -102,3 +110,37 @@ class ChangePassword(generics.GenericAPIView):
         user.set_password(new_password)
         user.save()
         return Response({"message": "Password changed successfully"}, status=status.HTTP_200_OK)
+
+
+class UserFranchiseListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            # Get franchises based on the authenticated user's distributor
+            franchises = Franchise.objects.filter(
+                distributor=request.user.distributor)
+            serializer = FranchiseSerializer(franchises, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {'error': 'Error fetching franchises'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class UserDistributorListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            # Get distributors based on the authenticated user's factory
+            distributors = Distributor.objects.filter(
+                factory=request.user.factory)
+            serializer = DistributorSerializer(distributors, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {'error': 'Error fetching distributors'},
+                status=status.HTTP_400_BAD_REQUEST
+            )

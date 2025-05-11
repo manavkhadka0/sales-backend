@@ -1,6 +1,10 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-from .views import FranchiseListCreateView, UserListView, LoginView, UserProfileView, DistributorListCreateView, FranchiseByDistributorView, FactoryListCreateView, ChangePassword
+from .views import (
+    FranchiseListCreateView, UserListView, LoginView, UserProfileView,
+    DistributorListCreateView, FranchiseByDistributorView, FactoryListCreateView,
+    ChangePassword, UserFranchiseListView, UserDistributorListView
+)
 
 urlpatterns = [
     path('users/', UserListView.as_view(),
@@ -17,4 +21,7 @@ urlpatterns = [
     path('distributors/<int:distributor_id>/franchises/',
          FranchiseByDistributorView.as_view(), name='franchise-by-distributor'),
     path('change-password/', ChangePassword.as_view(), name='change-password'),
+    path('my-franchises/', UserFranchiseListView.as_view(), name='user-franchises'),
+    path('my-distributors/', UserDistributorListView.as_view(),
+         name='user-distributors'),
 ]
