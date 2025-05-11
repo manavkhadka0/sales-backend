@@ -1828,3 +1828,60 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 {"error": f"Failed to update order: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class InventoryCheckView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = self.request.user
+        critical_threshold = 50  # Define critical threshold for inventory
+
+        try:
+            if user.role == 'SuperAdmin':
+                # Check factory inventory
+                inventory_items = Inventory.objects.filter(
+                    factory=user.factory,
+                    status='ready_to_dispatch'
+                )
+            elif user.role == 'Distributor':
+                # Check distributor inventory
+                inventory_items = Inventory.objects.filter(
+                    distributor=user.distributor,
+                )
+            elif user.role in ['Franchise', 'SalesPerson']:
+                # Check franchise inventory
+                inventory_items = Inventory.objects.filter(
+                    franchise=user.franchise,
+                )
+            else:
+                return Response(
+                    {"error": "Unauthorized access"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # Get inventory items with low quantity
+            low_quantity_items = []
+            for item in inventory_items:
+                if item.quantity < critical_threshold:
+                    low_quantity_items.append({
+                        'product_name': item.product.name,
+                        'quantity': item.quantity,
+                        'status': 'critical' if item.quantity <= 25 else 'low',
+                    })
+
+            # Sort items by quantity (lowest first)
+            low_quantity_items.sort(key=lambda x: x['quantity'])
+
+            response_data = {
+                'low_quantity_items': low_quantity_items,
+                'total_low_items': len(low_quantity_items),
+            }
+
+            return Response(response_data)
+
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to check inventory: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
