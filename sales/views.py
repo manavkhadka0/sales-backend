@@ -1113,23 +1113,41 @@ class TopSalespersonView(generics.ListAPIView):
 
 
 class RevenueView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
+        user = self.request.user
         filter_type = request.GET.get(
             'filter', 'monthly')  # Default to monthly
         today = timezone.now().date()
 
         try:
+            # Base queryset based on user role
+            if user.role == 'SuperAdmin':
+                base_queryset = Order.objects.all()
+            elif user.role == 'Distributor':
+                franchises = Franchise.objects.filter(
+                    distributor=user.distributor)
+                base_queryset = Order.objects.filter(franchise__in=franchises)
+            elif user.role == 'Franchise':
+                base_queryset = Order.objects.filter(franchise=user.franchise)
+            elif user.role == 'SalesPerson':
+                base_queryset = Order.objects.filter(sales_person=user)
+            else:
+                return Response(
+                    {"error": "Unauthorized access"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             if filter_type == 'daily':
-                # Add daily filter option
                 revenue = (
-                    Order.objects.filter(
+                    base_queryset.filter(
                         created_at__year=today.year,
                         created_at__month=today.month
                     )
-                    .values('date')  # Group by date
+                    .values('date')
                     .annotate(
-                        period=models.F('date'),  # Use date as period
+                        period=models.F('date'),
                         total_revenue=Sum('total_amount', default=0),
                         order_count=Count('id')
                     )
@@ -1138,7 +1156,7 @@ class RevenueView(generics.ListAPIView):
 
             elif filter_type == 'weekly':
                 revenue = (
-                    Order.objects.filter(created_at__year=today.year)
+                    base_queryset.filter(created_at__year=today.year)
                     .annotate(period=TruncWeek('created_at'))
                     .values('period')
                     .annotate(
@@ -1150,7 +1168,7 @@ class RevenueView(generics.ListAPIView):
 
             elif filter_type == 'yearly':
                 revenue = (
-                    Order.objects.annotate(period=TruncYear('created_at'))
+                    base_queryset.annotate(period=TruncYear('created_at'))
                     .values('period')
                     .annotate(
                         total_revenue=Sum('total_amount', default=0),
@@ -1161,7 +1179,7 @@ class RevenueView(generics.ListAPIView):
 
             else:  # Default is monthly
                 revenue = (
-                    Order.objects.annotate(period=TruncMonth('created_at'))
+                    base_queryset.annotate(period=TruncMonth('created_at'))
                     .values('period')
                     .annotate(
                         total_revenue=Sum('total_amount', default=0),
@@ -1184,6 +1202,7 @@ class RevenueView(generics.ListAPIView):
 
             return Response({
                 'filter_type': filter_type,
+                'user_role': user.role,
                 'data': response_data
             })
 
@@ -1195,47 +1214,72 @@ class RevenueView(generics.ListAPIView):
 
 
 class TopProductsView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, *args, **kwargs):
         try:
-            # Get filter parameter from query
+            user = self.request.user
             filter_type = request.GET.get('filter')
+            current_date = timezone.now()
 
-            # Base query for order products
-            base_query = OrderProduct.objects.filter(
-                order__order_status__in=['Delivered', 'Pending']
-            )
+            # Base query for order products based on user role
+            if user.role == 'SuperAdmin':
+                base_query = OrderProduct.objects.filter(
+                    order__order_status__in=['Delivered', 'Pending']
+                )
+            elif user.role == 'Distributor':
+                franchises = Franchise.objects.filter(
+                    distributor=user.distributor)
+                base_query = OrderProduct.objects.filter(
+                    order__franchise__in=franchises,
+                    order__order_status__in=['Delivered', 'Pending']
+                )
+            elif user.role == 'Franchise':
+                base_query = OrderProduct.objects.filter(
+                    order__franchise=user.franchise,
+                    order__order_status__in=['Delivered', 'Pending']
+                )
+            elif user.role == 'SalesPerson':
+                base_query = OrderProduct.objects.filter(
+                    order__sales_person=user,
+                    order__order_status__in=['Delivered', 'Pending']
+                )
+            else:
+                return Response(
+                    {"error": "Unauthorized access"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
             # Apply time filter if specified
             if filter_type:
-                current_date = timezone.now()
-
                 if filter_type == 'weekly':
                     # Filter for the last 7 days
                     start_date = current_date - timezone.timedelta(days=7)
                     base_query = base_query.filter(
-                        order__created_at__gte=start_date)
-
+                        order__created_at__gte=start_date
+                    )
                 elif filter_type == 'monthly':
                     # Filter for the last 30 days
                     start_date = current_date - timezone.timedelta(days=30)
                     base_query = base_query.filter(
-                        order__created_at__gte=start_date)
+                        order__created_at__gte=start_date
+                    )
 
             # Get top products with aggregated data
             top_products = (
                 base_query.values(
-                    'product__product__id',  # Get the actual product ID
-                    'product__product__name'  # Get the product name
+                    'product__product__id',
+                    'product__product__name'
                 ).annotate(
                     total_quantity=Sum('quantity'),
                     total_amount=Sum(
                         models.F('quantity') * models.F('order__total_amount') /
                         models.Subquery(
                             OrderProduct.objects.filter(
-                                order=models.OuterRef('order'))
-                            .values('order')
+                                order=models.OuterRef('order')
+                            ).values('order')
                             .annotate(total_qty=Sum('quantity'))
-                            .values('total_qty')
+                            .values('total_qty')[:1]
                         )
                     )
                 ).order_by('-total_quantity')[:5]  # Get top 5 by quantity
@@ -1250,6 +1294,8 @@ class TopProductsView(generics.ListAPIView):
             } for item in top_products]
 
             return Response({
+                'filter_type': filter_type or 'all',
+                'user_role': user.role,
                 'count': len(response_data),
                 'data': response_data
             })
