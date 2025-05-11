@@ -48,11 +48,16 @@ class CustomUserSerializer(serializers.ModelSerializer):
         validated_data['username'] = phone_number
 
         # Handle relationships between factory, distributor, and franchise
+        role = validated_data.get('role')
         franchise = validated_data.get('franchise')
         distributor = validated_data.get('distributor')
         factory = validated_data.get('factory')
 
-        if distributor and franchise:
+        if role == 'SalesPerson' and franchise:
+            # For salesperson, set distributor and factory based on franchise
+            validated_data['distributor'] = franchise.distributor
+            validated_data['factory'] = franchise.distributor.factory
+        elif distributor and franchise:
             # If both distributor and franchise exist, set factory from distributor
             validated_data['factory'] = distributor.factory
         elif franchise and not distributor:
