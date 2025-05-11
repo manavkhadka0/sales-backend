@@ -786,50 +786,69 @@ class InventoryRequestView(generics.ListCreateAPIView):
         queryset = self.get_queryset()
 
         if user.role == 'SuperAdmin':
-            # Separate requests to factory and other requests
-            factory_requests = []
-            other_requests = []
+            # SuperAdmin can see requests they receive and requests from others
+            incoming_requests = []
+            franchise_requests = []
+            distributor_requests = []
 
             for request in queryset:
-                if request.factory:
-                    factory_requests.append(
+                if request.factory == user.factory:
+                    # Requests coming to this factory
+                    incoming_requests.append(
                         InventoryRequestSerializer(request).data)
-                else:
-                    other_requests.append(
+                elif request.user.role == 'Franchise':
+                    # Requests made by franchises
+                    franchise_requests.append(
+                        InventoryRequestSerializer(request).data)
+                elif request.user.role == 'Distributor':
+                    # Requests made by distributors
+                    distributor_requests.append(
                         InventoryRequestSerializer(request).data)
 
             return Response({
-                'factory_requests': factory_requests,
-                'other_requests': other_requests
+                'incoming_requests': incoming_requests,
+                'franchise_requests': franchise_requests,
+                'distributor_requests': distributor_requests
             })
 
         elif user.role == 'Distributor':
-            # Separate requests to this distributor and requests from franchises
-            factory_requests = []
-            franchise_requests = []
+            # Distributor can see their own requests and requests they receive
+            incoming_requests = []
+            outgoing_requests = []
 
             for request in queryset:
-                if request.factory:
-                    factory_requests.append(
+                if request.distributor == user.distributor:
+                    # Requests coming to this distributor
+                    incoming_requests.append(
                         InventoryRequestSerializer(request).data)
-                elif request.distributor == user.distributor:
-                    franchise_requests.append(
+                elif request.user.distributor == user.distributor:
+                    # Requests made by this distributor
+                    outgoing_requests.append(
                         InventoryRequestSerializer(request).data)
 
             return Response({
-                'factory_requests': factory_requests,
-                'franchise_requests': franchise_requests
+                'incoming_requests': incoming_requests,
+                'outgoing_requests': outgoing_requests
             })
 
         elif user.role == 'Franchise':
-            # Return only the franchise's requests
-            franchise_requests = []
+            # Franchise can see their own requests and requests they receive
+            incoming_requests = []
+            outgoing_requests = []
+
             for request in queryset:
-                franchise_requests.append(
-                    InventoryRequestSerializer(request).data)
+                if request.franchise == user.franchise:
+                    # Requests coming to this franchise
+                    incoming_requests.append(
+                        InventoryRequestSerializer(request).data)
+                elif request.user.franchise == user.franchise:
+                    # Requests made by this franchise
+                    outgoing_requests.append(
+                        InventoryRequestSerializer(request).data)
 
             return Response({
-                'franchise_requests': franchise_requests
+                'incoming_requests': incoming_requests,
+                'outgoing_requests': outgoing_requests
             })
 
         # Return an empty Response for non-authorized users
