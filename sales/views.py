@@ -580,7 +580,8 @@ class OrderUpdateView(generics.UpdateAPIView):
 
         # Handle order cancellation and returns
         if (
-            order.order_status in ["Cancelled", "Returned By Dash"]
+            order.order_status in ["Cancelled",
+                                   "Returned By Customer", "Returned By Dash"]
             and previous_status != order.order_status
         ):
             # Restore inventory quantities for each product in the order
