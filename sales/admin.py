@@ -14,6 +14,7 @@ class OrderAdmin(ModelAdmin):
                     'delivery_address', 'phone_number', 'payment_method', 'total_amount', 'prepaid_amount', 'order_status']
     list_filter = ['sales_person', 'order_products__product__product',
                    'order_status', 'created_at']
+    search_fields = ['full_name', 'phone_number', 'sales_person__first_name']
 
     def get_sales_person_name(self, obj):
         return obj.sales_person.first_name
