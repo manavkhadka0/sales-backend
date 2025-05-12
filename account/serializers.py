@@ -34,6 +34,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
                   'phone_number', 'address', 'role', 'factory', 'distributor', 'franchise', 'password')
         # Make username read-only since we'll set it automatically
         read_only_fields = ('username',)
+        write_only_fields = ('password',)
 
     def create(self, validated_data):
         password = validated_data.pop('password')
