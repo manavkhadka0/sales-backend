@@ -324,6 +324,8 @@ class OrderFilter(django_filters.FilterSet):
     city = django_filters.CharFilter(
         field_name="city", lookup_expr='icontains')
     date = django_filters.DateFilter(field_name="date", lookup_expr='exact')
+    payment_method = django_filters.CharFilter(
+        field_name="payment_method", lookup_expr='icontains')
     start_date = django_filters.DateFilter(
         field_name="date", lookup_expr='gte')
     end_date = django_filters.DateFilter(field_name="date", lookup_expr='lte')
@@ -333,7 +335,7 @@ class OrderFilter(django_filters.FilterSet):
     class Meta:
         model = Order
         fields = ['distributor', 'sales_person', 'order_status',
-                  'date', 'start_date', 'end_date', 'city', 'oil_type']
+                  'date', 'start_date', 'end_date', 'city', 'oil_type', 'payment_method']
 
 
 class OrderListCreateView(generics.ListCreateAPIView):
