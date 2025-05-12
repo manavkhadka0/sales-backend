@@ -1836,85 +1836,50 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
 class InventoryCheckView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
-    def _get_low_quantity_items(self, inventory_queryset, critical_threshold=50):
-        """Helper method to get low quantity items from inventory queryset"""
-        low_quantity_items = []
-        for item in inventory_queryset:
-            if item.quantity < critical_threshold:
-                low_quantity_items.append({
-                    'product_name': item.product.name,
-                    'quantity': item.quantity,
-                    'status': 'critical' if item.quantity <= 25 else 'low',
-                })
-        return low_quantity_items
-
-    def _get_franchise_inventory(self, franchise, critical_threshold=50):
-        """Helper method to get franchise inventory status"""
-        franchise_inventory = Inventory.objects.filter(franchise=franchise)
-        return self._get_low_quantity_items(franchise_inventory, critical_threshold)
-
-    def _get_distributor_data(self, distributor, critical_threshold=50):
-        """Helper method to get distributor and its franchises inventory data"""
-        distributor_data = {
-            'distributor_inventory': self._get_low_quantity_items(
-                Inventory.objects.filter(distributor=distributor),
-                critical_threshold
-            ),
-            'franchises': {}
-        }
-
-        # Get franchise inventory
-        franchises = Franchise.objects.filter(distributor=distributor)
-        for franchise in franchises:
-            franchise_data = self._get_franchise_inventory(
-                franchise, critical_threshold)
-            if franchise_data:
-                distributor_data['franchises'][franchise.name] = franchise_data
-
-        return distributor_data
-
     def get(self, request):
         user = self.request.user
-        critical_threshold = 50
+        critical_threshold = 50  # Define critical threshold for inventory
 
         try:
             if user.role == 'SuperAdmin':
-                response_data = {
-                    'factory_inventory': self._get_low_quantity_items(
-                        Inventory.objects.filter(
-                            factory=user.factory,
-                            status='ready_to_dispatch'
-                        ),
-                        critical_threshold
-                    ),
-                    'distributors': {}
-                }
-
-                # Get only distributors associated with this factory
-                distributors = Distributor.objects.filter(factory=user.factory)
-                for distributor in distributors:
-                    response_data['distributors'][distributor.name] = self._get_distributor_data(
-                        distributor, critical_threshold
-                    )
-
-            elif user.role == 'Distributor':
-                response_data = self._get_distributor_data(
-                    user.distributor, critical_threshold)
-
-            elif user.role in ['Franchise', 'SalesPerson']:
-                low_quantity_items = self._get_low_quantity_items(
-                    Inventory.objects.filter(franchise=user.franchise),
-                    critical_threshold
+                # Check factory inventory
+                inventory_items = Inventory.objects.filter(
+                    factory=user.factory,
+                    status='ready_to_dispatch'
                 )
-                response_data = {
-                    'low_quantity_items': low_quantity_items,
-                    'total_low_items': len(low_quantity_items),
-                }
+            elif user.role == 'Distributor':
+                # Check distributor inventory
+                inventory_items = Inventory.objects.filter(
+                    distributor=user.distributor,
+                )
+            elif user.role in ['Franchise', 'SalesPerson']:
+                # Check franchise inventory
+                inventory_items = Inventory.objects.filter(
+                    franchise=user.franchise,
+                )
             else:
                 return Response(
                     {"error": "Unauthorized access"},
                     status=status.HTTP_403_FORBIDDEN
                 )
+
+            # Get inventory items with low quantity
+            low_quantity_items = []
+            for item in inventory_items:
+                if item.quantity < critical_threshold:
+                    low_quantity_items.append({
+                        'product_name': item.product.name,
+                        'quantity': item.quantity,
+                        'status': 'critical' if item.quantity <= 25 else 'low',
+                    })
+
+            # Sort items by quantity (lowest first)
+            low_quantity_items.sort(key=lambda x: x['quantity'])
+
+            response_data = {
+                'low_quantity_items': low_quantity_items,
+                'total_low_items': len(low_quantity_items),
+            }
 
             return Response(response_data)
 
