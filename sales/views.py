@@ -1890,8 +1890,8 @@ class InventoryCheckView(generics.GenericAPIView):
                     'distributors': {}
                 }
 
-                # Get all distributors and their franchises data
-                distributors = Distributor.objects.all()
+                # Get only distributors associated with this factory
+                distributors = Distributor.objects.filter(factory=user.factory)
                 for distributor in distributors:
                     response_data['distributors'][distributor.name] = self._get_distributor_data(
                         distributor, critical_threshold
