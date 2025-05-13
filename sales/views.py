@@ -1592,7 +1592,7 @@ class OrderCSVExportView(generics.GenericAPIView):
             franchises = Franchise.objects.filter(distributor=user.distributor)
             orders = Order.objects.filter(
                 franchise__in=franchises, order_status='Processing')
-        elif user.role in ['Franchise', 'SalesPerson']:
+        elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
             orders = Order.objects.filter(
                 franchise=user.franchise, order_status='Processing')
         else:
