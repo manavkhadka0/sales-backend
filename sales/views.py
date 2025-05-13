@@ -1748,7 +1748,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 'full_name', 'city', 'delivery_address', 'landmark',
                 'phone_number', 'alternate_phone_number', 'delivery_charge',
                 'payment_method', 'total_amount', 'promo_code', 'remarks',
-                'prepaid_amount'
+                'prepaid_amount', 'created_at', 'updated_at'
             ]
 
             for field in fields_to_check:
