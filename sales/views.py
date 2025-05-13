@@ -438,6 +438,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
         salesperson = self.request.user
         phone_number = self.request.data.get('phone_number')
         order_products_data = self.request._full_data.get('order_products', [])
+        payment_method = self.request.data.get('payment_method')
 
         # Get force_order flag from request data (default to False if not provided)
         force_order = self.request.data.get('force_order', False)
@@ -507,6 +508,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
             except Inventory.DoesNotExist:
                 raise serializers.ValidationError(
                     f"Product with ID {product_id} not found")
+
+        # Set order status to Delivered if payment method is Office Visit
+        if payment_method == 'Office Visit':
+            serializer.validated_data['order_status'] = 'Delivered'
 
         # Create the order based on user role
         if salesperson.role in ['Franchise', 'SalesPerson']:
@@ -1562,97 +1567,99 @@ class RevenueByProductView(generics.GenericAPIView):
 
 
 class OrderCSVExportView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Get date range from query parameters
-        start_date = request.GET.get('start_date')
-        end_date = request.GET.get('end_date')
-
-        try:
-            # Parse dates
-            start_date = datetime.strptime(
-                start_date, '%Y-%m-%d').date() if start_date else None
-            end_date = datetime.strptime(
-                end_date, '%Y-%m-%d').date() if end_date else None
-        except (ValueError, TypeError):
-            return Response(
-                {"error": "Invalid date format. Use YYYY-MM-DD"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
         # Get orders based on user role
         user = request.user
+
         if user.role == 'SuperAdmin':
-            orders = Order.objects.filter(factory=user.factory)
+            orders = Order.objects.filter(
+                factory=user.factory, order_status='Processing')
         elif user.role == 'Distributor':
             franchises = Franchise.objects.filter(distributor=user.distributor)
-            orders = Order.objects.filter(franchise__in=franchises)
+            orders = Order.objects.filter(
+                franchise__in=franchises, order_status='Processing')
         elif user.role in ['Franchise', 'SalesPerson']:
-            orders = Order.objects.filter(franchise=user.franchise)
+            orders = Order.objects.filter(
+                franchise=user.franchise, order_status='Processing')
         else:
             return Response(
                 {"error": "Unauthorized to export orders"},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Apply date filters
-        if start_date and end_date:
-            orders = orders.filter(date__range=(start_date, end_date))
-        elif start_date:
-            orders = orders.filter(date=start_date)
+        if not orders.exists():
+            return Response(
+                {"error": "No processing orders found to export"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        # Create the HttpResponse object with CSV header
-        response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = f'attachment; filename="orders_{start_date}_{end_date}.csv"'
+        try:
+            # Create the HttpResponse object with CSV header
+            response = HttpResponse(content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="dash_orders.csv"'
 
-        # Create CSV writer
-        writer = csv.writer(response)
+            # Create CSV writer
+            writer = csv.writer(response)
 
-        # Write header row
-        writer.writerow([
-            'Order ID',
-            'Date',
-            'Customer Name',
-            'Phone Number',
-            'Delivery Address',
-            'City',
-            'Products',
-            'Delivery Charge',
-            'Total Amount',
-            'Prepaid Amount',
-            'Order Status',
-            'Sales Person',
-            'Franchise',
-            'Distributor'
-        ])
-
-        # Write data rows
-        for order in orders:
-            products = OrderProduct.objects.filter(order=order)
-            products_str = ', '.join([
-                f"{p.product.product.name} (x{p.quantity})"
-                for p in products
-            ])
-
+            # Write header row with new fields
             writer.writerow([
-                order.id,
-                order.date.strftime('%Y-%m-%d'),
-                order.full_name,
-                order.phone_number,
-                order.delivery_address,
-                order.city,
-                products_str,
-                order.delivery_charge,
-                order.total_amount,
-                order.prepaid_amount,
-                order.order_status,
-                order.sales_person.username if order.sales_person else 'N/A',
-                order.franchise.name if order.franchise else 'N/A',
-                order.franchise.distributor.name if order.franchise and order.franchise.distributor else 'N/A'
+                'Customer Name',
+                'Contact Number',
+                'Alternative Number',
+                'Location',
+                'Customer Landmark',
+                'Address',
+                'Customer Order ID',
+                'Product Name',
+                'Product Price',
+                'Payment Type',
+                'Client Note'
             ])
 
-        return response
+            # Write data rows
+            for order in orders:
+                # Format products string as requested
+                products = OrderProduct.objects.filter(order=order)
+                products_str = ','.join([
+                    f"{p.quantity}-{p.product.product.name}"
+                    for p in products
+                ])
+
+                # Calculate product price
+                product_price = order.total_amount
+                if order.prepaid_amount:
+                    product_price = order.total_amount - order.prepaid_amount
+
+                # Determine payment type
+                payment_type = "pre-paid" if order.prepaid_amount and (
+                    order.total_amount - order.prepaid_amount) == 0 else "cashOnDelivery"
+
+                writer.writerow([
+                    order.full_name,  # Customer Name
+                    order.phone_number,  # Contact Number
+                    order.alternate_phone_number or '',  # Alternative Number
+                    '',
+                    '',
+                    order.delivery_address,  # Address
+                    '',
+                    products_str,  # Product Name
+                    product_price,  # Product Price
+                    payment_type,  # Payment Type
+                    order.remarks or ''  # Client Note
+                ])
+
+            # After successful export, update all processed orders to "Sent to Dash"
+            orders.update(order_status='Sent to Dash')
+
+            return response
+
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to export orders: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class PromoCodeListCreateView(generics.ListCreateAPIView):
