@@ -237,7 +237,7 @@ class DistributorInventoryListView(generics.ListAPIView):
             }
             return Response(inventory_summary)
 
-        elif user.role == 'Franchise':
+        elif user.role in ['Franchise', 'Packaging']:
             inventory_summary = {
                 user.franchise.name: {
                     'inventory': self._format_inventory_data(user.franchise.inventory.all())
@@ -295,7 +295,7 @@ class FranchiseInventoryListView(generics.ListAPIView):
 
             return Response(inventory_summary)
 
-        elif user.role == 'Franchise':
+        elif user.role in ['Franchise', 'Packaging']:
             # Get only this franchise's inventory
             inventory_summary = {
                 user.franchise.name: {
