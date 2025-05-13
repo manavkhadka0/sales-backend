@@ -967,7 +967,7 @@ class SalesStatisticsView(generics.GenericAPIView):
         elif user.role == 'Distributor':
             franchises = Franchise.objects.filter(distributor=user.distributor)
             queryset = Order.objects.filter(franchise__in=franchises)
-        elif user.role == 'Franchise':
+        elif user.role in ['Franchise', 'Packaging']:
             queryset = Order.objects.filter(franchise=user.franchise)
         elif user.role == 'SalesPerson':
             queryset = Order.objects.filter(sales_person=user)
@@ -1040,7 +1040,7 @@ class TopSalespersonView(generics.ListAPIView):
             franchises = Franchise.objects.filter(distributor=user.distributor)
             salespersons = CustomUser.objects.filter(
                 role='SalesPerson', franchise__in=franchises)
-        elif user.role in ['Franchise', 'SalesPerson']:
+        elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
             salespersons = CustomUser.objects.filter(
                 role='SalesPerson', franchise=user.franchise)
         else:
@@ -1150,7 +1150,7 @@ class RevenueView(generics.ListAPIView):
                 franchises = Franchise.objects.filter(
                     distributor=user.distributor)
                 base_queryset = Order.objects.filter(franchise__in=franchises)
-            elif user.role == 'Franchise':
+            elif user.role in ['Franchise', 'Packaging']:
                 base_queryset = Order.objects.filter(franchise=user.franchise)
             elif user.role == 'SalesPerson':
                 base_queryset = Order.objects.filter(sales_person=user)
@@ -1256,7 +1256,7 @@ class TopProductsView(generics.ListAPIView):
                     order__franchise__in=franchises,
                     order__order_status__in=['Delivered', 'Pending']
                 )
-            elif user.role == 'Franchise':
+            elif user.role in ['Franchise', 'Packaging']:
                 base_query = OrderProduct.objects.filter(
                     order__franchise=user.franchise,
                     order__order_status__in=['Delivered', 'Pending']
@@ -1396,7 +1396,7 @@ class DashboardStatsView(generics.GenericAPIView):
                 status='ready_to_dispatch'
             ).values('product').distinct()
 
-        elif user.role in ['Franchise', 'SalesPerson']:
+        elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
             # For Franchise/SalesPerson: their orders, their sales persons as customers
             orders = Order.objects.filter(franchise=user.franchise)
             customers = CustomUser.objects.filter(
