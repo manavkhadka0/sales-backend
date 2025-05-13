@@ -95,7 +95,7 @@ class InventoryListCreateView(generics.ListCreateAPIView):
             }
             return Response(inventory_summary)
 
-        elif user.role in ['Franchise', 'SalesPerson']:
+        elif user.role in ['Franchise', 'Packaging']:
             inventory_summary = {
                 user.franchise.name: self._get_franchise_data(user.franchise)
             }
@@ -119,8 +119,8 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                 # Distributor can only add inventory to their own distributor account
                 return user.distributor, 'distributor'
 
-            elif user.role == 'Franchise':
-                # Franchise can only add inventory to their own franchise
+            elif user.role in ['Franchise', 'Packaging']:
+                # Franchise and Packaging can only add inventory to their own franchise
                 return user.franchise, 'franchise'
 
             raise serializers.ValidationError(
@@ -432,6 +432,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
             return Order.objects.filter(franchise=user.franchise).order_by('-id')
         elif user.role == 'SuperAdmin':
             return Order.objects.filter(factory=user.factory).order_by('-id')
+        elif user.role == 'Packaging':
+            return Order.objects.filter(franchise=user.franchise, order_status='Processing').order_by('-id')
         return Order.objects.none()
 
     def perform_create(self, serializer):
@@ -475,7 +477,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
             try:
                 # Get the inventory item based on user role
-                if salesperson.role in ['Franchise', 'SalesPerson']:
+                if salesperson.role in ['Franchise', 'SalesPerson', 'Packaging']:
                     inventory_item = Inventory.objects.get(
                         id=product_id,
                         franchise=salesperson.franchise
@@ -539,7 +541,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
             quantity = int(order_product_data.get('quantity'))
 
             # Get the inventory item again
-            if salesperson.role in ['Franchise', 'SalesPerson']:
+            if salesperson.role in ['Franchise', 'SalesPerson', 'Packaging']:
                 inventory_item = Inventory.objects.get(
                     id=product_id,
                     franchise=salesperson.franchise
@@ -723,6 +725,16 @@ class InventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Inventory.objects.all()
     serializer_class = InventorySerializer
     # permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'SuperAdmin':
+            return Inventory.objects.filter(factory=user.factory)
+        elif user.role == 'Distributor':
+            return Inventory.objects.filter(distributor=user.distributor)
+        elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
+            return Inventory.objects.filter(franchise=user.franchise)
+        return Inventory.objects.none()
 
     def perform_update(self, serializer):
         inventory_item = self.get_object()
@@ -1721,7 +1733,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
             return Order.objects.filter(factory=user.factory)
         elif user.role == 'Distributor':
             return Order.objects.filter(distributor=user.distributor)
-        elif user.role in ['Franchise', 'SalesPerson']:
+        elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
             return Order.objects.filter(franchise=user.franchise)
         return Order.objects.none()
 
@@ -1861,7 +1873,7 @@ class InventoryCheckView(generics.GenericAPIView):
                 inventory_items = Inventory.objects.filter(
                     distributor=user.distributor,
                 )
-            elif user.role in ['Franchise', 'SalesPerson']:
+            elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
                 # Check franchise inventory
                 inventory_items = Inventory.objects.filter(
                     franchise=user.franchise,

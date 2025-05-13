@@ -38,6 +38,7 @@ class CustomUser(AbstractUser):
         ('SalesPerson', 'Sales Person'),
         ('Treatment Staff', 'Treatment Staff'),
         ('Logistics', 'Logistics'),
+        ('Packaging', 'Packaging'),
         ('Others', 'Others')
     )
     phone_number = models.CharField(max_length=20)
