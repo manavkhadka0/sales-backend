@@ -1505,7 +1505,7 @@ class RevenueByProductView(generics.GenericAPIView):
                 franchise__in=franchises,
                 order_status__in=['Delivered', 'Pending']
             )
-        elif user.role in ['Franchise', 'SalesPerson']:
+        elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
             orders = Order.objects.filter(
                 franchise=user.franchise,
                 order_status__in=['Delivered', 'Pending']
