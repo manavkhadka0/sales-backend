@@ -17,7 +17,7 @@ from .serializers import ChangePasswordSerializer
 
 class UserListView(APIView):
     serializer_class = CustomUserSerializer
-    # permission_classes = [IsAuthenticated]  # This ensures token authentication
+    permission_classes = [IsAuthenticated]  # This ensures token authentication
 
     def get(self, request):
         users = CustomUser.objects.all()
@@ -28,9 +28,9 @@ class UserListView(APIView):
         # Create a copy of the request data to modify
         data = request.data.copy()
 
-        # # Only set franchise if request.user exists and has a franchise
-        # if request.user and request.user.role == 'Franchise':
-        #     data['franchise'] = request.user.franchise.id
+        # Only set franchise if request.user exists and has a franchise
+        if request.user and request.user.role == 'Franchise':
+            data['franchise'] = request.user.franchise.id
 
         serializer = CustomUserSerializer(data=data)
         if serializer.is_valid():
