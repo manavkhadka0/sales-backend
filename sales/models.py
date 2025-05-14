@@ -146,6 +146,7 @@ class Order(models.Model):
         ('Processing', 'Processing'),
         ('Sent to Dash', 'Sent to Dash'),
         ('Delivered', 'Delivered'),
+        ('Indrive', 'Indrive'),
         ('Cancelled', 'Cancelled'),
         ('Returned By Customer', 'Returned By Customer'),
         ('Returned By Dash', 'Returned By Dash'),

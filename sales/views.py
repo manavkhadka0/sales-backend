@@ -456,7 +456,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 created_at__gte=seven_days_ago
             ).exclude(
                 order_status__in=['Cancelled',
-                                  'Returned By Customer', 'Returned By Dash', 'Delivered']
+                                  'Returned By Customer', 'Returned By Dash', 'Delivered', 'Indrive']
             )
 
             # Get all product IDs ordered by this phone number in last 7 days
@@ -1247,24 +1247,24 @@ class TopProductsView(generics.ListAPIView):
             if user.role == 'SuperAdmin':
                 base_query = OrderProduct.objects.filter(
                     order__factory=user.factory,
-                    order__order_status__in=['Delivered', 'Pending']
+                    order__order_status__in=['Delivered', 'Pending', 'Indrive']
                 )
             elif user.role == 'Distributor':
                 franchises = Franchise.objects.filter(
                     distributor=user.distributor)
                 base_query = OrderProduct.objects.filter(
                     order__franchise__in=franchises,
-                    order__order_status__in=['Delivered', 'Pending']
+                    order__order_status__in=['Delivered', 'Pending', 'Indrive']
                 )
             elif user.role in ['Franchise', 'Packaging']:
                 base_query = OrderProduct.objects.filter(
                     order__franchise=user.franchise,
-                    order__order_status__in=['Delivered', 'Pending']
+                    order__order_status__in=['Delivered', 'Pending', 'Indrive']
                 )
             elif user.role == 'SalesPerson':
                 base_query = OrderProduct.objects.filter(
                     order__sales_person=user,
-                    order__order_status__in=['Delivered', 'Pending']
+                    order__order_status__in=['Delivered', 'Pending', 'Indrive']
                 )
             else:
                 return Response(
@@ -1415,7 +1415,7 @@ class DashboardStatsView(generics.GenericAPIView):
         current_revenue = orders.filter(
             created_at__gte=last_month,
             # Only count delivered orders for revenue
-            order_status__in=['Delivered', 'Pending']
+            order_status__in=['Delivered', 'Pending', 'Indrive']
         ).aggregate(total=Sum('total_amount'))['total'] or 0
 
         current_orders = orders.filter(created_at__gte=last_month).count()
@@ -1428,12 +1428,13 @@ class DashboardStatsView(generics.GenericAPIView):
         previous_revenue = orders.filter(
             created_at__gte=previous_month,
             created_at__lt=last_month,
-            order_status__in=['Delivered', 'Pending']
+            order_status__in=['Delivered', 'Pending', 'Indrive']
         ).aggregate(total=Sum('total_amount'))['total'] or 0
 
         previous_orders = orders.filter(
             created_at__gte=previous_month,
-            created_at__lt=last_month
+            created_at__lt=last_month,
+            order_status__in=['Delivered', 'Pending', 'Indrive']
         ).count()
 
         previous_customers = customers.filter(
@@ -1498,17 +1499,17 @@ class RevenueByProductView(generics.GenericAPIView):
         # Filter orders based on user role
         if user.role == 'SuperAdmin':
             orders = Order.objects.filter(
-                order_status__in=['Delivered', 'Pending'])
+                order_status__in=['Delivered', 'Pending', 'Indrive'])
         elif user.role == 'Distributor':
             franchises = Franchise.objects.filter(distributor=user.distributor)
             orders = Order.objects.filter(
                 franchise__in=franchises,
-                order_status__in=['Delivered', 'Pending']
+                order_status__in=['Delivered', 'Pending', 'Indrive']
             )
         elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
             orders = Order.objects.filter(
                 franchise=user.franchise,
-                order_status__in=['Delivered', 'Pending']
+                order_status__in=['Delivered', 'Pending', 'Indrive']
             )
         else:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
