@@ -456,7 +456,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 created_at__gte=seven_days_ago
             ).exclude(
                 order_status__in=['Cancelled',
-                                  'Returned By Customer', 'Returned By Dash']
+                                  'Returned By Customer', 'Returned By Dash', 'Delivered']
             )
 
             # Get all product IDs ordered by this phone number in last 7 days
