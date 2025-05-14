@@ -17,7 +17,7 @@ from .serializers import ChangePasswordSerializer
 
 class UserListView(APIView):
     serializer_class = CustomUserSerializer
-    permission_classes = [IsAuthenticated]  # This ensures token authentication
+    # permission_classes = [IsAuthenticated]  # This ensures token authentication
 
     def get(self, request):
         users = CustomUser.objects.all()
