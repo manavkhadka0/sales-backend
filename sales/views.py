@@ -1939,6 +1939,13 @@ class SalesPersonStatisticsView(APIView):
             # Get the salesperson
             salesperson = CustomUser.objects.get(phone_number=phone_number)
 
+            # Check if the user is a salesperson
+            if salesperson.role != 'SalesPerson':
+                return Response(
+                    {'error': 'User is not a salesperson'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             # Get filter type and specific date from query params
             filter_type = request.query_params.get('filter', 'all')
             specific_date = request.query_params.get('date')
