@@ -17,7 +17,7 @@ from .serializers import ChangePasswordSerializer
 
 class UserListView(APIView):
     serializer_class = CustomUserSerializer
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, phone_number=None):
         if phone_number:
