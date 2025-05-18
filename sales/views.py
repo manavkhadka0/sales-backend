@@ -1084,7 +1084,7 @@ class TopSalespersonView(generics.ListAPIView):
         ).filter(
             sales_count__gt=0,
             total_sales__gt=0
-        ).order_by('-sales_count', '-total_sales')[:5]
+        ).order_by('-sales_count', '-total_sales')
 
         return salespersons
 
