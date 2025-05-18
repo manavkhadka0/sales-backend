@@ -20,6 +20,17 @@ class FranchiseSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class UserSerializer(serializers.ModelSerializer):
+    factory = serializers.StringRelatedField(read_only=True)
+    distributor = serializers.StringRelatedField(read_only=True)
+    franchise = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = CustomUser
+        fields = ('id', 'username', 'first_name', 'last_name', 'email',
+                  'phone_number', 'address', 'role', 'factory', 'distributor', 'franchise')
+
+
 class CustomUserSerializer(serializers.ModelSerializer):
     distributor = serializers.PrimaryKeyRelatedField(
         queryset=Distributor.objects.all(), write_only=True, required=False, allow_null=True)
@@ -31,7 +42,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ('id', 'username', 'first_name', 'last_name', 'email',
-                  'phone_number', 'address', 'role', 'factory', 'distributor', 'franchise', 'password')
+                  'phone_number', 'address', 'role', 'factory', 'distributor', 'franchise')
         # Make username read-only since we'll set it automatically
         read_only_fields = ('username',)
         write_only_fields = ('password',)

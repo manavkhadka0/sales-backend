@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status
 # Make sure to import these models
 from .models import CustomUser, Distributor, Franchise, Factory
-from .serializers import CustomUserSerializer, DistributorSerializer, LoginSerializer, FranchiseSerializer, FactorySerializer, SmallUserSerializer, UserSmallSerializer
+from .serializers import CustomUserSerializer, DistributorSerializer, LoginSerializer, FranchiseSerializer, FactorySerializer, SmallUserSerializer, UserSerializer, UserSmallSerializer
 from rest_framework_simplejwt.tokens import RefreshToken  # Import JWT token utilities
 from rest_framework.permissions import AllowAny  # Import permission class
 from rest_framework import generics
@@ -19,6 +19,11 @@ class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = CustomUserSerializer
     lookup_field = 'phone_number'
+
+    def get_serializer_class(self):
+        if self.request.method == 'GET':
+            return UserSerializer
+        return CustomUserSerializer
 
 
 class UserListView(APIView):
