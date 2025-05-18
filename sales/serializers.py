@@ -141,7 +141,7 @@ class OrderSerializer(serializers.ModelSerializer):
                   'phone_number', 'alternate_phone_number', 'payment_method',
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at',
                   'order_products', 'total_amount', 'delivery_charge', 'remarks', 'promo_code',
-                  'prepaid_amount']
+                  'prepaid_amount', 'delivery_choice']
 
     def create(self, validated_data):
         order_products_data = validated_data.pop('order_products', [])

@@ -395,6 +395,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 'promo_code': request.data.get('promo_code'),
                 'remarks': request.data.get('remarks'),
                 'prepaid_amount': request.data.get('prepaid_amount'),
+                'delivery_choice': request.data.get('delivery_choice'),
                 'order_products': order_products
             }
 
@@ -1768,7 +1769,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 'full_name', 'city', 'delivery_address', 'landmark',
                 'phone_number', 'alternate_phone_number', 'delivery_charge',
                 'payment_method', 'total_amount', 'promo_code', 'remarks',
-                'prepaid_amount', 'created_at', 'updated_at'
+                'prepaid_amount', 'delivery_choice', 'created_at', 'updated_at'
             ]
 
             for field in fields_to_check:

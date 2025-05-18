@@ -152,6 +152,10 @@ class Order(models.Model):
         ('Returned By Dash', 'Returned By Dash'),
         ('Return Pending', 'Return Pending'),
     ]
+    DELIVERY_ADDRESS_CHOICES = [
+        ('Inside valley', 'Inside valley'),
+        ('Outside valley', 'Outside valley'),
+    ]
     franchise = models.ForeignKey(
         'account.Franchise', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
     distributor = models.ForeignKey(
@@ -175,6 +179,8 @@ class Order(models.Model):
         max_digits=10, decimal_places=2, default=0, blank=True, null=True)
     delivery_charge = models.DecimalField(
         max_digits=10, decimal_places=2, default=0, blank=True, null=True)
+    delivery_choice = models.CharField(
+        max_length=255, choices=DELIVERY_ADDRESS_CHOICES, blank=True, null=True)
     date = models.DateField(auto_now_add=True)
     prepaid_amount = models.DecimalField(
         max_digits=10, decimal_places=2, default=0, blank=True, null=True)
