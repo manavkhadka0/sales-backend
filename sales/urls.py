@@ -22,7 +22,6 @@ urlpatterns = [
     path('log/', Inventorylogs.as_view(), name='log'),
     path('user-inventory-logs/', UserInventoryLogs.as_view(),
          name='user-inventory-logs'),
-
     path('orders/', OrderListCreateView.as_view(),
          name='order-create'),  # URL for creating orders
     path('orders/<int:pk>/update/',
@@ -36,6 +35,7 @@ urlpatterns = [
     path('products/', ProductListView.as_view(), name='product-list'),
     path('all-products/', AllProductsListView.as_view(), name='all-products-list'),
     path('statistics/', SalesStatisticsView.as_view(), name='sales-statistics'),
+
     path('top-salespersons/', TopSalespersonView.as_view(),
          name='top-salespersons'),  # New URL for top salespersons
     path('revenue/', RevenueView.as_view(), name='revenue'),
@@ -56,4 +56,5 @@ urlpatterns = [
          SalesPersonStatisticsView.as_view(), name='salesperson-statistics'),
     path('salesperson/<str:phone_number>/revenue/',
          SalesPersonRevenueView.as_view(), name='salesperson-revenue'),
+
 ]

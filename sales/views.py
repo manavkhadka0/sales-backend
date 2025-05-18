@@ -939,7 +939,7 @@ class AllProductsListView(generics.ListCreateAPIView):
 
 
 class SalesStatisticsView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
 
     def get_stats_for_queryset(self, queryset, today):
         """Helper method to get statistics for a queryset"""
@@ -1152,7 +1152,8 @@ class TopSalespersonView(generics.ListAPIView):
 class RevenueView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, *args, **kwargs):
+    def get(self, request):
+
         user = self.request.user
         filter_type = request.GET.get(
             'filter', 'monthly')  # Default to monthly
@@ -1250,6 +1251,128 @@ class RevenueView(generics.ListAPIView):
             )
 
 
+class SalesPersonRevenueView(generics.GenericAPIView):
+
+    def get(self, request, phone_number):
+        try:
+            # Get the salesperson
+            salesperson = CustomUser.objects.get(phone_number=phone_number)
+
+            # Check if the user is a salesperson
+            if salesperson.role != 'SalesPerson':
+                return Response(
+                    {'error': 'User is not a salesperson'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            filter_type = request.query_params.get(
+                'filter', 'daily')  # Default to daily
+            specific_date = request.query_params.get('date')
+
+            today = timezone.now().date()
+
+            # Base queryset for the specific salesperson
+            base_queryset = Order.objects.filter(sales_person=salesperson)
+
+            if specific_date:
+                try:
+                    specific_date = datetime.strptime(
+                        specific_date, '%Y-%m-%d').date()
+                    revenue = (
+                        base_queryset.filter(created_at__date=specific_date)
+                        .values('created_at__date')
+                        .annotate(
+                            period=models.F('created_at__date'),
+                            total_revenue=Sum('total_amount', default=0),
+                            order_count=Count('id')
+                        )
+                        .order_by('created_at__date')
+                    )
+                except ValueError:
+                    return Response(
+                        {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            elif filter_type == 'daily':
+                revenue = (
+                    base_queryset.filter(
+                        created_at__year=today.year,
+                        created_at__month=today.month
+                    )
+                    .values('date')
+                    .annotate(
+                        period=models.F('date'),
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('date')
+                )
+
+            elif filter_type == 'weekly':
+                revenue = (
+                    base_queryset.filter(created_at__year=today.year)
+                    .annotate(period=TruncWeek('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+
+            elif filter_type == 'yearly':
+                revenue = (
+                    base_queryset.annotate(period=TruncYear('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+
+            elif filter_type == 'monthly':
+                revenue = (
+                    base_queryset.annotate(period=TruncMonth('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+
+            # Format the response data
+            response_data = [{
+                'period': entry['period'].strftime('%Y-%m-%d') if filter_type == 'daily' or specific_date
+                else entry['period'].strftime(
+                    '%Y-%m-%d' if filter_type == 'weekly'
+                    else '%Y-%m' if filter_type == 'monthly'
+                    else '%Y'
+                ),
+                'total_revenue': float(entry['total_revenue']),
+                'order_count': entry['order_count']
+            } for entry in revenue]
+
+            return Response({
+                'filter_type': filter_type,
+                'specific_date': specific_date.strftime('%Y-%m-%d') if specific_date else None,
+                'data': response_data
+            })
+
+        except CustomUser.DoesNotExist:
+            return Response(
+                {'error': 'Salesperson not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch revenue data: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
 class TopProductsView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
@@ -1320,7 +1443,7 @@ class TopProductsView(generics.ListAPIView):
                             .values('total_qty')[:1]
                         )
                     )
-                ).order_by('-total_quantity')[:5]  # Get top 5 by quantity
+                ).order_by('-total_quantity')  # Get top 5 by quantity
             )
 
             # Format the response data
@@ -1929,7 +2052,6 @@ class InventoryCheckView(generics.GenericAPIView):
 
 
 class SalesPersonStatisticsView(APIView):
-    permission_classes = [IsAuthenticated]
 
     def get(self, request, phone_number):
         try:
@@ -2013,155 +2135,4 @@ class SalesPersonStatisticsView(APIView):
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-
-class SalesPersonRevenueView(APIView):
-    # permission_classes = [IsAuthenticated]
-
-    def get(self, request, phone_number):
-        try:
-            # Get the salesperson
-            salesperson = CustomUser.objects.get(phone_number=phone_number)
-
-            # Check if the user is a salesperson
-            if salesperson.role != 'SalesPerson':
-                return Response(
-                    {'error': 'User is not a salesperson'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-            # Get filter type from query params
-            filter_type = request.GET.get(
-                'filter', 'daily')  # Default to daily
-            today = timezone.now().date()
-
-            # Base queryset for orders
-            base_queryset = Order.objects.filter(sales_person=salesperson)
-
-            if filter_type == 'daily':
-                revenue = (
-                    base_queryset.filter(
-                        created_at__year=today.year,
-                        created_at__month=today.month
-                    )
-                    .values('date')
-                    .annotate(
-                        period=models.F('date'),
-                        total_revenue=Sum('total_amount', default=0),
-                        order_count=Count('id')
-                    )
-                    .order_by('date')
-                )
-
-            elif filter_type == 'weekly':
-                revenue = (
-                    base_queryset.filter(created_at__year=today.year)
-                    .annotate(period=TruncWeek('created_at'))
-                    .values('period')
-                    .annotate(
-                        total_revenue=Sum('total_amount', default=0),
-                        order_count=Count('id')
-                    )
-                    .order_by('period')
-                )
-
-            elif filter_type == 'yearly':
-                revenue = (
-                    base_queryset.annotate(period=TruncYear('created_at'))
-                    .values('period')
-                    .annotate(
-                        total_revenue=Sum('total_amount', default=0),
-                        order_count=Count('id')
-                    )
-                    .order_by('period')
-                )
-
-            elif filter_type == 'monthly':
-                # Get data for the last 12 months
-                start_date = today - timezone.timedelta(days=365)
-                revenue = (
-                    base_queryset.filter(created_at__gte=start_date)
-                    .annotate(period=TruncMonth('created_at'))
-                    .values('period')
-                    .annotate(
-                        total_revenue=Sum('total_amount', default=0),
-                        order_count=Count('id')
-                    )
-                    .order_by('period')
-                )
-
-            # Format the response data
-            response_data = [{
-                'period': entry['period'].strftime('%Y-%m-%d') if filter_type == 'daily'
-                else entry['period'].strftime(
-                    '%Y-%m-%d' if filter_type == 'weekly'
-                    else '%Y-%m' if filter_type == 'monthly'
-                    else '%Y'
-                ),
-                'total_revenue': float(entry['total_revenue']),
-                'order_count': entry['order_count']
-            } for entry in revenue]
-
-            # Calculate overall statistics
-            total_revenue = base_queryset.aggregate(
-                total=Sum('total_amount'))['total'] or 0
-            total_orders = base_queryset.count()
-
-            # Calculate current month statistics
-            current_month_start = today.replace(day=1)
-            current_month_stats = base_queryset.filter(
-                created_at__gte=current_month_start
-            ).aggregate(
-                total_revenue=Sum('total_amount', default=0),
-                total_orders=Count('id')
-            )
-
-            # Calculate previous month statistics
-            if today.month == 1:
-                prev_month_start = today.replace(
-                    year=today.year-1, month=12, day=1)
-            else:
-                prev_month_start = today.replace(month=today.month-1, day=1)
-            prev_month_end = current_month_start - timezone.timedelta(days=1)
-
-            previous_month_stats = base_queryset.filter(
-                created_at__gte=prev_month_start,
-                created_at__lte=prev_month_end
-            ).aggregate(
-                total_revenue=Sum('total_amount', default=0),
-                total_orders=Count('id')
-            )
-
-            return Response({
-                'filter_type': filter_type,
-                'salesperson': {
-                    'id': salesperson.id,
-                    'name': salesperson.get_full_name() or salesperson.first_name,
-                    'phone_number': salesperson.phone_number
-                },
-                'overall_stats': {
-                    'total_revenue': float(total_revenue),
-                    'total_orders': total_orders
-                },
-                'current_month_stats': {
-                    'total_revenue': float(current_month_stats['total_revenue']),
-                    'total_orders': current_month_stats['total_orders']
-                },
-                'previous_month_stats': {
-                    'total_revenue': float(previous_month_stats['total_revenue']),
-                    'total_orders': previous_month_stats['total_orders']
-                },
-                'revenue_data': response_data
-            })
-
-        except CustomUser.DoesNotExist:
-            return Response(
-                {'error': 'Salesperson not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {'error': f'Failed to fetch revenue data: {str(e)}'},
-                status=status.HTTP_400_BAD_REQUEST
             )
