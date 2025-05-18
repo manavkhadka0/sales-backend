@@ -399,6 +399,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 'remarks': request.data.get('remarks'),
                 'prepaid_amount': request.data.get('prepaid_amount'),
                 'delivery_type': request.data.get('delivery_type'),
+                'force_order': request.data.get('force_order'),
                 'order_products': order_products
             }
 
@@ -447,10 +448,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
         payment_method = self.request.data.get('payment_method')
 
         # Get force_order flag from request data (default to False if not provided)
-        force_order = self.request.data.get('force_order', False)
+        force_order = self.request._full_data.get('force_order', False)
         if isinstance(force_order, str):
             # Convert string to bool if needed (e.g., from form-data)
-            force_order = force_order.lower() == 'true'
+            force_order = force_order.lower() in ['true', '1', 'yes', 'y']
 
         if not force_order:
             # Check for recent orders with same phone number across ALL orders
