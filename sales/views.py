@@ -331,11 +331,13 @@ class OrderFilter(django_filters.FilterSet):
     end_date = django_filters.DateFilter(field_name="date", lookup_expr='lte')
     oil_type = django_filters.CharFilter(
         field_name="order_products__product__product__name", lookup_expr='icontains')
+    delivery_type = django_filters.CharFilter(
+        field_name="delivery_type", lookup_expr='icontains')
 
     class Meta:
         model = Order
         fields = ['distributor', 'sales_person', 'order_status',
-                  'date', 'start_date', 'end_date', 'city', 'oil_type', 'payment_method']
+                  'date', 'start_date', 'end_date', 'city', 'oil_type', 'payment_method', 'delivery_type']
 
 
 class OrderListCreateView(generics.ListCreateAPIView):
@@ -450,14 +452,14 @@ class OrderListCreateView(generics.ListCreateAPIView):
             force_order = force_order.lower() == 'true'
 
         if not force_order:
-            # First, check for recent orders with same phone number and products
+            # Check for recent orders with same phone number across ALL orders
             seven_days_ago = timezone.now() - timezone.timedelta(days=7)
             recent_orders = Order.objects.filter(
                 phone_number=phone_number,
                 created_at__gte=seven_days_ago
             ).exclude(
-                order_status__in=['Cancelled',
-                                  'Returned By Customer', 'Returned By Dash', 'Delivered', 'Indrive']
+                order_status__in=['Cancelled', 'Returned By Customer',
+                                  'Returned By Dash', 'Delivered', 'Indrive']
             )
 
             # Get all product IDs ordered by this phone number in last 7 days
