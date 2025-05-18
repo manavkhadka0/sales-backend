@@ -462,7 +462,6 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 order_status__in=['Cancelled', 'Returned By Customer',
                                   'Returned By Dash', 'Delivered', 'Indrive']
             )
-
             # Get all product IDs ordered by this phone number in last 7 days
             recent_product_ids = set(OrderProduct.objects.filter(
                 order__in=recent_orders
@@ -499,10 +498,25 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
                 # Only check for recent orders if force_order is False
                 if not force_order and inventory_item.product.id in recent_product_ids:
-                    raise serializers.ValidationError({
-                        "error": f"Customer with phone number {phone_number} has already ordered the same product within the last 7 days.",
-                        "status": status.HTTP_403_FORBIDDEN
-                    })
+                    # Get the first recent order
+                    recent_order = recent_orders.first()
+                    error_details = {
+                        "error": f"Customer with phone number {phone_number} has an active order of within the last 7 days.",
+                        "status": status.HTTP_403_FORBIDDEN,
+                        "existing_order": {
+                            "order_id": recent_order.id,  # Use recent_order instead of recent_orders
+                            "created_at": recent_order.created_at,
+                            "salesperson": {
+                                "name": recent_order.sales_person.get_full_name() or recent_order.sales_person.first_name,
+                                "phone": recent_order.sales_person.phone_number
+                            },
+                            "location": {
+                                "franchise": recent_order.franchise.name if recent_order.franchise else None,
+                                "distributor": recent_order.distributor.name if recent_order.distributor else None
+                            }
+                        }
+                    }
+                    raise serializers.ValidationError(error_details)
 
                 # Check if there's enough quantity
                 if inventory_item.quantity < quantity:
@@ -1947,10 +1961,10 @@ class SalesPersonStatisticsView(APIView):
                 orders = orders.filter(created_at__date=timezone.now().date())
             elif filter_type == 'weekly':
                 orders = orders.filter(
-                    created_at__gte=timezone.now() - timedelta(days=7))
+                    created_at__gte=timezone.now() - timezone.timedelta(days=7))
             elif filter_type == 'monthly':
                 orders = orders.filter(
-                    created_at__gte=timezone.now() - timedelta(days=30))
+                    created_at__gte=timezone.now() - timezone.timedelta(days=30))
 
             # Calculate total orders and amount
             total_orders = orders.count()
