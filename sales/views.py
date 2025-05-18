@@ -1917,7 +1917,7 @@ class InventoryCheckView(generics.GenericAPIView):
 
 
 class SalesPersonStatisticsView(APIView):
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, phone_number):
         try:
