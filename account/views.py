@@ -41,7 +41,6 @@ class UserListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-
         user = request.user
         if user.role == 'Admin':
             users = CustomUser.objects.all()
@@ -50,6 +49,8 @@ class UserListView(APIView):
             users = CustomUser.objects.filter(role__in=['SalesPerson', 'Treatment Staff', 'Packaging'],
                                               franchise=user.franchise)
             serializer = SmallUserSerializer(users, many=True)
+        else:
+            return Response({'error': 'You do not have permission to view this resource.'}, status=status.HTTP_403_FORBIDDEN)
         return Response(serializer.data)
 
     def post(self, request):
