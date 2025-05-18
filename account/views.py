@@ -20,9 +20,23 @@ class UserListView(APIView):
     permission_classes = [IsAuthenticated]  # This ensures token authentication
 
     def get(self, request):
-        users = CustomUser.objects.all()
+        user = request.user
+        if user.role == 'Admin':
+            users = CustomUser.objects.all()
+        elif user.role == 'Franchise':
+            users = CustomUser.objects.filter(role='Sales Person',
+                                              franchise=user.franchise)
         serializer = CustomUserSerializer(users, many=True)
         return Response(serializer.data)
+
+    def retrieve(self, request, phone_number):
+        try:
+            user = CustomUser.objects.get(phone_number=phone_number)
+            serializer = CustomUserSerializer(user)
+            return Response(serializer.data)
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'User not found'},
+                            status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request):
         # Create a copy of the request data to modify
@@ -37,6 +51,26 @@ class UserListView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, phone_number):
+        try:
+            user = CustomUser.objects.get(phone_number=phone_number)
+            serializer = CustomUserSerializer(
+                user, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self, request, phone_number):
+        try:
+            user = CustomUser.objects.get(phone_number=phone_number)
+            user.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class LoginView(APIView):

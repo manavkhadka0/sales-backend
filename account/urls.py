@@ -9,6 +9,8 @@ from .views import (
 urlpatterns = [
     path('users/', UserListView.as_view(),
          name='user-list'),  # Existing user list URL
+    path('users/<str:phone_number>/', UserListView.as_view(),
+         name='user-detail'),  # New URL for PATCH and DELETE
     path('login/', LoginView.as_view(), name='login'),  # New login URL
     path('profile/', UserProfileView.as_view(), name='user-profile'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
