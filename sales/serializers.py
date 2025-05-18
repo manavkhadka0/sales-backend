@@ -2,7 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from .models import Inventory, Order, OrderProduct, Product, InventoryChangeLog, InventoryRequest, PromoCode
 from account.models import CustomUser
-from account.serializers import UserSmallSerializer
+from account.serializers import SmallUserSerializer, UserSmallSerializer
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -302,8 +302,13 @@ class TopSalespersonSerializer(serializers.ModelSerializer):
                   'total_sales', 'sales_count')
 
 
+class ProductSalesSerializer(serializers.Serializer):
+    product_name = serializers.CharField()
+    quantity_sold = serializers.IntegerField()
+
+
 class SalesPersonStatisticsSerializer(serializers.Serializer):
-    user = UserSmallSerializer()
+    user = SmallUserSerializer()
     total_orders = serializers.IntegerField()
-    total_quantity = serializers.IntegerField()
     total_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    product_sales = ProductSalesSerializer(many=True)

@@ -1924,14 +1924,26 @@ class SalesPersonStatisticsView(APIView):
             # Get the salesperson
             salesperson = CustomUser.objects.get(phone_number=phone_number)
 
-            # Get filter type from query params
+            # Get filter type and specific date from query params
             filter_type = request.query_params.get('filter', 'all')
+            specific_date = request.query_params.get('date')
 
             # Base queryset for orders
             orders = Order.objects.filter(sales_person=salesperson)
 
-            # Apply time filter
-            if filter_type == 'daily':
+            # Apply specific date filter if provided
+            if specific_date:
+                try:
+                    specific_date = datetime.strptime(
+                        specific_date, '%Y-%m-%d').date()
+                    orders = orders.filter(created_at__date=specific_date)
+                except ValueError:
+                    return Response(
+                        {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            # Apply time filter if no specific date is provided
+            elif filter_type == 'daily':
                 orders = orders.filter(created_at__date=timezone.now().date())
             elif filter_type == 'weekly':
                 orders = orders.filter(
@@ -1940,22 +1952,34 @@ class SalesPersonStatisticsView(APIView):
                 orders = orders.filter(
                     created_at__gte=timezone.now() - timedelta(days=30))
 
-            # Calculate total orders
+            # Calculate total orders and amount
             total_orders = orders.count()
-
-            # Calculate total quantity and amount
-            order_products = OrderProduct.objects.filter(order__in=orders)
-            total_quantity = order_products.aggregate(
-                total=Sum('quantity'))['total'] or 0
             total_amount = orders.aggregate(
                 total=Sum('total_amount'))['total'] or 0
+
+            # Get product-wise sales data
+            product_sales = (
+                OrderProduct.objects.filter(order__in=orders)
+                .values(
+                    'product__product__id',
+                    'product__product__name'
+                )
+                .annotate(
+                    quantity_sold=Sum('quantity')
+                )
+                .order_by('-quantity_sold')
+            )
 
             # Prepare response data
             data = {
                 'user': salesperson,
                 'total_orders': total_orders,
-                'total_quantity': total_quantity,
-                'total_amount': total_amount
+                'total_amount': float(total_amount),
+                'product_sales': [{
+                    'product_name': p['product__product__name'],
+                    'quantity_sold': p['quantity_sold']
+                } for p in product_sales],
+
             }
 
             serializer = SalesPersonStatisticsSerializer(data)
