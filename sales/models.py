@@ -179,7 +179,7 @@ class Order(models.Model):
         max_digits=10, decimal_places=2, default=0, blank=True, null=True)
     delivery_charge = models.DecimalField(
         max_digits=10, decimal_places=2, default=0, blank=True, null=True)
-    delivery_choice = models.CharField(
+    delivery_type = models.CharField(
         max_length=255, choices=DELIVERY_ADDRESS_CHOICES, blank=True, null=True)
     date = models.DateField(auto_now_add=True)
     prepaid_amount = models.DecimalField(
