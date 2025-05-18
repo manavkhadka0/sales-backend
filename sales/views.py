@@ -2033,7 +2033,7 @@ class SalesPersonRevenueView(APIView):
 
             # Get filter type from query params
             filter_type = request.GET.get(
-                'filter', 'daily')  # Default to monthly
+                'filter', 'daily')  # Default to daily
             today = timezone.now().date()
 
             # Base queryset for orders
@@ -2077,9 +2077,12 @@ class SalesPersonRevenueView(APIView):
                     .order_by('period')
                 )
 
-            else:  # Default is monthly
+            elif filter_type == 'monthly':
+                # Get data for the last 12 months
+                start_date = today - timezone.timedelta(days=365)
                 revenue = (
-                    base_queryset.annotate(period=TruncMonth('created_at'))
+                    base_queryset.filter(created_at__gte=start_date)
+                    .annotate(period=TruncMonth('created_at'))
                     .values('period')
                     .annotate(
                         total_revenue=Sum('total_amount', default=0),
@@ -2105,6 +2108,31 @@ class SalesPersonRevenueView(APIView):
                 total=Sum('total_amount'))['total'] or 0
             total_orders = base_queryset.count()
 
+            # Calculate current month statistics
+            current_month_start = today.replace(day=1)
+            current_month_stats = base_queryset.filter(
+                created_at__gte=current_month_start
+            ).aggregate(
+                total_revenue=Sum('total_amount', default=0),
+                total_orders=Count('id')
+            )
+
+            # Calculate previous month statistics
+            if today.month == 1:
+                prev_month_start = today.replace(
+                    year=today.year-1, month=12, day=1)
+            else:
+                prev_month_start = today.replace(month=today.month-1, day=1)
+            prev_month_end = current_month_start - timezone.timedelta(days=1)
+
+            previous_month_stats = base_queryset.filter(
+                created_at__gte=prev_month_start,
+                created_at__lte=prev_month_end
+            ).aggregate(
+                total_revenue=Sum('total_amount', default=0),
+                total_orders=Count('id')
+            )
+
             return Response({
                 'filter_type': filter_type,
                 'salesperson': {
@@ -2115,6 +2143,14 @@ class SalesPersonRevenueView(APIView):
                 'overall_stats': {
                     'total_revenue': float(total_revenue),
                     'total_orders': total_orders
+                },
+                'current_month_stats': {
+                    'total_revenue': float(current_month_stats['total_revenue']),
+                    'total_orders': current_month_stats['total_orders']
+                },
+                'previous_month_stats': {
+                    'total_revenue': float(previous_month_stats['total_revenue']),
+                    'total_orders': previous_month_stats['total_orders']
                 },
                 'revenue_data': response_data
             })
