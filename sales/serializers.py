@@ -300,3 +300,10 @@ class TopSalespersonSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ('first_name', 'last_name',
                   'total_sales', 'sales_count')
+
+
+class SalesPersonStatisticsSerializer(serializers.Serializer):
+    user = UserSmallSerializer()
+    total_orders = serializers.IntegerField()
+    total_quantity = serializers.IntegerField()
+    total_amount = serializers.DecimalField(max_digits=10, decimal_places=2)

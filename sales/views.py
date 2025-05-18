@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from .models import Inventory, Order, Commission, Product, InventoryChangeLog, InventoryRequest, OrderProduct, PromoCode
 from account.models import CustomUser, Distributor, Franchise, Factory
-from .serializers import InventorySerializer, OrderSerializer, ProductSerializer, InventoryChangeLogSerializer, InventoryRequestSerializer, RawMaterialSerializer, TopSalespersonSerializer, PromoCodeSerializer
+from .serializers import InventorySerializer, OrderSerializer, ProductSerializer, InventoryChangeLogSerializer, InventoryRequestSerializer, RawMaterialSerializer, TopSalespersonSerializer, PromoCodeSerializer, SalesPersonStatisticsSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
@@ -15,13 +15,14 @@ from rest_framework import filters as rest_filters
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import serializers
 from django.utils import timezone
-from django.db.models import Count, Sum
+from django.db.models import Count, Sum, Q
 from django.db import models
 from django.db.models.functions import TruncMonth, TruncWeek, TruncYear
 from django.http import HttpResponse
 import csv
-from datetime import datetime
+from datetime import datetime, timedelta
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
+from rest_framework.views import APIView
 
 
 # Create your views here.
@@ -1912,4 +1913,61 @@ class InventoryCheckView(generics.GenericAPIView):
             return Response(
                 {'error': f'Failed to check inventory: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class SalesPersonStatisticsView(APIView):
+    # permission_classes = [IsAuthenticated]
+
+    def get(self, request, phone_number):
+        try:
+            # Get the salesperson
+            salesperson = CustomUser.objects.get(phone_number=phone_number)
+
+            # Get filter type from query params
+            filter_type = request.query_params.get('filter', 'all')
+
+            # Base queryset for orders
+            orders = Order.objects.filter(sales_person=salesperson)
+
+            # Apply time filter
+            if filter_type == 'daily':
+                orders = orders.filter(created_at__date=timezone.now().date())
+            elif filter_type == 'weekly':
+                orders = orders.filter(
+                    created_at__gte=timezone.now() - timedelta(days=7))
+            elif filter_type == 'monthly':
+                orders = orders.filter(
+                    created_at__gte=timezone.now() - timedelta(days=30))
+
+            # Calculate total orders
+            total_orders = orders.count()
+
+            # Calculate total quantity and amount
+            order_products = OrderProduct.objects.filter(order__in=orders)
+            total_quantity = order_products.aggregate(
+                total=Sum('quantity'))['total'] or 0
+            total_amount = orders.aggregate(
+                total=Sum('total_amount'))['total'] or 0
+
+            # Prepare response data
+            data = {
+                'user': salesperson,
+                'total_orders': total_orders,
+                'total_quantity': total_quantity,
+                'total_amount': total_amount
+            }
+
+            serializer = SalesPersonStatisticsSerializer(data)
+            return Response(serializer.data)
+
+        except CustomUser.DoesNotExist:
+            return Response(
+                {'error': 'Salesperson not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

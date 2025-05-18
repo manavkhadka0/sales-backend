@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status
 # Make sure to import these models
 from .models import CustomUser, Distributor, Franchise, Factory
-from .serializers import CustomUserSerializer, DistributorSerializer, LoginSerializer, FranchiseSerializer, FactorySerializer
+from .serializers import CustomUserSerializer, DistributorSerializer, LoginSerializer, FranchiseSerializer, FactorySerializer, SmallUserSerializer, UserSmallSerializer
 from rest_framework_simplejwt.tokens import RefreshToken  # Import JWT token utilities
 from rest_framework.permissions import AllowAny  # Import permission class
 from rest_framework import generics
@@ -17,16 +17,17 @@ from .serializers import ChangePasswordSerializer
 
 class UserListView(APIView):
     serializer_class = CustomUserSerializer
-    permission_classes = [IsAuthenticated]  # This ensures token authentication
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
         if user.role == 'Admin':
             users = CustomUser.objects.all()
+            serializer = CustomUserSerializer(users, many=True)
         elif user.role == 'Franchise':
-            users = CustomUser.objects.filter(role='Sales Person',
+            users = CustomUser.objects.filter(role__in=['SalesPerson', 'Packaging', 'Treatment Staff'],
                                               franchise=user.franchise)
-        serializer = CustomUserSerializer(users, many=True)
+            serializer = SmallUserSerializer(users, many=True)
         return Response(serializer.data)
 
     def retrieve(self, request, phone_number):
