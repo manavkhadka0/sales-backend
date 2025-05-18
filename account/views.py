@@ -25,6 +25,16 @@ class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
             return UserSerializer
         return CustomUserSerializer
 
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        new_phone = serializer.validated_data.get('phone_number')
+
+        # If phone number is being updated, update username as well
+        if new_phone and new_phone != instance.phone_number:
+            serializer.validated_data['username'] = new_phone
+
+        serializer.save()
+
 
 class UserListView(APIView):
     serializer_class = CustomUserSerializer
