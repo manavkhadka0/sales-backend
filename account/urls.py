@@ -3,13 +3,13 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     FranchiseListCreateView, UserListView, LoginView, UserProfileView,
     DistributorListCreateView, FranchiseByDistributorView, FactoryListCreateView,
-    ChangePassword, UserFranchiseListView, UserDistributorListView
+    ChangePassword, UserFranchiseListView, UserDistributorListView, UserRetrieveUpdateDestroyView
 )
 
 urlpatterns = [
     path('users/', UserListView.as_view(),
          name='user-list'),  # Existing user list URL
-    path('users/<str:phone_number>/', UserListView.as_view(),
+    path('users/<str:phone_number>/', UserRetrieveUpdateDestroyView.as_view(),
          name='user-detail'),  # New URL for PATCH and DELETE
     path('login/', LoginView.as_view(), name='login'),  # New login URL
     path('profile/', UserProfileView.as_view(), name='user-profile'),

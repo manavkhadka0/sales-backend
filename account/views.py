@@ -15,19 +15,17 @@ from rest_framework.permissions import IsAuthenticated
 from .serializers import ChangePasswordSerializer
 
 
+class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = CustomUser.objects.all()
+    serializer_class = CustomUserSerializer
+    lookup_field = 'phone_number'
+
+
 class UserListView(APIView):
     serializer_class = CustomUserSerializer
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, phone_number=None):
-        if phone_number:
-            try:
-                user = CustomUser.objects.get(phone_number=phone_number)
-                serializer = SmallUserSerializer(user)
-                return Response(serializer.data)
-            except CustomUser.DoesNotExist:
-                return Response({'error': 'User not found'},
-                                status=status.HTTP_404_NOT_FOUND)
+    def get(self, request):
 
         user = request.user
         if user.role == 'Admin':
@@ -52,26 +50,6 @@ class UserListView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def patch(self, request, phone_number):
-        try:
-            user = CustomUser.objects.get(phone_number=phone_number)
-            serializer = CustomUserSerializer(
-                user, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except CustomUser.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    def delete(self, request, phone_number):
-        try:
-            user = CustomUser.objects.get(phone_number=phone_number)
-            user.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except CustomUser.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class LoginView(APIView):
