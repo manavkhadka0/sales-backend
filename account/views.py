@@ -17,9 +17,18 @@ from .serializers import ChangePasswordSerializer
 
 class UserListView(APIView):
     serializer_class = CustomUserSerializer
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request, phone_number=None):
+        if phone_number:
+            try:
+                user = CustomUser.objects.get(phone_number=phone_number)
+                serializer = SmallUserSerializer(user)
+                return Response(serializer.data)
+            except CustomUser.DoesNotExist:
+                return Response({'error': 'User not found'},
+                                status=status.HTTP_404_NOT_FOUND)
+
         user = request.user
         if user.role == 'Admin':
             users = CustomUser.objects.all()
@@ -29,15 +38,6 @@ class UserListView(APIView):
                                               franchise=user.franchise)
             serializer = SmallUserSerializer(users, many=True)
         return Response(serializer.data)
-
-    def retrieve(self, request, phone_number):
-        try:
-            user = CustomUser.objects.get(phone_number=phone_number)
-            serializer = CustomUserSerializer(user)
-            return Response(serializer.data)
-        except CustomUser.DoesNotExist:
-            return Response({'error': 'User not found'},
-                            status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request):
         # Create a copy of the request data to modify
