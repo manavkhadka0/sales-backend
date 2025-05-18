@@ -25,7 +25,7 @@ class UserListView(APIView):
             users = CustomUser.objects.all()
             serializer = CustomUserSerializer(users, many=True)
         elif user.role == 'Franchise':
-            users = CustomUser.objects.filter(role__in=['SalesPerson', 'Packaging', 'Treatment Staff'],
+            users = CustomUser.objects.filter(role='SalesPerson',
                                               franchise=user.franchise)
             serializer = SmallUserSerializer(users, many=True)
         return Response(serializer.data)
