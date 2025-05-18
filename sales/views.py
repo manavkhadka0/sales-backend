@@ -2014,3 +2014,118 @@ class SalesPersonStatisticsView(APIView):
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class SalesPersonRevenueView(APIView):
+    # permission_classes = [IsAuthenticated]
+
+    def get(self, request, phone_number):
+        try:
+            # Get the salesperson
+            salesperson = CustomUser.objects.get(phone_number=phone_number)
+
+            # Check if the user is a salesperson
+            if salesperson.role != 'SalesPerson':
+                return Response(
+                    {'error': 'User is not a salesperson'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # Get filter type from query params
+            filter_type = request.GET.get(
+                'filter', 'daily')  # Default to monthly
+            today = timezone.now().date()
+
+            # Base queryset for orders
+            base_queryset = Order.objects.filter(sales_person=salesperson)
+
+            if filter_type == 'daily':
+                revenue = (
+                    base_queryset.filter(
+                        created_at__year=today.year,
+                        created_at__month=today.month
+                    )
+                    .values('date')
+                    .annotate(
+                        period=models.F('date'),
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('date')
+                )
+
+            elif filter_type == 'weekly':
+                revenue = (
+                    base_queryset.filter(created_at__year=today.year)
+                    .annotate(period=TruncWeek('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+
+            elif filter_type == 'yearly':
+                revenue = (
+                    base_queryset.annotate(period=TruncYear('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+
+            else:  # Default is monthly
+                revenue = (
+                    base_queryset.annotate(period=TruncMonth('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+
+            # Format the response data
+            response_data = [{
+                'period': entry['period'].strftime('%Y-%m-%d') if filter_type == 'daily'
+                else entry['period'].strftime(
+                    '%Y-%m-%d' if filter_type == 'weekly'
+                    else '%Y-%m' if filter_type == 'monthly'
+                    else '%Y'
+                ),
+                'total_revenue': float(entry['total_revenue']),
+                'order_count': entry['order_count']
+            } for entry in revenue]
+
+            # Calculate overall statistics
+            total_revenue = base_queryset.aggregate(
+                total=Sum('total_amount'))['total'] or 0
+            total_orders = base_queryset.count()
+
+            return Response({
+                'filter_type': filter_type,
+                'salesperson': {
+                    'id': salesperson.id,
+                    'name': salesperson.get_full_name() or salesperson.first_name,
+                    'phone_number': salesperson.phone_number
+                },
+                'overall_stats': {
+                    'total_revenue': float(total_revenue),
+                    'total_orders': total_orders
+                },
+                'revenue_data': response_data
+            })
+
+        except CustomUser.DoesNotExist:
+            return Response(
+                {'error': 'Salesperson not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch revenue data: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )

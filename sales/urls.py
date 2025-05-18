@@ -1,6 +1,6 @@
 # sales-backend/sales/urls.py
 from django.urls import path
-from .views import FranchiseInventoryListView, InventoryCheckView, InventoryListCreateView, LatestOrdersView, OrderDetailUpdateView, OrderListCreateView, OrderUpdateView, CommissionPaymentView, ProductListView, InventoryDetailView, InventoryChangeLogView, Inventorylogs, FactoryInventoryListView, DistributorInventoryListView, InventoryRequestView, InventoryRequestDetailView, AllProductsListView, RawMaterialListView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView, OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView, SalesPersonStatisticsView
+from .views import FranchiseInventoryListView, InventoryCheckView, InventoryListCreateView, LatestOrdersView, OrderDetailUpdateView, OrderListCreateView, OrderUpdateView, CommissionPaymentView, ProductListView, InventoryDetailView, InventoryChangeLogView, Inventorylogs, FactoryInventoryListView, DistributorInventoryListView, InventoryRequestView, InventoryRequestDetailView, AllProductsListView, RawMaterialListView, SalesPersonRevenueView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView, OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView, SalesPersonStatisticsView
 
 urlpatterns = [
     path('inventory/', InventoryListCreateView.as_view(), name='inventory-list'),
@@ -54,4 +54,6 @@ urlpatterns = [
          name='validate-promo-code'),
     path('salesperson/<str:phone_number>/statistics/',
          SalesPersonStatisticsView.as_view(), name='salesperson-statistics'),
+    path('salesperson/<str:phone_number>/revenue/',
+         SalesPersonRevenueView.as_view(), name='salesperson-revenue'),
 ]
