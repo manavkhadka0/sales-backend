@@ -1,5 +1,5 @@
 from django.db import models
-
+from account.models import Logistics
 # Create your models here.
 
 
@@ -191,6 +191,8 @@ class Order(models.Model):
     remarks = models.TextField(blank=True)
     promo_code = models.ForeignKey(
         PromoCode, on_delete=models.SET_NULL, null=True, blank=True)
+    logistics = models.ForeignKey(
+        Logistics, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f'{self.full_name} - {self.order_status}'

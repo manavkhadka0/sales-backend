@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import CustomUser, Distributor, Franchise, Factory
+from .models import CustomUser, Distributor, Franchise, Factory, Logistics
 
 
 class FactorySerializer(serializers.ModelSerializer):
@@ -123,3 +123,8 @@ class ChangePasswordSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['phone_number', 'new_password']
+
+class LogisticsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Logistics
+        fields = '__all__'

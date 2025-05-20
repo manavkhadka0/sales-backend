@@ -334,11 +334,13 @@ class OrderFilter(django_filters.FilterSet):
         field_name="order_products__product__product__name", lookup_expr='icontains')
     delivery_type = django_filters.CharFilter(
         field_name="delivery_type", lookup_expr='icontains')
+    logistics = django_filters.CharFilter(
+        field_name="logistics__id", lookup_expr='exact')
 
     class Meta:
         model = Order
         fields = ['distributor', 'sales_person', 'order_status',
-                  'date', 'start_date', 'end_date', 'city', 'oil_type', 'payment_method', 'delivery_type']
+                  'date', 'start_date', 'end_date', 'city', 'oil_type', 'payment_method', 'delivery_type', 'logistics']
 
 
 class OrderListCreateView(generics.ListCreateAPIView):
@@ -400,6 +402,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 'prepaid_amount': request.data.get('prepaid_amount'),
                 'delivery_type': request.data.get('delivery_type'),
                 'force_order': request.data.get('force_order'),
+                'logistics': request.data.get('logistics'),
                 'order_products': order_products
             }
 
@@ -1727,11 +1730,11 @@ class OrderCSVExportView(generics.GenericAPIView):
 
         if user.role == 'SuperAdmin':
             orders = Order.objects.filter(
-                factory=user.factory, order_status='Processing')
+                factory=user.factory)
         elif user.role == 'Distributor':
             franchises = Franchise.objects.filter(distributor=user.distributor)
             orders = Order.objects.filter(
-                franchise__in=franchises, order_status='Processing')
+                franchise__in=franchises)
         elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
             orders = Order.objects.filter(
                 franchise=user.franchise, order_status='Processing')
@@ -1886,6 +1889,9 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
             # Handle order products separately
             order_products = None
 
+            if 'logistics' in request.data:
+                modified_data['logistics'] = request.data.get('logistics')
+
             # Check if order_products is provided and parse it
             if 'order_products' in request.data:
                 if isinstance(request.data.get('order_products'), list):
@@ -1907,7 +1913,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 'full_name', 'city', 'delivery_address', 'landmark',
                 'phone_number', 'alternate_phone_number', 'delivery_charge',
                 'payment_method', 'total_amount', 'promo_code', 'remarks',
-                'prepaid_amount', 'delivery_type', 'created_at', 'updated_at'
+                'prepaid_amount', 'delivery_type', 'created_at', 'updated_at',
             ]
 
             for field in fields_to_check:

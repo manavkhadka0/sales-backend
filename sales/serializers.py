@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 from .models import Inventory, Order, OrderProduct, Product, InventoryChangeLog, InventoryRequest, PromoCode
-from account.models import CustomUser
+from account.models import CustomUser, Logistics
 from account.serializers import SmallUserSerializer, UserSmallSerializer
 
 
@@ -134,6 +134,13 @@ class OrderSerializer(serializers.ModelSerializer):
     order_products = OrderProductSerializer(many=True, required=False)
     promo_code = serializers.CharField(required=False, allow_null=True)
     payment_screenshot = serializers.FileField(required=False, allow_null=True)
+    logistics = serializers.PrimaryKeyRelatedField(
+        queryset=Logistics.objects.all(),
+        required=False,
+        allow_null=True,
+        write_only=True
+    )
+    logistics_name = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Order
@@ -141,7 +148,10 @@ class OrderSerializer(serializers.ModelSerializer):
                   'phone_number', 'alternate_phone_number', 'payment_method',
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at',
                   'order_products', 'total_amount', 'delivery_charge', 'remarks', 'promo_code',
-                  'prepaid_amount', 'delivery_type']
+                  'prepaid_amount', 'delivery_type', 'logistics', 'logistics_name']
+
+    def get_logistics_name(self, obj):
+        return obj.logistics.name if obj.logistics else None
 
     def create(self, validated_data):
         order_products_data = validated_data.pop('order_products', [])

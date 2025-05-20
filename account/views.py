@@ -1,13 +1,9 @@
-from django.shortcuts import render
-
-# Create your views here.
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 # Make sure to import these models
-from .models import CustomUser, Distributor, Franchise, Factory
-from .serializers import CustomUserSerializer, DistributorSerializer, LoginSerializer, FranchiseSerializer, FactorySerializer, SmallUserSerializer, UserSerializer, UserSmallSerializer
+from .models import CustomUser, Distributor, Franchise, Factory, Logistics
+from .serializers import CustomUserSerializer, DistributorSerializer, LoginSerializer, FranchiseSerializer, FactorySerializer, SmallUserSerializer, UserSerializer, UserSmallSerializer, LogisticsSerializer
 from rest_framework_simplejwt.tokens import RefreshToken  # Import JWT token utilities
 from rest_framework.permissions import AllowAny  # Import permission class
 from rest_framework import generics
@@ -173,3 +169,14 @@ class UserDistributorListView(APIView):
                 {'error': 'Error fetching distributors'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class LogisticsListCreateView(generics.ListCreateAPIView):
+    queryset = Logistics.objects.all()
+    serializer_class = LogisticsSerializer
+
+
+class LogisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Logistics.objects.all()
+    serializer_class = LogisticsSerializer
+    lookup_field = 'id'

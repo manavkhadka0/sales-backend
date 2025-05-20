@@ -3,7 +3,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     FranchiseListCreateView, UserListView, LoginView, UserProfileView,
     DistributorListCreateView, FranchiseByDistributorView, FactoryListCreateView,
-    ChangePassword, UserFranchiseListView, UserDistributorListView, UserRetrieveUpdateDestroyView
+    ChangePassword, UserFranchiseListView, UserDistributorListView, UserRetrieveUpdateDestroyView,
+    LogisticsListCreateView, LogisticsDetailView
 )
 
 urlpatterns = [
@@ -26,4 +27,8 @@ urlpatterns = [
     path('my-franchises/', UserFranchiseListView.as_view(), name='user-franchises'),
     path('my-distributors/', UserDistributorListView.as_view(),
          name='user-distributors'),
+    path('logistics/', LogisticsListCreateView.as_view(),
+         name='logistics-list-create'),
+    path('logistics/<int:id>/', LogisticsDetailView.as_view(),
+         name='logistics-detail'),
 ]
