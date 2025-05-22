@@ -42,7 +42,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ('id', 'username', 'first_name', 'last_name', 'email',
-                  'phone_number', 'address', 'role', 'factory', 'distributor', 'franchise')
+                  'phone_number', 'address', 'role', 'factory', 'distributor', 'franchise', 'password')
         # Make username read-only since we'll set it automatically
         read_only_fields = ('username',)
         write_only_fields = ('password',)
@@ -123,6 +123,7 @@ class ChangePasswordSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['phone_number', 'new_password']
+
 
 class LogisticsSerializer(serializers.ModelSerializer):
     class Meta:
