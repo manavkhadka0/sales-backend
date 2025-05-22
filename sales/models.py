@@ -138,7 +138,8 @@ class Order(models.Model):
     PAYMENT_CHOICES = [
         ('Cash on Delivery', 'Cash on Delivery'),
         ('Prepaid', 'Prepaid'),
-        ('Office Visit', 'Office Visit')
+        ('Office Visit', 'Office Visit'),
+        ('Indrive', 'Indrive')
     ]
 
     ORDER_STATUS_CHOICES = [

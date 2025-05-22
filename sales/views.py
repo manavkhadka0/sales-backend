@@ -533,6 +533,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
         # Set order status to Delivered if payment method is Office Visit
         if payment_method == 'Office Visit':
             serializer.validated_data['order_status'] = 'Delivered'
+        elif payment_method == 'Indrive':
+            serializer.validated_data['order_status'] = 'Delivered'
 
         # Create the order based on user role
         if salesperson.role in ['Franchise', 'SalesPerson']:
@@ -1722,11 +1724,12 @@ class RevenueByProductView(generics.GenericAPIView):
 
 
 class OrderCSVExportView(generics.GenericAPIView):
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         # Get orders based on user role
         user = request.user
+        logistics = request.query_params.get('logistics')
 
         if user.role == 'SuperAdmin':
             orders = Order.objects.filter(
@@ -1735,9 +1738,16 @@ class OrderCSVExportView(generics.GenericAPIView):
             franchises = Franchise.objects.filter(distributor=user.distributor)
             orders = Order.objects.filter(
                 franchise__in=franchises)
-        elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
+        elif user.role in ['Franchise', 'SalesPerson']:
             orders = Order.objects.filter(
-                franchise=user.franchise, order_status='Processing')
+                franchise=user.franchise, order_status='Pending')
+        elif user.role == 'Packaging':
+            base_orders = Order.objects.filter(
+                franchise=user.franchise, order_status='Pending')
+            if logistics:
+                orders = base_orders.filter(logistics=logistics)
+            else:
+                orders = base_orders
         else:
             return Response(
                 {"error": "Unauthorized to export orders"},
