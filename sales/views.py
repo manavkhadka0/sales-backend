@@ -1742,28 +1742,26 @@ class OrderCSVExportView(generics.GenericAPIView):
             orders = Order.objects.filter(
                 franchise=user.franchise, order_status='Pending')
         elif user.role == 'Packaging':
-            base_orders = Order.objects.filter(
+            orders = Order.objects.filter(
                 franchise=user.franchise, order_status='Pending')
-            if logistics:
-                orders = base_orders.filter(logistics=logistics)
-            else:
-                orders = base_orders
         else:
             return Response(
                 {"error": "Unauthorized to export orders"},
                 status=status.HTTP_403_FORBIDDEN
             )
+        if logistics:
+            orders = orders.filter(logistics=logistics)
 
         if not orders.exists():
             return Response(
-                {"error": "No processing orders found to export"},
+                {"error": "No orders found to export"},
                 status=status.HTTP_404_NOT_FOUND
             )
 
         try:
             # Create the HttpResponse object with CSV header
             response = HttpResponse(content_type='text/csv')
-            response['Content-Disposition'] = f'attachment; filename="dash_orders.csv"'
+            response['Content-Disposition'] = f'attachment; filename="orders.csv"'
 
             # Create CSV writer
             writer = csv.writer(response)
@@ -1816,7 +1814,7 @@ class OrderCSVExportView(generics.GenericAPIView):
                 ])
 
             # After successful export, update all processed orders to "Sent to Dash"
-            orders.update(order_status='Sent to Dash')
+            orders.update(order_status='Processing')
 
             return response
 
