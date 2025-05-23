@@ -1740,10 +1740,10 @@ class OrderCSVExportView(generics.GenericAPIView):
                 franchise__in=franchises)
         elif user.role in ['Franchise', 'SalesPerson']:
             orders = Order.objects.filter(
-                franchise=user.franchise, order_status='Processing')
+                franchise=user.franchise, order_status='Processing').order_by('-id')
         elif user.role == 'Packaging':
             orders = Order.objects.filter(
-                franchise=user.franchise, order_status='Processing')
+                franchise=user.franchise, order_status='Processing').order_by('-id')
         else:
             return Response(
                 {"error": "Unauthorized to export orders"},
