@@ -1814,7 +1814,7 @@ class OrderCSVExportView(generics.GenericAPIView):
                 ])
 
             # After successful export, update all processed orders to "Sent to Dash"
-            orders.update(order_status='Processing')
+            orders.update(order_status='Sent to Dash')
 
             return response
 
