@@ -441,7 +441,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
         elif user.role == 'SuperAdmin':
             return Order.objects.filter(factory=user.factory).order_by('-id')
         elif user.role == 'Packaging':
-            return Order.objects.filter(franchise=user.franchise, order_status='Pending').order_by('-id')
+            return Order.objects.filter(franchise=user.franchise, order_status='Processing').order_by('-id')
         return Order.objects.none()
 
     def perform_create(self, serializer):
@@ -1743,7 +1743,7 @@ class OrderCSVExportView(generics.GenericAPIView):
                 franchise=user.franchise, order_status='Processing')
         elif user.role == 'Packaging':
             orders = Order.objects.filter(
-                franchise=user.franchise, order_status='Pending')
+                franchise=user.franchise, order_status='Processing')
         else:
             return Response(
                 {"error": "Unauthorized to export orders"},
