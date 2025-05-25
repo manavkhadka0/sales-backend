@@ -1874,7 +1874,7 @@ class ValidatePromoCodeView(generics.GenericAPIView):
 class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
     parser_classes = (JSONParser, FormParser, MultiPartParser)
 
     def get_queryset(self):
