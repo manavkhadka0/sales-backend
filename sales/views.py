@@ -441,7 +441,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
         elif user.role == 'SuperAdmin':
             return Order.objects.filter(factory=user.factory).order_by('-id')
         elif user.role == 'Packaging':
-            return Order.objects.filter(franchise=user.franchise, order_status__in=['Pending', 'Processing', 'Sent to Dash','Delivered']).order_by('-id')
+            return Order.objects.filter(franchise=user.franchise, order_status__in=['Pending', 'Processing', 'Sent to Dash', 'Delivered']).order_by('-id')
         return Order.objects.none()
 
     def perform_create(self, serializer):
@@ -1075,8 +1075,11 @@ class TopSalespersonView(generics.ListAPIView):
                 start_date = current_date - timezone.timedelta(days=7)
                 orders_filter = {'orders__created_at__gte': start_date}
             elif filter_type == 'monthly':
-                start_date = current_date - timezone.timedelta(days=30)
-                orders_filter = {'orders__created_at__gte': start_date}
+                # Filter for current month only
+                orders_filter = {
+                    'orders__created_at__year': current_date.year,
+                    'orders__created_at__month': current_date.month
+                }
             else:
                 orders_filter = {}
         else:
@@ -1099,6 +1102,7 @@ class TopSalespersonView(generics.ListAPIView):
         data = serializer.data
 
         filter_type = request.GET.get('filter', 'all')
+        current_date = timezone.now()
 
         for index, item in enumerate(data):
             salesperson = queryset[index]
@@ -1107,14 +1111,16 @@ class TopSalespersonView(generics.ListAPIView):
 
             if filter_type == 'daily':
                 orders_query = orders_query.filter(
-                    created_at__date=timezone.now().date())
+                    created_at__date=current_date.date())
             elif filter_type == 'weekly':
                 orders_query = orders_query.filter(
-                    created_at__gte=timezone.now() - timezone.timedelta(days=7)
+                    created_at__gte=current_date - timezone.timedelta(days=7)
                 )
             elif filter_type == 'monthly':
+                # Filter for current month only
                 orders_query = orders_query.filter(
-                    created_at__gte=timezone.now() - timezone.timedelta(days=30)
+                    created_at__year=current_date.year,
+                    created_at__month=current_date.month
                 )
 
             product_sales = (
@@ -1425,10 +1431,10 @@ class TopProductsView(generics.ListAPIView):
                         order__created_at__gte=start_date
                     )
                 elif filter_type == 'monthly':
-                    # Filter for the last 30 days
-                    start_date = current_date - timezone.timedelta(days=30)
+                    # Filter for current month only
                     base_query = base_query.filter(
-                        order__created_at__gte=start_date
+                        order__created_at__year=current_date.year,
+                        order__created_at__month=current_date.month
                     )
 
             # Get top products with aggregated data
@@ -1639,6 +1645,7 @@ class RevenueByProductView(generics.GenericAPIView):
         user = self.request.user
         # Get filter parameter from query
         filter_type = request.GET.get('filter')
+        current_date = timezone.now()
 
         # Filter orders based on user role
         if user.role == 'SuperAdmin':
@@ -1660,17 +1667,16 @@ class RevenueByProductView(generics.GenericAPIView):
 
         # Apply time filter if specified
         if filter_type:
-            current_date = timezone.now()
-
             if filter_type == 'weekly':
                 # Filter for the last 7 days
                 start_date = current_date - timezone.timedelta(days=7)
                 orders = orders.filter(created_at__gte=start_date)
-
             elif filter_type == 'monthly':
-                # Filter for the last 30 days
-                start_date = current_date - timezone.timedelta(days=30)
-                orders = orders.filter(created_at__gte=start_date)
+                # Filter for current month only
+                orders = orders.filter(
+                    created_at__year=current_date.year,
+                    created_at__month=current_date.month
+                )
 
         # Get all order products and calculate revenue per product
         product_revenue = (
