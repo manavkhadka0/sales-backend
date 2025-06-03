@@ -948,23 +948,29 @@ class SalesStatisticsView(generics.GenericAPIView):
 
     def get_stats_for_queryset(self, queryset, today):
         """Helper method to get statistics for a queryset"""
+        # Define excluded statuses
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+
         # Calculate yesterday's date
         yesterday = today - timezone.timedelta(days=1)
 
-        # Get today's stats
+        # Get today's stats - no exclusions
         daily_stats = queryset.filter(date=today).aggregate(
             total_orders=Count('id'),
             total_sales=Sum('total_amount')
         )
 
-        # Get yesterday's stats
+        # Get yesterday's stats - no exclusions
         yesterday_stats = queryset.filter(date=yesterday).aggregate(
             total_orders=Count('id'),
             total_sales=Sum('total_amount')
         )
 
-        # Get all-time stats
-        all_time_stats = queryset.aggregate(
+        # Get all-time stats - exclude cancelled and returned orders
+        all_time_stats = queryset.exclude(
+            order_status__in=excluded_statuses
+        ).aggregate(
             total_orders=Count('id'),
             total_sales=Sum('total_amount')
         )
@@ -1393,29 +1399,33 @@ class TopProductsView(generics.ListAPIView):
             filter_type = request.GET.get('filter')
             current_date = timezone.now()
 
+            # Define excluded statuses
+            excluded_statuses = [
+                'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+
             # Base query for order products based on user role
             if user.role == 'SuperAdmin':
                 base_query = OrderProduct.objects.filter(
                     order__factory=user.factory,
                     order__order_status__in=['Delivered', 'Pending', 'Indrive']
-                )
+                ).exclude(order__order_status__in=excluded_statuses)
             elif user.role == 'Distributor':
                 franchises = Franchise.objects.filter(
                     distributor=user.distributor)
                 base_query = OrderProduct.objects.filter(
                     order__franchise__in=franchises,
                     order__order_status__in=['Delivered', 'Pending', 'Indrive']
-                )
+                ).exclude(order__order_status__in=excluded_statuses)
             elif user.role in ['Franchise', 'Packaging']:
                 base_query = OrderProduct.objects.filter(
                     order__franchise=user.franchise,
                     order__order_status__in=['Delivered', 'Pending', 'Indrive']
-                )
+                ).exclude(order__order_status__in=excluded_statuses)
             elif user.role == 'SalesPerson':
                 base_query = OrderProduct.objects.filter(
                     order__sales_person=user,
                     order__order_status__in=['Delivered', 'Pending', 'Indrive']
-                )
+                ).exclude(order__order_status__in=excluded_statuses)
             else:
                 return Response(
                     {"error": "Unauthorized access"},
@@ -1520,6 +1530,10 @@ class DashboardStatsView(generics.GenericAPIView):
         current_date = timezone.now()
         last_month = current_date - timezone.timedelta(days=30)
 
+        # Define excluded statuses
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+
         # Base queryset filters based on user role
         if user.role == 'SuperAdmin':
             # For SuperAdmin: all orders, all distributors/franchises as customers, all products
@@ -1564,11 +1578,12 @@ class DashboardStatsView(generics.GenericAPIView):
         # Calculate current period stats
         current_revenue = orders.filter(
             created_at__gte=last_month,
-            # Only count delivered orders for revenue
-            order_status__in=['Delivered', 'Pending', 'Indrive']
-        ).aggregate(total=Sum('total_amount'))['total'] or 0
+            order_status__in=['Delivered', 'Pending',
+                              'Indrive', 'Processing', 'Sent to Dash']
+        ).exclude(order_status__in=excluded_statuses).aggregate(total=Sum('total_amount'))['total'] or 0
 
-        current_orders = orders.filter(created_at__gte=last_month).count()
+        current_orders = orders.filter(created_at__gte=last_month).exclude(
+            order_status__in=excluded_statuses).count()
         current_customers = customers.filter(
             date_joined__gte=last_month).count()
         current_products = products.count()
@@ -1578,14 +1593,16 @@ class DashboardStatsView(generics.GenericAPIView):
         previous_revenue = orders.filter(
             created_at__gte=previous_month,
             created_at__lt=last_month,
-            order_status__in=['Delivered', 'Pending', 'Indrive']
-        ).aggregate(total=Sum('total_amount'))['total'] or 0
+            order_status__in=['Delivered', 'Pending',
+                              'Indrive', 'Processing', 'Sent to Dash']
+        ).exclude(order_status__in=excluded_statuses).aggregate(total=Sum('total_amount'))['total'] or 0
 
         previous_orders = orders.filter(
             created_at__gte=previous_month,
             created_at__lt=last_month,
-            order_status__in=['Delivered', 'Pending', 'Indrive']
-        ).count()
+            order_status__in=['Delivered', 'Pending',
+                              'Indrive', 'Processing', 'Sent to Dash']
+        ).exclude(order_status__in=excluded_statuses).count()
 
         previous_customers = customers.filter(
             date_joined__gte=previous_month,
@@ -1647,21 +1664,26 @@ class RevenueByProductView(generics.GenericAPIView):
         filter_type = request.GET.get('filter')
         current_date = timezone.now()
 
+        # Define excluded statuses
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+
         # Filter orders based on user role
         if user.role == 'SuperAdmin':
             orders = Order.objects.filter(
-                order_status__in=['Delivered', 'Pending', 'Indrive'])
+                order_status__in=['Delivered', 'Pending', 'Indrive']
+            ).exclude(order_status__in=excluded_statuses)
         elif user.role == 'Distributor':
             franchises = Franchise.objects.filter(distributor=user.distributor)
             orders = Order.objects.filter(
                 franchise__in=franchises,
                 order_status__in=['Delivered', 'Pending', 'Indrive']
-            )
+            ).exclude(order_status__in=excluded_statuses)
         elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
             orders = Order.objects.filter(
                 franchise=user.franchise,
                 order_status__in=['Delivered', 'Pending', 'Indrive']
-            )
+            ).exclude(order_status__in=excluded_statuses)
         else:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
 
