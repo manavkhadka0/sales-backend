@@ -189,7 +189,7 @@ class SalesPersonListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
 
-        if user.role == 'Franchise':
+        if user.role in ['Franchise', 'Packaging']:
             # Get all sales persons for this franchise
             return CustomUser.objects.filter(
                 franchise=user.franchise,
