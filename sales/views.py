@@ -1060,6 +1060,10 @@ class TopSalespersonView(generics.ListAPIView):
         filter_type = self.request.GET.get('filter')
         current_date = timezone.now()
 
+        # Define excluded statuses
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+
         if user.role == 'SuperAdmin':
             salespersons = CustomUser.objects.filter(
                 factory=user.factory, role='SalesPerson')
@@ -1076,20 +1080,28 @@ class TopSalespersonView(generics.ListAPIView):
         if filter_type:
             if filter_type == 'daily':
                 start_date = current_date.date()
-                orders_filter = {'orders__created_at__date': start_date}
+                orders_filter = {
+                    'orders__created_at__date': start_date,
+                    'orders__order_status__not_in': excluded_statuses
+                }
             elif filter_type == 'weekly':
                 start_date = current_date - timezone.timedelta(days=7)
-                orders_filter = {'orders__created_at__gte': start_date}
+                orders_filter = {
+                    'orders__created_at__gte': start_date,
+                    'orders__order_status__not_in': excluded_statuses
+                }
             elif filter_type == 'monthly':
                 # Filter for current month only
                 orders_filter = {
                     'orders__created_at__year': current_date.year,
-                    'orders__created_at__month': current_date.month
+                    'orders__created_at__month': current_date.month,
+                    'orders__order_status__not_in': excluded_statuses
                 }
             else:
-                orders_filter = {}
+                orders_filter = {
+                    'orders__order_status__not_in': excluded_statuses}
         else:
-            orders_filter = {}
+            orders_filter = {'orders__order_status__not_in': excluded_statuses}
 
         salespersons = salespersons.annotate(
             sales_count=Count('orders', filter=models.Q(**orders_filter)),
@@ -1110,10 +1122,16 @@ class TopSalespersonView(generics.ListAPIView):
         filter_type = request.GET.get('filter', 'all')
         current_date = timezone.now()
 
+        # Define excluded statuses
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+
         for index, item in enumerate(data):
             salesperson = queryset[index]
 
-            orders_query = Order.objects.filter(sales_person=salesperson)
+            orders_query = Order.objects.filter(
+                sales_person=salesperson
+            ).exclude(order_status__in=excluded_statuses)
 
             if filter_type == 'daily':
                 orders_query = orders_query.filter(
