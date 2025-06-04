@@ -1060,6 +1060,10 @@ class TopSalespersonView(generics.ListAPIView):
         filter_type = self.request.GET.get('filter')
         current_date = timezone.now()
 
+        # Define excluded statuses
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+
         if user.role == 'SuperAdmin':
             salespersons = CustomUser.objects.filter(
                 factory=user.factory, role='SalesPerson')
@@ -1076,25 +1080,31 @@ class TopSalespersonView(generics.ListAPIView):
         if filter_type:
             if filter_type == 'daily':
                 start_date = current_date.date()
-                orders_filter = {'orders__created_at__date': start_date}
+                orders_filter = {
+                    'orders__created_at__date': start_date,
+                }
             elif filter_type == 'weekly':
                 start_date = current_date - timezone.timedelta(days=7)
-                orders_filter = {'orders__created_at__gte': start_date}
+                orders_filter = {
+                    'orders__created_at__gte': start_date,
+                }
             elif filter_type == 'monthly':
                 # Filter for current month only
                 orders_filter = {
                     'orders__created_at__year': current_date.year,
-                    'orders__created_at__month': current_date.month
+                    'orders__created_at__month': current_date.month,
                 }
             else:
                 orders_filter = {}
         else:
             orders_filter = {}
 
+        # Create base queryset with time filters
         salespersons = salespersons.annotate(
-            sales_count=Count('orders', filter=models.Q(**orders_filter)),
+            sales_count=Count('orders', filter=models.Q(
+                **orders_filter) & ~models.Q(orders__order_status__in=excluded_statuses)),
             total_sales=Sum('orders__total_amount',
-                            filter=models.Q(**orders_filter))
+                            filter=models.Q(**orders_filter) & ~models.Q(orders__order_status__in=excluded_statuses))
         ).filter(
             sales_count__gt=0,
             total_sales__gt=0
@@ -1110,10 +1120,16 @@ class TopSalespersonView(generics.ListAPIView):
         filter_type = request.GET.get('filter', 'all')
         current_date = timezone.now()
 
+        # Define excluded statuses
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+
         for index, item in enumerate(data):
             salesperson = queryset[index]
 
-            orders_query = Order.objects.filter(sales_person=salesperson)
+            orders_query = Order.objects.filter(
+                sales_person=salesperson
+            ).exclude(order_status__in=excluded_statuses)
 
             if filter_type == 'daily':
                 orders_query = orders_query.filter(
