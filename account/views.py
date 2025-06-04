@@ -180,3 +180,38 @@ class LogisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Logistics.objects.all()
     serializer_class = LogisticsSerializer
     lookup_field = 'id'
+
+
+class SalesPersonListView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = SmallUserSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.role == 'Franchise':
+            # Get all sales persons for this franchise
+            return CustomUser.objects.filter(
+                franchise=user.franchise,
+                role='SalesPerson',
+                is_active=True
+            )
+        elif user.role == 'Distributor':
+            # Get all sales persons for all franchises under this distributor
+            franchises = Franchise.objects.filter(distributor=user.distributor)
+            return CustomUser.objects.filter(
+                franchise__in=franchises,
+                role='SalesPerson',
+                is_active=True
+            )
+        elif user.role == 'SuperAdmin':
+            # Get all sales persons for all franchises under this factory
+            franchises = Franchise.objects.filter(
+                distributor__factory=user.factory)
+            return CustomUser.objects.filter(
+                franchise__in=franchises,
+                role='SalesPerson',
+                is_active=True
+            )
+
+        return CustomUser.objects.none()
