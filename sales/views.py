@@ -2061,6 +2061,11 @@ class SalesPersonStatisticsView(APIView):
             total_amount = orders.aggregate(
                 total=Sum('total_amount'))['total'] or 0
 
+            # Subtract delivery charges if present
+            delivery_charges = orders.aggregate(
+                total_delivery=Sum('delivery_charge'))['total_delivery'] or 0
+            total_amount = total_amount - delivery_charges
+
             # Get product-wise sales data
             product_sales = (
                 OrderProduct.objects.filter(order__in=orders)
@@ -2132,12 +2137,14 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                 try:
                     specific_date = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
+                    # For specific date without end date
                     revenue = (
                         base_queryset.filter(created_at__date=specific_date)
                         .values('created_at__date')
                         .annotate(
                             period=models.F('created_at__date'),
-                            total_revenue=Sum('total_amount', default=0),
+                            total_revenue=Sum(
+                                'total_amount', default=0) - Sum('delivery_charge', default=0),
                             order_count=Count('id')
                         )
                         .order_by('created_at__date')
@@ -2153,6 +2160,7 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                     specific_date = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
                     end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    # For date range
                     revenue = (
                         base_queryset.filter(
                             created_at__date__range=(specific_date, end_date)
@@ -2160,7 +2168,8 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                         .values('created_at__date')
                         .annotate(
                             period=models.F('created_at__date'),
-                            total_revenue=Sum('total_amount', default=0),
+                            total_revenue=Sum(
+                                'total_amount', default=0) - Sum('delivery_charge', default=0),
                             order_count=Count('id')
                         )
                         .order_by('created_at__date')
@@ -2172,6 +2181,7 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                     )
 
             elif filter_type == 'daily':
+                # For daily filter
                 revenue = (
                     base_queryset.filter(
                         created_at__year=today.year,
@@ -2180,41 +2190,48 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                     .values('date')
                     .annotate(
                         period=models.F('date'),
-                        total_revenue=Sum('total_amount', default=0),
+                        total_revenue=Sum(
+                            'total_amount', default=0) - Sum('delivery_charge', default=0),
                         order_count=Count('id')
                     )
                     .order_by('date')
                 )
 
             elif filter_type == 'weekly':
+                # For weekly filter
                 revenue = (
                     base_queryset.filter(created_at__year=today.year)
                     .annotate(period=TruncWeek('created_at'))
                     .values('period')
                     .annotate(
-                        total_revenue=Sum('total_amount', default=0),
+                        total_revenue=Sum(
+                            'total_amount', default=0) - Sum('delivery_charge', default=0),
                         order_count=Count('id')
                     )
                     .order_by('period')
                 )
 
             elif filter_type == 'yearly':
+                # For yearly filter
                 revenue = (
                     base_queryset.annotate(period=TruncYear('created_at'))
                     .values('period')
                     .annotate(
-                        total_revenue=Sum('total_amount', default=0),
+                        total_revenue=Sum(
+                            'total_amount', default=0) - Sum('delivery_charge', default=0),
                         order_count=Count('id')
                     )
                     .order_by('period')
                 )
 
             elif filter_type == 'monthly':
+                # For monthly filter
                 revenue = (
                     base_queryset.annotate(period=TruncMonth('created_at'))
                     .values('period')
                     .annotate(
-                        total_revenue=Sum('total_amount', default=0),
+                        total_revenue=Sum(
+                            'total_amount', default=0) - Sum('delivery_charge', default=0),
                         order_count=Count('id')
                     )
                     .order_by('period')
