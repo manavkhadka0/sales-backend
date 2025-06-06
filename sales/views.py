@@ -1081,18 +1081,18 @@ class TopSalespersonView(generics.ListAPIView):
             if filter_type == 'daily':
                 start_date = current_date.date()
                 orders_filter = {
-                    'orders__created_at__date': start_date,
+                    'orders__date': start_date,
                 }
             elif filter_type == 'weekly':
                 start_date = current_date - timezone.timedelta(days=7)
                 orders_filter = {
-                    'orders__created_at__gte': start_date,
+                    'orders__date__gte': start_date,
                 }
             elif filter_type == 'monthly':
                 # Filter for current month only
                 orders_filter = {
-                    'orders__created_at__year': current_date.year,
-                    'orders__created_at__month': current_date.month,
+                    'orders__date__year': current_date.year,
+                    'orders__date__month': current_date.month,
                 }
             else:
                 orders_filter = {}
@@ -1133,16 +1133,16 @@ class TopSalespersonView(generics.ListAPIView):
 
             if filter_type == 'daily':
                 orders_query = orders_query.filter(
-                    created_at__date=current_date.date())
+                    date=current_date.date())
             elif filter_type == 'weekly':
                 orders_query = orders_query.filter(
-                    created_at__gte=current_date - timezone.timedelta(days=7)
+                    date__gte=current_date - timezone.timedelta(days=7)
                 )
             elif filter_type == 'monthly':
                 # Filter for current month only
                 orders_query = orders_query.filter(
-                    created_at__year=current_date.year,
-                    created_at__month=current_date.month
+                    date__year=current_date.year,
+                    date__month=current_date.month
                 )
 
             product_sales = (
