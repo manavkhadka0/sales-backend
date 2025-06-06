@@ -956,13 +956,17 @@ class SalesStatisticsView(generics.GenericAPIView):
         yesterday = today - timezone.timedelta(days=1)
 
         # Get today's stats - no exclusions
-        daily_stats = queryset.filter(date=today).aggregate(
+        daily_stats = queryset.filter(date=today).exclude(
+            order_status__in=excluded_statuses
+        ).aggregate(
             total_orders=Count('id'),
             total_sales=Sum('total_amount')
         )
 
         # Get yesterday's stats - no exclusions
-        yesterday_stats = queryset.filter(date=yesterday).aggregate(
+        yesterday_stats = queryset.filter(date=yesterday).exclude(
+            order_status__in=excluded_statuses
+        ).aggregate(
             total_orders=Count('id'),
             total_sales=Sum('total_amount')
         )
@@ -1206,13 +1210,14 @@ class RevenueView(generics.ListAPIView):
             elif user.role in ['Franchise', 'Packaging']:
                 base_queryset = Order.objects.filter(franchise=user.franchise)
             elif user.role == 'SalesPerson':
-                base_queryset = Order.objects.filter(sales_person=user).exclude(
-                    order_status__in=excluded_statuses)
+                base_queryset = Order.objects.filter(sales_person=user)
             else:
                 return Response(
                     {"error": "Unauthorized access"},
                     status=status.HTTP_403_FORBIDDEN
                 )
+            base_queryset = base_queryset.exclude(
+                order_status__in=excluded_statuses)
 
             if filter_type == 'daily':
                 revenue = (
@@ -1281,128 +1286,6 @@ class RevenueView(generics.ListAPIView):
                 'data': response_data
             })
 
-        except Exception as e:
-            return Response(
-                {'error': f'Failed to fetch revenue data: {str(e)}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-
-class SalesPersonRevenueView(generics.GenericAPIView):
-
-    def get(self, request, phone_number):
-        try:
-            # Get the salesperson
-            salesperson = CustomUser.objects.get(phone_number=phone_number)
-
-            # Check if the user is a salesperson
-            if salesperson.role != 'SalesPerson':
-                return Response(
-                    {'error': 'User is not a salesperson'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-            filter_type = request.query_params.get(
-                'filter', 'daily')  # Default to daily
-            specific_date = request.query_params.get('date')
-
-            today = timezone.now().date()
-
-            # Base queryset for the specific salesperson
-            base_queryset = Order.objects.filter(sales_person=salesperson)
-
-            if specific_date:
-                try:
-                    specific_date = datetime.strptime(
-                        specific_date, '%Y-%m-%d').date()
-                    revenue = (
-                        base_queryset.filter(created_at__date=specific_date)
-                        .values('created_at__date')
-                        .annotate(
-                            period=models.F('created_at__date'),
-                            total_revenue=Sum('total_amount', default=0),
-                            order_count=Count('id')
-                        )
-                        .order_by('created_at__date')
-                    )
-                except ValueError:
-                    return Response(
-                        {'error': 'Invalid date format. Use YYYY-MM-DD'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-
-            elif filter_type == 'daily':
-                revenue = (
-                    base_queryset.filter(
-                        created_at__year=today.year,
-                        created_at__month=today.month
-                    )
-                    .values('date')
-                    .annotate(
-                        period=models.F('date'),
-                        total_revenue=Sum('total_amount', default=0),
-                        order_count=Count('id')
-                    )
-                    .order_by('date')
-                )
-
-            elif filter_type == 'weekly':
-                revenue = (
-                    base_queryset.filter(created_at__year=today.year)
-                    .annotate(period=TruncWeek('created_at'))
-                    .values('period')
-                    .annotate(
-                        total_revenue=Sum('total_amount', default=0),
-                        order_count=Count('id')
-                    )
-                    .order_by('period')
-                )
-
-            elif filter_type == 'yearly':
-                revenue = (
-                    base_queryset.annotate(period=TruncYear('created_at'))
-                    .values('period')
-                    .annotate(
-                        total_revenue=Sum('total_amount', default=0),
-                        order_count=Count('id')
-                    )
-                    .order_by('period')
-                )
-
-            elif filter_type == 'monthly':
-                revenue = (
-                    base_queryset.annotate(period=TruncMonth('created_at'))
-                    .values('period')
-                    .annotate(
-                        total_revenue=Sum('total_amount', default=0),
-                        order_count=Count('id')
-                    )
-                    .order_by('period')
-                )
-
-            # Format the response data
-            response_data = [{
-                'period': entry['period'].strftime('%Y-%m-%d') if filter_type == 'daily' or specific_date
-                else entry['period'].strftime(
-                    '%Y-%m-%d' if filter_type == 'weekly'
-                    else '%Y-%m' if filter_type == 'monthly'
-                    else '%Y'
-                ),
-                'total_revenue': float(entry['total_revenue']),
-                'order_count': entry['order_count']
-            } for entry in revenue]
-
-            return Response({
-                'filter_type': filter_type,
-                'specific_date': specific_date.strftime('%Y-%m-%d') if specific_date else None,
-                'data': response_data
-            })
-
-        except CustomUser.DoesNotExist:
-            return Response(
-                {'error': 'Salesperson not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
         except Exception as e:
             return Response(
                 {'error': f'Failed to fetch revenue data: {str(e)}'},
@@ -2116,6 +1999,10 @@ class InventoryCheckView(generics.GenericAPIView):
 class SalesPersonStatisticsView(APIView):
 
     def get(self, request, phone_number):
+
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+
         try:
             # Get the salesperson
             salesperson = CustomUser.objects.get(phone_number=phone_number)
@@ -2130,16 +2017,30 @@ class SalesPersonStatisticsView(APIView):
             # Get filter type and specific date from query params
             filter_type = request.query_params.get('filter', 'all')
             specific_date = request.query_params.get('date')
+            end_date = request.query_params.get('end_date')
 
             # Base queryset for orders
-            orders = Order.objects.filter(sales_person=salesperson)
+            orders = Order.objects.filter(sales_person=salesperson).exclude(
+                order_status__in=excluded_statuses)
 
             # Apply specific date filter if provided
-            if specific_date:
+            if specific_date and not end_date:
                 try:
                     specific_date = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
                     orders = orders.filter(created_at__date=specific_date)
+                except ValueError:
+                    return Response(
+                        {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            if specific_date and end_date:
+                try:
+                    specific_date = datetime.strptime(
+                        specific_date, '%Y-%m-%d').date()
+                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    orders = orders.filter(
+                        created_at__date__gte=specific_date, created_at__date__lte=end_date)
                 except ValueError:
                     return Response(
                         {'error': 'Invalid date format. Use YYYY-MM-DD'},
@@ -2197,4 +2098,153 @@ class SalesPersonStatisticsView(APIView):
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class SalesPersonRevenueView(generics.GenericAPIView):
+
+    def get(self, request, phone_number):
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+        try:
+            # Get the salesperson
+            salesperson = CustomUser.objects.get(phone_number=phone_number)
+
+            # Check if the user is a salesperson
+            if salesperson.role != 'SalesPerson':
+                return Response(
+                    {'error': 'User is not a salesperson'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            filter_type = request.query_params.get(
+                'filter', 'daily')  # Default to daily
+            specific_date = request.query_params.get('date')
+            end_date = request.query_params.get('end_date')
+
+            today = timezone.now().date()
+
+            # Base queryset for the specific salesperson
+            base_queryset = Order.objects.filter(sales_person=salesperson).exclude(
+                order_status__in=excluded_statuses)
+
+            if specific_date and not end_date:
+                try:
+                    specific_date = datetime.strptime(
+                        specific_date, '%Y-%m-%d').date()
+                    revenue = (
+                        base_queryset.filter(created_at__date=specific_date)
+                        .values('created_at__date')
+                        .annotate(
+                            period=models.F('created_at__date'),
+                            total_revenue=Sum('total_amount', default=0),
+                            order_count=Count('id')
+                        )
+                        .order_by('created_at__date')
+                    )
+                except ValueError:
+                    return Response(
+                        {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            elif specific_date and end_date:
+                try:
+                    specific_date = datetime.strptime(
+                        specific_date, '%Y-%m-%d').date()
+                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    revenue = (
+                        base_queryset.filter(
+                            created_at__date__range=(specific_date, end_date)
+                        )
+                        .values('created_at__date')
+                        .annotate(
+                            period=models.F('created_at__date'),
+                            total_revenue=Sum('total_amount', default=0),
+                            order_count=Count('id')
+                        )
+                        .order_by('created_at__date')
+                    )
+                except ValueError:
+                    return Response(
+                        {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            elif filter_type == 'daily':
+                revenue = (
+                    base_queryset.filter(
+                        created_at__year=today.year,
+                        created_at__month=today.month
+                    )
+                    .values('date')
+                    .annotate(
+                        period=models.F('date'),
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('date')
+                )
+
+            elif filter_type == 'weekly':
+                revenue = (
+                    base_queryset.filter(created_at__year=today.year)
+                    .annotate(period=TruncWeek('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+
+            elif filter_type == 'yearly':
+                revenue = (
+                    base_queryset.annotate(period=TruncYear('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+
+            elif filter_type == 'monthly':
+                revenue = (
+                    base_queryset.annotate(period=TruncMonth('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id')
+                    )
+                    .order_by('period')
+                )
+
+            # Format the response data
+            response_data = [{
+                'period': entry['period'].strftime('%Y-%m-%d') if filter_type == 'daily' or specific_date
+                else entry['period'].strftime(
+                    '%Y-%m-%d' if filter_type == 'weekly'
+                    else '%Y-%m' if filter_type == 'monthly'
+                    else '%Y'
+                ),
+                'total_revenue': float(entry['total_revenue']),
+                'order_count': entry['order_count']
+            } for entry in revenue]
+
+            return Response({
+                'filter_type': filter_type,
+                'specific_date': specific_date.strftime('%Y-%m-%d') if specific_date else None,
+                'data': response_data
+            })
+
+        except CustomUser.DoesNotExist:
+            return Response(
+                {'error': 'Salesperson not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch revenue data: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
             )
