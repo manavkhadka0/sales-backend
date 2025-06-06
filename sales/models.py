@@ -183,11 +183,10 @@ class Order(models.Model):
         max_digits=10, decimal_places=2, default=0, blank=True, null=True)
     delivery_type = models.CharField(
         max_length=255, choices=DELIVERY_ADDRESS_CHOICES, blank=True, null=True)
-    date = models.DateField(default=timezone.now, null=True, blank=True)
+    date = models.DateField(auto_now_add=True)
     prepaid_amount = models.DecimalField(
         max_digits=10, decimal_places=2, default=0, blank=True, null=True)
-    created_at = models.DateTimeField(
-        default=timezone.now, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     total_amount = models.DecimalField(
         max_digits=10, decimal_places=2, default=0)
