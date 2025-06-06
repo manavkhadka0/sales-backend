@@ -1186,11 +1186,14 @@ class RevenueView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-
         user = self.request.user
         filter_type = request.GET.get(
             'filter', 'monthly')  # Default to monthly
         today = timezone.now().date()
+
+        # Define excluded statuses
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
 
         try:
             # Base queryset based on user role
@@ -1203,7 +1206,8 @@ class RevenueView(generics.ListAPIView):
             elif user.role in ['Franchise', 'Packaging']:
                 base_queryset = Order.objects.filter(franchise=user.franchise)
             elif user.role == 'SalesPerson':
-                base_queryset = Order.objects.filter(sales_person=user)
+                base_queryset = Order.objects.filter(sales_person=user).exclude(
+                    order_status__in=excluded_statuses)
             else:
                 return Response(
                     {"error": "Unauthorized access"},
