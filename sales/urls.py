@@ -1,6 +1,6 @@
 # sales-backend/sales/urls.py
 from django.urls import path
-from .views import FranchiseInventoryListView, InventoryCheckView, InventoryListCreateView, LatestOrdersView, OrderDetailUpdateView, OrderListCreateView, OrderUpdateView, CommissionPaymentView, ProductListView, InventoryDetailView, InventoryChangeLogView, Inventorylogs, FactoryInventoryListView, DistributorInventoryListView, InventoryRequestView, InventoryRequestDetailView, AllProductsListView, RawMaterialListView, SalesPersonRevenueView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView, OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView, SalesPersonStatisticsView
+from .views import FranchiseInventoryListView, InventoryCheckView, InventoryListCreateView, LatestOrdersView, OrderDetailUpdateView, OrderListCreateView, OrderUpdateView, CommissionPaymentView, ProductListView, InventoryDetailView, InventoryChangeLogView, Inventorylogs, FactoryInventoryListView, DistributorInventoryListView, InventoryRequestView, InventoryRequestDetailView, AllProductsListView, RawMaterialListView, RevenueWithCancelledView, SalesPersonRevenueView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView, OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView, SalesPersonStatisticsView
 
 urlpatterns = [
     path('inventory/', InventoryListCreateView.as_view(), name='inventory-list'),
@@ -39,6 +39,7 @@ urlpatterns = [
     path('top-salespersons/', TopSalespersonView.as_view(),
          name='top-salespersons'),  # New URL for top salespersons
     path('revenue/', RevenueView.as_view(), name='revenue'),
+    path('revenue-with-cancelled/', RevenueWithCancelledView.as_view(), name='revenue-with-cancelled'),
     path('top-products/', TopProductsView.as_view(), name='top-products'),
     path('raw-materials/', RawMaterialListView.as_view(), name='raw-materials'),
     path('dashboard-stats/', DashboardStatsView.as_view(), name='dashboard-stats'),

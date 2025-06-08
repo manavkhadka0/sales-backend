@@ -2274,3 +2274,178 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                 {'error': f'Failed to fetch revenue data: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class RevenueWithCancelledView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = self.request.user
+        filter_type = request.GET.get('filter', 'daily')  # Default to daily
+        today = timezone.now().date()
+
+        # Define active order statuses
+        active_statuses = ['Pending', 'Processing',
+                           'Sent to Dash', 'Delivered', 'Indrive']
+
+        try:
+            # Base queryset based on user role
+            if user.role == 'SuperAdmin':
+                base_queryset = Order.objects.filter(factory=user.factory)
+            elif user.role == 'Distributor':
+                franchises = Franchise.objects.filter(
+                    distributor=user.distributor)
+                base_queryset = Order.objects.filter(franchise__in=franchises)
+            elif user.role in ['Franchise', 'Packaging']:
+                base_queryset = Order.objects.filter(franchise=user.franchise)
+            elif user.role == 'SalesPerson':
+                base_queryset = Order.objects.filter(sales_person=user)
+            else:
+                return Response(
+                    {"error": "Unauthorized access"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            if filter_type == 'daily':
+                revenue = (
+                    base_queryset.filter(
+                        created_at__year=today.year,
+                        created_at__month=today.month
+                    )
+                    .values('date')
+                    .annotate(
+                        period=models.F('date'),
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id'),
+                        cancelled_count=Count('id', filter=Q(order_status__in=[
+                            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending'])),
+                        active_count=Count('id', filter=Q(
+                            order_status__in=active_statuses)),
+                        # Add counts for each active status
+                        pending_count=Count(
+                            'id', filter=Q(order_status='Pending')),
+                        processing_count=Count(
+                            'id', filter=Q(order_status='Processing')),
+                        sent_to_dash_count=Count(
+                            'id', filter=Q(order_status='Sent to Dash')),
+                        delivered_count=Count(
+                            'id', filter=Q(order_status='Delivered')),
+                        indrive_count=Count(
+                            'id', filter=Q(order_status='Indrive'))
+                    )
+                    .order_by('date')
+                )
+
+            elif filter_type == 'weekly':
+                revenue = (
+                    base_queryset.filter(created_at__year=today.year)
+                    .annotate(period=TruncWeek('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id'),
+                        cancelled_count=Count('id', filter=Q(order_status__in=[
+                            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending'])),
+                        active_count=Count('id', filter=Q(
+                            order_status__in=active_statuses)),
+                        # Add counts for each active status
+                        pending_count=Count(
+                            'id', filter=Q(order_status='Pending')),
+                        processing_count=Count(
+                            'id', filter=Q(order_status='Processing')),
+                        sent_to_dash_count=Count(
+                            'id', filter=Q(order_status='Sent to Dash')),
+                        delivered_count=Count(
+                            'id', filter=Q(order_status='Delivered')),
+                        indrive_count=Count(
+                            'id', filter=Q(order_status='Indrive'))
+                    )
+                    .order_by('period')
+                )
+
+            elif filter_type == 'yearly':
+                revenue = (
+                    base_queryset.annotate(period=TruncYear('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id'),
+                        cancelled_count=Count('id', filter=Q(order_status__in=[
+                            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending'])),
+                        active_count=Count('id', filter=Q(
+                            order_status__in=active_statuses)),
+                        # Add counts for each active status
+                        pending_count=Count(
+                            'id', filter=Q(order_status='Pending')),
+                        processing_count=Count(
+                            'id', filter=Q(order_status='Processing')),
+                        sent_to_dash_count=Count(
+                            'id', filter=Q(order_status='Sent to Dash')),
+                        delivered_count=Count(
+                            'id', filter=Q(order_status='Delivered')),
+                        indrive_count=Count(
+                            'id', filter=Q(order_status='Indrive'))
+                    )
+                    .order_by('period')
+                )
+
+            else:  # Default is monthly
+                revenue = (
+                    base_queryset.annotate(period=TruncMonth('created_at'))
+                    .values('period')
+                    .annotate(
+                        total_revenue=Sum('total_amount', default=0),
+                        order_count=Count('id'),
+                        cancelled_count=Count('id', filter=Q(order_status__in=[
+                            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending'])),
+                        active_count=Count('id', filter=Q(
+                            order_status__in=active_statuses)),
+                        # Add counts for each active status
+                        pending_count=Count(
+                            'id', filter=Q(order_status='Pending')),
+                        processing_count=Count(
+                            'id', filter=Q(order_status='Processing')),
+                        sent_to_dash_count=Count(
+                            'id', filter=Q(order_status='Sent to Dash')),
+                        delivered_count=Count(
+                            'id', filter=Q(order_status='Delivered')),
+                        indrive_count=Count(
+                            'id', filter=Q(order_status='Indrive'))
+                    )
+                    .order_by('period')
+                )
+
+            # Format the response data
+            response_data = [{
+                'period': entry['period'].strftime('%Y-%m-%d') if filter_type == 'daily'
+                else entry['period'].strftime(
+                    '%Y-%m-%d' if filter_type == 'weekly'
+                    else '%Y-%m' if filter_type == 'monthly'
+                    else '%Y'
+                ),
+                'total_revenue': float(entry['total_revenue']),
+                'total_orders': entry['order_count'],
+                'cancelled_orders': entry['cancelled_count'],
+                'active_orders': {
+                    'total': entry['active_count'],
+                    'by_status': {
+                        'pending': entry['pending_count'],
+                        'processing': entry['processing_count'],
+                        'sent_to_dash': entry['sent_to_dash_count'],
+                        'delivered': entry['delivered_count'],
+                        'indrive': entry['indrive_count']
+                    }
+                }
+            } for entry in revenue]
+
+            return Response({
+                'filter_type': filter_type,
+                'user_role': user.role,
+                'data': response_data
+            })
+
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch revenue data: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
