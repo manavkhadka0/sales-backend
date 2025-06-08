@@ -971,12 +971,47 @@ class SalesStatisticsView(generics.GenericAPIView):
             total_sales=Sum('total_amount')
         )
 
-        # Get all-time stats - exclude cancelled and returned orders
-        all_time_stats = queryset.exclude(
-            order_status__in=excluded_statuses
-        ).aggregate(
-            total_orders=Count('id'),
-            total_sales=Sum('total_amount')
+        # Get all-time stats with status breakdown
+        all_time_stats = queryset.aggregate(
+            # Active orders and sales
+            all_time_orders=Count('id', filter=~Q(
+                order_status__in=excluded_statuses)),
+            all_time_sales=Sum('total_amount', filter=~Q(
+                order_status__in=excluded_statuses), default=0),
+
+            # Cancelled orders and sales totals
+            cancelled_orders_count=Count('id', filter=Q(
+                order_status__in=excluded_statuses)),
+            all_time_cancelled_sales=Sum('total_amount', filter=Q(
+                order_status__in=excluded_statuses), default=0),
+
+            # Status-specific counts for active orders
+            pending_count=Count('id', filter=Q(order_status='Pending')),
+            processing_count=Count('id', filter=Q(order_status='Processing')),
+            sent_to_dash_count=Count(
+                'id', filter=Q(order_status='Sent to Dash')),
+            delivered_count=Count('id', filter=Q(order_status='Delivered')),
+            indrive_count=Count('id', filter=Q(order_status='Indrive')),
+
+            # Status-specific counts and amounts for cancelled orders
+            cancelled_count=Count('id', filter=Q(order_status='Cancelled')),
+            cancelled_amount=Sum('total_amount', filter=Q(
+                order_status='Cancelled'), default=0),
+
+            returned_by_customer_count=Count(
+                'id', filter=Q(order_status='Returned By Customer')),
+            returned_by_customer_amount=Sum('total_amount', filter=Q(
+                order_status='Returned By Customer'), default=0),
+
+            returned_by_dash_count=Count(
+                'id', filter=Q(order_status='Returned By Dash')),
+            returned_by_dash_amount=Sum('total_amount', filter=Q(
+                order_status='Returned By Dash'), default=0),
+
+            return_pending_count=Count(
+                'id', filter=Q(order_status='Return Pending')),
+            return_pending_amount=Sum('total_amount', filter=Q(
+                order_status='Return Pending'), default=0)
         )
 
         return {
@@ -985,8 +1020,22 @@ class SalesStatisticsView(generics.GenericAPIView):
             'total_sales': daily_stats['total_sales'] or 0,
             'total_orders_yesterday': yesterday_stats['total_orders'] or 0,
             'total_sales_yesterday': yesterday_stats['total_sales'] or 0,
-            'all_time_orders': all_time_stats['total_orders'] or 0,
-            'all_time_sales': all_time_stats['total_sales'] or 0
+            'all_time_orders': all_time_stats['all_time_orders'] or 0,
+            'cancelled_orders_count': all_time_stats['cancelled_orders_count'] or 0,
+            'cancelled_orders': {
+                'cancelled': all_time_stats['cancelled_count'] or 0,
+                'returned_by_customer': all_time_stats['returned_by_customer_count'] or 0,
+                'returned_by_dash': all_time_stats['returned_by_dash_count'] or 0,
+                'return_pending': all_time_stats['return_pending_count'] or 0
+            },
+            'all_time_sales': float(all_time_stats['all_time_sales'] or 0),
+            'all_time_cancelled_sales': float(all_time_stats['all_time_cancelled_sales'] or 0),
+            'cancelled_amount': {
+                'cancelled': float(all_time_stats['cancelled_amount'] or 0),
+                'returned_by_customer': float(all_time_stats['returned_by_customer_amount'] or 0),
+                'returned_by_dash': float(all_time_stats['returned_by_dash_amount'] or 0),
+                'return_pending': float(all_time_stats['return_pending_amount'] or 0)
+            }
         }
 
     def get(self, request):
