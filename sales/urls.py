@@ -39,7 +39,8 @@ urlpatterns = [
     path('top-salespersons/', TopSalespersonView.as_view(),
          name='top-salespersons'),  # New URL for top salespersons
     path('revenue/', RevenueView.as_view(), name='revenue'),
-    path('revenue-with-cancelled/', RevenueWithCancelledView.as_view(), name='revenue-with-cancelled'),
+    path('revenue-with-cancelled/', RevenueWithCancelledView.as_view(),
+         name='revenue-with-cancelled'),
     path('top-products/', TopProductsView.as_view(), name='top-products'),
     path('raw-materials/', RawMaterialListView.as_view(), name='raw-materials'),
     path('dashboard-stats/', DashboardStatsView.as_view(), name='dashboard-stats'),
