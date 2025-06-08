@@ -944,7 +944,7 @@ class AllProductsListView(generics.ListCreateAPIView):
 
 
 class SalesStatisticsView(generics.GenericAPIView):
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_stats_for_queryset(self, queryset, today):
         """Helper method to get statistics for a queryset"""
@@ -2107,7 +2107,6 @@ class SalesPersonStatisticsView(APIView):
 
 
 class SalesPersonRevenueView(generics.GenericAPIView):
-
     def get(self, request, phone_number):
         excluded_statuses = [
             'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
@@ -2122,22 +2121,19 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-            filter_type = request.query_params.get(
-                'filter', 'daily')  # Default to daily
+            filter_type = request.query_params.get('filter', 'daily')
             specific_date = request.query_params.get('date')
             end_date = request.query_params.get('end_date')
 
             today = timezone.now().date()
 
             # Base queryset for the specific salesperson
-            base_queryset = Order.objects.filter(sales_person=salesperson).exclude(
-                order_status__in=excluded_statuses)
+            base_queryset = Order.objects.filter(sales_person=salesperson)
 
             if specific_date and not end_date:
                 try:
                     specific_date = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
-                    # For specific date without end date
                     revenue = (
                         base_queryset.filter(created_at__date=specific_date)
                         .values('created_at__date')
@@ -2145,7 +2141,10 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                             period=models.F('created_at__date'),
                             total_revenue=Sum(
                                 'total_amount', default=0) - Sum('delivery_charge', default=0),
-                            order_count=Count('id')
+                            order_count=Count('id', filter=~Q(
+                                order_status__in=excluded_statuses)),
+                            cancelled_count=Count('id', filter=Q(
+                                order_status__in=excluded_statuses))
                         )
                         .order_by('created_at__date')
                     )
@@ -2160,17 +2159,18 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                     specific_date = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
                     end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-                    # For date range
                     revenue = (
                         base_queryset.filter(
-                            created_at__date__range=(specific_date, end_date)
-                        )
+                            created_at__date__range=(specific_date, end_date))
                         .values('created_at__date')
                         .annotate(
                             period=models.F('created_at__date'),
                             total_revenue=Sum(
                                 'total_amount', default=0) - Sum('delivery_charge', default=0),
-                            order_count=Count('id')
+                            order_count=Count('id', filter=~Q(
+                                order_status__in=excluded_statuses)),
+                            cancelled_count=Count('id', filter=Q(
+                                order_status__in=excluded_statuses))
                         )
                         .order_by('created_at__date')
                     )
@@ -2181,7 +2181,6 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                     )
 
             elif filter_type == 'daily':
-                # For daily filter
                 revenue = (
                     base_queryset.filter(
                         created_at__year=today.year,
@@ -2192,13 +2191,15 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                         period=models.F('date'),
                         total_revenue=Sum(
                             'total_amount', default=0) - Sum('delivery_charge', default=0),
-                        order_count=Count('id')
+                        order_count=Count('id', filter=~Q(
+                            order_status__in=excluded_statuses)),
+                        cancelled_count=Count('id', filter=Q(
+                            order_status__in=excluded_statuses))
                     )
                     .order_by('date')
                 )
 
             elif filter_type == 'weekly':
-                # For weekly filter
                 revenue = (
                     base_queryset.filter(created_at__year=today.year)
                     .annotate(period=TruncWeek('created_at'))
@@ -2206,33 +2207,40 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                     .annotate(
                         total_revenue=Sum(
                             'total_amount', default=0) - Sum('delivery_charge', default=0),
-                        order_count=Count('id')
+                        order_count=Count('id', filter=~Q(
+                            order_status__in=excluded_statuses)),
+                        cancelled_count=Count('id', filter=Q(
+                            order_status__in=excluded_statuses))
                     )
                     .order_by('period')
                 )
 
             elif filter_type == 'yearly':
-                # For yearly filter
                 revenue = (
                     base_queryset.annotate(period=TruncYear('created_at'))
                     .values('period')
                     .annotate(
                         total_revenue=Sum(
                             'total_amount', default=0) - Sum('delivery_charge', default=0),
-                        order_count=Count('id')
+                        order_count=Count('id', filter=~Q(
+                            order_status__in=excluded_statuses)),
+                        cancelled_count=Count('id', filter=Q(
+                            order_status__in=excluded_statuses))
                     )
                     .order_by('period')
                 )
 
             elif filter_type == 'monthly':
-                # For monthly filter
                 revenue = (
                     base_queryset.annotate(period=TruncMonth('created_at'))
                     .values('period')
                     .annotate(
                         total_revenue=Sum(
                             'total_amount', default=0) - Sum('delivery_charge', default=0),
-                        order_count=Count('id')
+                        order_count=Count('id', filter=~Q(
+                            order_status__in=excluded_statuses)),
+                        cancelled_count=Count('id', filter=Q(
+                            order_status__in=excluded_statuses))
                     )
                     .order_by('period')
                 )
@@ -2246,7 +2254,8 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                     else '%Y'
                 ),
                 'total_revenue': float(entry['total_revenue']),
-                'order_count': entry['order_count']
+                'order_count': entry['order_count'],
+                'cancelled_count': entry['cancelled_count']
             } for entry in revenue]
 
             return Response({
