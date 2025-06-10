@@ -19,6 +19,7 @@ from django.db.models.functions import TruncMonth, TruncWeek, TruncYear
 from django.http import HttpResponse
 import csv
 import openpyxl
+import io
 from datetime import datetime
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from rest_framework.views import APIView
@@ -2446,6 +2447,7 @@ class LocationSearchAPIView(generics.ListAPIView):
 
 class LocationUploadView(APIView):
     serializer_class = FileUploadSerializer
+
     def post(self, request):
         uploaded_file = request.FILES.get('file')
         if not uploaded_file:
