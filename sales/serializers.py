@@ -1,6 +1,6 @@
 from django.utils import timezone
 from rest_framework import serializers
-from .models import Inventory, Order, OrderProduct, Product, InventoryChangeLog, InventoryRequest, PromoCode
+from .models import Inventory, Order, OrderProduct, Product, InventoryChangeLog, InventoryRequest, PromoCode, Location
 from account.models import CustomUser, Logistics
 from account.serializers import SmallUserSerializer, UserSmallSerializer
 
@@ -140,18 +140,28 @@ class OrderSerializer(serializers.ModelSerializer):
         allow_null=True,
         write_only=True
     )
+    dash_location = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(),
+        required=False,
+        allow_null=True,
+        write_only=True
+    )
+    dash_location_name = serializers.SerializerMethodField(read_only=True)
     logistics_name = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Order
         fields = ['id', 'sales_person', 'full_name', 'city', 'delivery_address', 'landmark',
-                  'phone_number', 'alternate_phone_number', 'payment_method',
+                  'phone_number', 'alternate_phone_number', 'payment_method', 'dash_location',
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at',
                   'order_products', 'total_amount', 'delivery_charge', 'remarks', 'promo_code',
-                  'prepaid_amount', 'delivery_type', 'logistics', 'logistics_name']
+                  'prepaid_amount', 'delivery_type', 'logistics', 'logistics_name', 'dash_location_name']
 
     def get_logistics_name(self, obj):
         return obj.logistics.name if obj.logistics else None
+
+    def get_dash_location_name(self, obj):
+        return obj.dash_location.name if obj.dash_location else None
 
     def create(self, validated_data):
         order_products_data = validated_data.pop('order_products', [])
@@ -322,3 +332,13 @@ class SalesPersonStatisticsSerializer(serializers.Serializer):
     total_orders = serializers.IntegerField()
     total_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     product_sales = ProductSalesSerializer(many=True)
+
+
+class LocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Location
+        fields = ['id', 'name', 'coverage_areas']
+
+
+class FileUploadSerializer(serializers.Serializer):
+    file = serializers.FileField()

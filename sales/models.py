@@ -3,6 +3,12 @@ from account.models import Logistics
 from django.utils import timezone
 # Create your models here.
 
+class Location(models.Model):
+    name = models.CharField(max_length=100)
+    coverage_areas = models.JSONField(default=list)  # Stores list of strings
+
+    def __str__(self):
+        return self.name
 
 class Inventory(models.Model):
     STATUS_CHOICES = [
@@ -166,6 +172,8 @@ class Order(models.Model):
         'account.Factory', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
     sales_person = models.ForeignKey(
         'account.CustomUser', on_delete=models.CASCADE, related_name='orders')
+    dash_location = models.ForeignKey(
+        'sales.Location', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
     full_name = models.CharField(max_length=200)
     city = models.CharField(max_length=200, blank=True)
     delivery_address = models.CharField(max_length=200)

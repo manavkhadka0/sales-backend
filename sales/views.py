@@ -1,11 +1,9 @@
-from django.forms import DecimalField
-from django.shortcuts import render
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 
-from .models import Inventory, Order, Commission, Product, InventoryChangeLog, InventoryRequest, OrderProduct, PromoCode
+from .models import Inventory, Order, Commission, Product, InventoryChangeLog, InventoryRequest, OrderProduct, PromoCode, Location
 from account.models import CustomUser, Distributor, Franchise, Factory
-from .serializers import InventorySerializer, OrderSerializer, ProductSerializer, InventoryChangeLogSerializer, InventoryRequestSerializer, RawMaterialSerializer, TopSalespersonSerializer, PromoCodeSerializer, SalesPersonStatisticsSerializer
+from .serializers import InventorySerializer, OrderSerializer, ProductSerializer, InventoryChangeLogSerializer, InventoryRequestSerializer, RawMaterialSerializer, TopSalespersonSerializer, PromoCodeSerializer, SalesPersonStatisticsSerializer, LocationSerializer, FileUploadSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth.models import User
@@ -20,7 +18,8 @@ from django.db import models
 from django.db.models.functions import TruncMonth, TruncWeek, TruncYear
 from django.http import HttpResponse
 import csv
-from datetime import datetime, timedelta
+import openpyxl
+from datetime import datetime
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from rest_framework.views import APIView
 
@@ -403,6 +402,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 'delivery_type': request.data.get('delivery_type'),
                 'force_order': request.data.get('force_order'),
                 'logistics': request.data.get('logistics'),
+                'dash_location': request.data.get('dash_location'),
                 'order_products': order_products
             }
 
@@ -1783,7 +1783,7 @@ class OrderCSVExportView(generics.GenericAPIView):
                     order.full_name,  # Customer Name
                     order.phone_number,  # Contact Number
                     order.alternate_phone_number or '',  # Alternative Number
-                    '',
+                    order.dash_location.name if order.dash_location else '',
                     '',
                     order.delivery_address,  # Address
                     '',
@@ -1900,7 +1900,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
             fields_to_check = [
                 'full_name', 'city', 'delivery_address', 'landmark',
                 'phone_number', 'alternate_phone_number', 'delivery_charge',
-                'payment_method', 'total_amount', 'promo_code', 'remarks',
+                'payment_method', 'total_amount', 'promo_code', 'remarks', 'dash_location',
                 'prepaid_amount', 'delivery_type', 'created_at', 'updated_at',
             ]
 
@@ -2417,3 +2417,103 @@ class RevenueWithCancelledView(generics.ListAPIView):
                 {'error': f'Failed to fetch revenue data: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class SearchInJSONFieldFilter(DjangoFilterBackend):
+    def filter_queryset(self, request, queryset, view):
+        search_query = request.query_params.get('search', '').strip().lower()
+        if not search_query:
+            return queryset
+
+        filtered_queryset = []
+
+        for location in queryset:
+            match_in_name = search_query in location.name.lower()
+            match_in_coverage = any(search_query in area.lower()
+                                    for area in location.coverage_areas)
+
+            if match_in_name or match_in_coverage:
+                filtered_queryset.append(location)
+
+        return filtered_queryset
+
+
+class LocationSearchAPIView(generics.ListAPIView):
+    queryset = Location.objects.all()
+    serializer_class = LocationSerializer
+    filter_backends = [SearchInJSONFieldFilter]
+
+
+class LocationUploadView(APIView):
+    serializer_class = FileUploadSerializer
+    def post(self, request):
+        uploaded_file = request.FILES.get('file')
+        if not uploaded_file:
+            return Response({'error': 'No file provided'}, status=400)
+
+        filename = uploaded_file.name.lower()
+
+        try:
+            # Initialize storage for parsed rows
+            rows = []
+            if filename.endswith('.xlsx'):
+                # Read Excel file in-memory
+                wb = openpyxl.load_workbook(uploaded_file, read_only=True)
+                sheet = wb.active
+                headers = [cell.value for cell in sheet[1]]
+
+                loc_idx = headers.index("Location Name")
+                area_idx = headers.index("Coverage Area")
+
+                for row in sheet.iter_rows(min_row=2, values_only=True):
+                    rows.append([row[loc_idx], row[area_idx]])
+
+            elif filename.endswith('.csv'):
+                # Read CSV file in-memory
+                decoded_file = uploaded_file.read().decode('utf-8')
+                io_string = io.StringIO(decoded_file)
+                reader = csv.reader(io_string)
+                headers = next(reader)
+
+                loc_idx = headers.index("Location Name")
+                area_idx = headers.index("Coverage Area")
+
+                for row in reader:
+                    rows.append([row[loc_idx], row[area_idx]])
+
+            else:
+                return Response({'error': 'Unsupported file type. Use .xlsx or .csv'}, status=400)
+
+        except Exception as e:
+            return Response({'error': f"Failed to process file: {str(e)}"}, status=400)
+
+        # Save to DB
+        created, updated = 0, 0
+        for location_name, coverage_raw in rows:
+            if not location_name or not coverage_raw:
+                continue
+
+            location_name = str(location_name).strip()
+            coverage_list = [area.strip() for area in str(
+                coverage_raw).split(',') if area.strip()]
+
+            location, is_created = Location.objects.get_or_create(
+                name=location_name)
+
+            if is_created:
+                location.coverage_areas = coverage_list
+                created += 1
+            else:
+                # Merge new areas without duplicates
+                merged = list(set(location.coverage_areas + coverage_list))
+                if merged != location.coverage_areas:
+                    location.coverage_areas = merged
+                    updated += 1
+
+            location.save()
+
+        return Response({
+            "message": "Upload successful",
+            "locations_created": created,
+            "locations_updated": updated
+        }, status=201)
