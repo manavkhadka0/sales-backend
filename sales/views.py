@@ -2111,11 +2111,6 @@ class SalesPersonStatisticsView(APIView):
             total_amount = orders.aggregate(
                 total=Sum('total_amount'))['total'] or 0
 
-            # Subtract delivery charges if present
-            delivery_charges = orders.aggregate(
-                total_delivery=Sum('delivery_charge'))['total_delivery'] or 0
-            total_amount = total_amount - delivery_charges
-
             # Get product-wise sales data
             product_sales = (
                 OrderProduct.objects.filter(order__in=orders)
