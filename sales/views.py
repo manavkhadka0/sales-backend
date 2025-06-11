@@ -1049,11 +1049,9 @@ class SalesStatisticsView(generics.GenericAPIView):
 
         if user.role == 'SuperAdmin':
             if franchise:
-                queryset = Order.objects.filter(
-                    factory=user.factory, franchise=franchise)
+                queryset = Order.objects.filter(franchise=franchise)
             elif distributor:
-                queryset = Order.objects.filter(
-                    factory=user.factory, distributor=distributor)
+                queryset = Order.objects.filter(distributor=distributor)
             else:
                 queryset = Order.objects.filter(factory=user.factory)
         elif user.role == 'Distributor':
