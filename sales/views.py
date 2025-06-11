@@ -950,7 +950,6 @@ class SalesStatisticsView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_stats_for_queryset(self, queryset, today):
-
         """Helper method to get statistics for a queryset"""
         # Define excluded statuses
         excluded_statuses = [
@@ -1043,16 +1042,18 @@ class SalesStatisticsView(generics.GenericAPIView):
         }
 
     def get(self, request):
-        franchise= self.request.query_params.get('franchise')
-        distributor= self.request.query_params.get('distributor')
+        franchise = self.request.query_params.get('franchise')
+        distributor = self.request.query_params.get('distributor')
         user = self.request.user
         today = timezone.now().date()
 
         if user.role == 'SuperAdmin':
             if franchise:
-                queryset = Order.objects.filter(factory=user.factory,franchise=franchise)
+                queryset = Order.objects.filter(
+                    factory=user.factory, franchise=franchise)
             elif distributor:
-                queryset = Order.objects.filter(factory=user.factory,distributor=distributor)
+                queryset = Order.objects.filter(
+                    factory=user.factory, distributor=distributor)
             else:
                 queryset = Order.objects.filter(factory=user.factory)
         elif user.role == 'Distributor':
@@ -1120,8 +1121,8 @@ class TopSalespersonView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        franchise= self.request.query_params.get('franchise')
-        distributor= self.request.query_params.get('distributor')
+        franchise = self.request.query_params.get('franchise')
+        distributor = self.request.query_params.get('distributor')
         user = self.request.user
         filter_type = self.request.GET.get('filter')
         current_date = timezone.now()
@@ -1259,8 +1260,8 @@ class RevenueView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        franchise= self.request.query_params.get('franchise')
-        distributor= self.request.query_params.get('distributor')
+        franchise = self.request.query_params.get('franchise')
+        distributor = self.request.query_params.get('distributor')
         user = self.request.user
         filter_type = request.GET.get(
             'filter', 'monthly')  # Default to monthly
@@ -1274,9 +1275,11 @@ class RevenueView(generics.ListAPIView):
             # Base queryset based on user role
             if user.role == 'SuperAdmin':
                 if franchise:
-                    base_queryset = Order.objects.filter(factory=user.factory, franchise=franchise)
+                    base_queryset = Order.objects.filter(
+                        factory=user.factory, franchise=franchise)
                 elif distributor:
-                    base_queryset = Order.objects.filter(factory=user.factory, distributor=distributor)
+                    base_queryset = Order.objects.filter(
+                        factory=user.factory, distributor=distributor)
                 else:
                     base_queryset = Order.objects.filter(factory=user.factory)
             elif user.role == 'Distributor':
@@ -1374,8 +1377,8 @@ class TopProductsView(generics.ListAPIView):
 
     def get(self, request, *args, **kwargs):
         try:
-            franchise= self.request.query_params.get('franchise')
-            distributor= self.request.query_params.get('distributor')
+            franchise = self.request.query_params.get('franchise')
+            distributor = self.request.query_params.get('distributor')
             user = self.request.user
             filter_type = request.GET.get('filter')
             current_date = timezone.now()
@@ -1389,34 +1392,40 @@ class TopProductsView(generics.ListAPIView):
                 if franchise:
                     base_query = OrderProduct.objects.filter(
                         order__factory=user.factory, order__franchise=franchise,
-                        order__order_status__in=['Delivered', 'Pending', 'Indrive','Sent to Dash','Processing']
+                        order__order_status__in=[
+                            'Delivered', 'Pending', 'Indrive', 'Sent to Dash', 'Processing']
                     ).exclude(order__order_status__in=excluded_statuses)
                 elif distributor:
                     base_query = OrderProduct.objects.filter(
                         order__factory=user.factory, order__distributor=distributor,
-                        order__order_status__in=['Delivered', 'Pending', 'Indrive','Sent to Dash','Processing']
+                        order__order_status__in=[
+                            'Delivered', 'Pending', 'Indrive', 'Sent to Dash', 'Processing']
                     ).exclude(order__order_status__in=excluded_statuses)
                 else:
                     base_query = OrderProduct.objects.filter(
                         order__factory=user.factory,
-                        order__order_status__in=['Delivered', 'Pending', 'Indrive','Sent to Dash','Processing']
+                        order__order_status__in=[
+                            'Delivered', 'Pending', 'Indrive', 'Sent to Dash', 'Processing']
                     ).exclude(order__order_status__in=excluded_statuses)
             elif user.role == 'Distributor':
                 franchises = Franchise.objects.filter(
                     distributor=user.distributor)
                 base_query = OrderProduct.objects.filter(
                     order__franchise__in=franchises,
-                    order__order_status__in=['Delivered', 'Pending', 'Indrive','Sent to Dash','Processing']
+                    order__order_status__in=[
+                        'Delivered', 'Pending', 'Indrive', 'Sent to Dash', 'Processing']
                 ).exclude(order__order_status__in=excluded_statuses)
             elif user.role in ['Franchise', 'Packaging']:
                 base_query = OrderProduct.objects.filter(
                     order__franchise=user.franchise,
-                    order__order_status__in=['Delivered', 'Pending', 'Indrive','Sent to Dash','Processing']
+                    order__order_status__in=[
+                        'Delivered', 'Pending', 'Indrive', 'Sent to Dash', 'Processing']
                 ).exclude(order__order_status__in=excluded_statuses)
             elif user.role == 'SalesPerson':
                 base_query = OrderProduct.objects.filter(
                     order__sales_person=user,
-                    order__order_status__in=['Delivered', 'Pending', 'Indrive','Sent to Dash','Processing']
+                    order__order_status__in=[
+                        'Delivered', 'Pending', 'Indrive', 'Sent to Dash', 'Processing']
                 ).exclude(order__order_status__in=excluded_statuses)
             else:
                 return Response(
@@ -1677,18 +1686,21 @@ class RevenueByProductView(generics.GenericAPIView):
                 orders = Order.objects.filter(distributor=distributor)
             else:
                 orders = Order.objects.filter(
-                    order_status__in=['Delivered', 'Pending', 'Indrive','Sent to Dash','Processing']
+                    order_status__in=['Delivered', 'Pending',
+                                      'Indrive', 'Sent to Dash', 'Processing']
                 ).exclude(order_status__in=excluded_statuses)
         elif user.role == 'Distributor':
             franchises = Franchise.objects.filter(distributor=user.distributor)
             orders = Order.objects.filter(
                 franchise__in=franchises,
-                order_status__in=['Delivered', 'Pending', 'Indrive','Sent to Dash','Processing']
+                order_status__in=['Delivered', 'Pending',
+                                  'Indrive', 'Sent to Dash', 'Processing']
             ).exclude(order_status__in=excluded_statuses)
         elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
             orders = Order.objects.filter(
                 franchise=user.franchise,
-                order_status__in=['Delivered', 'Pending', 'Indrive','Sent to Dash','Processing']
+                order_status__in=['Delivered', 'Pending',
+                                  'Indrive', 'Sent to Dash', 'Processing']
             ).exclude(order_status__in=excluded_statuses)
         else:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
@@ -2045,61 +2057,92 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
 class InventoryCheckView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
+    def _get_low_quantity_items(self, inventory_queryset, critical_threshold=50):
+        """Helper method to get low quantity items from inventory queryset"""
+        low_quantity_items = []
+        for item in inventory_queryset:
+            if item.quantity < critical_threshold:
+                low_quantity_items.append({
+                    'product_name': item.product.name,
+                    'quantity': item.quantity,
+                    'status': 'critical' if item.quantity <= 25 else 'low',
+                })
+        return sorted(low_quantity_items, key=lambda x: x['quantity'])
+
+    def _format_inventory_response(self, low_quantity_items):
+        """Helper method to format inventory response"""
+        return {
+            'low_quantity_items': low_quantity_items,
+            'total_low_items': len(low_quantity_items)
+        }
+
+    def _get_inventory_by_owner(self, owner_type, owner):
+        """Helper method to get inventory by owner type"""
+        return Inventory.objects.filter(**{owner_type: owner})
+
     def get(self, request):
         franchise = request.query_params.get('franchise')
         distributor = request.query_params.get('distributor')
         user = self.request.user
-        critical_threshold = 50  # Define critical threshold for inventory
+        critical_threshold = 50
 
         try:
             if user.role == 'SuperAdmin':
-                if franchise:
-                    inventory_items = Inventory.objects.filter(
-                        franchise=franchise,
-                    )
-                elif distributor:
-                    inventory_items = Inventory.objects.filter(
-                        distributor=distributor,
-                    )
-                else:
-                    inventory_items = Inventory.objects.filter(
-                        factory=user.factory,
-                    )
+                response_data = {
+                    'factory': {'low_quantity_items': [], 'total_low_items': 0},
+                    'distributors': {},
+                    'franchises': {}
+                }
+
+                # Get factory inventory
+                factory_inventory = self._get_inventory_by_owner(
+                    'factory', user.factory)
+                factory_low_items = self._get_low_quantity_items(
+                    factory_inventory, critical_threshold)
+                response_data['factory'].update(
+                    self._format_inventory_response(factory_low_items))
+
+                # Get distributor inventory
+                for dist in Distributor.objects.all():
+                    dist_inventory = self._get_inventory_by_owner(
+                        'distributor', dist)
+                    dist_low_items = self._get_low_quantity_items(
+                        dist_inventory, critical_threshold)
+                    if dist_low_items:
+                        response_data['distributors'][dist.name] = self._format_inventory_response(
+                            dist_low_items)
+
+                # Get franchise inventory
+                for fran in Franchise.objects.all():
+                    fran_inventory = self._get_inventory_by_owner(
+                        'franchise', fran)
+                    fran_low_items = self._get_low_quantity_items(
+                        fran_inventory, critical_threshold)
+                    if fran_low_items:
+                        response_data['franchises'][fran.name] = self._format_inventory_response(
+                            fran_low_items)
+
+                return Response(response_data)
+
             elif user.role == 'Distributor':
-                # Check distributor inventory
-                inventory_items = Inventory.objects.filter(
-                    distributor=user.distributor,
-                )
+                inventory_items = self._get_inventory_by_owner(
+                    'distributor', user.distributor)
+                low_quantity_items = self._get_low_quantity_items(
+                    inventory_items, critical_threshold)
+                return Response(self._format_inventory_response(low_quantity_items))
+
             elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
-                # Check franchise inventory
-                inventory_items = Inventory.objects.filter(
-                    franchise=user.franchise,
-                )
+                inventory_items = self._get_inventory_by_owner(
+                    'franchise', user.franchise)
+                low_quantity_items = self._get_low_quantity_items(
+                    inventory_items, critical_threshold)
+                return Response(self._format_inventory_response(low_quantity_items))
+
             else:
                 return Response(
                     {"error": "Unauthorized access"},
                     status=status.HTTP_403_FORBIDDEN
                 )
-
-            # Get inventory items with low quantity
-            low_quantity_items = []
-            for item in inventory_items:
-                if item.quantity < critical_threshold:
-                    low_quantity_items.append({
-                        'product_name': item.product.name,
-                        'quantity': item.quantity,
-                        'status': 'critical' if item.quantity <= 25 else 'low',
-                    })
-
-            # Sort items by quantity (lowest first)
-            low_quantity_items.sort(key=lambda x: x['quantity'])
-
-            response_data = {
-                'low_quantity_items': low_quantity_items,
-                'total_low_items': len(low_quantity_items),
-            }
-
-            return Response(response_data)
 
         except Exception as e:
             return Response(
@@ -2359,8 +2402,8 @@ class RevenueWithCancelledView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        franchise= self.request.query_params.get('franchise')
-        distributor= self.request.query_params.get('distributor')
+        franchise = self.request.query_params.get('franchise')
+        distributor = self.request.query_params.get('distributor')
         user = self.request.user
         filter_type = request.GET.get('filter', 'daily')  # Default to daily
         today = timezone.now().date()
@@ -2375,9 +2418,11 @@ class RevenueWithCancelledView(generics.ListAPIView):
             # Base queryset based on user role
             if user.role == 'SuperAdmin':
                 if franchise:
-                    base_queryset = Order.objects.filter(factory=user.factory, franchise=franchise)
+                    base_queryset = Order.objects.filter(
+                        factory=user.factory, franchise=franchise)
                 elif distributor:
-                    base_queryset = Order.objects.filter(factory=user.factory, distributor=distributor)
+                    base_queryset = Order.objects.filter(
+                        factory=user.factory, distributor=distributor)
                 else:
                     base_queryset = Order.objects.filter(factory=user.factory)
             elif user.role == 'Distributor':
