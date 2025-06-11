@@ -39,7 +39,7 @@ class UserListView(APIView):
     def get(self, request):
         user = request.user
         if user.role == 'SuperAdmin':
-            users = CustomUser.objects.all(factory=user.factory)
+            users = CustomUser.objects.filter(factory=user.factory)
             serializer = CustomUserSerializer(users, many=True)
         elif user.role == 'Distributor':
             users = CustomUser.objects.filter(role__in=['SalesPerson', 'Treatment Staff', 'Packaging', 'Franchise'],
