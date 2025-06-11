@@ -1055,7 +1055,7 @@ class SalesStatisticsView(generics.GenericAPIView):
             elif distributor:
                 queryset = Order.objects.filter(distributor=distributor)
             else:
-                queryset = Order.objects.all()
+                queryset = Order.objects.filter(factory=user.factory)
         elif user.role == 'Distributor':
             franchises = Franchise.objects.filter(distributor=user.distributor)
             queryset = Order.objects.filter(franchise__in=franchises)
@@ -2626,76 +2626,3 @@ class LocationUploadView(APIView):
             "locations_created": created,
             "locations_updated": updated
         }, status=201)
-
-
-class FixOrderRelationshipsView(APIView):
-
-    def get(self, request):
-        # Get orders that are missing distributor or factory
-        orders = Order.objects.filter(
-            # Case 1: Has franchise but no distributor
-            Q(franchise__isnull=False, distributor__isnull=True) |
-            # Case 2: Has distributor but no factory
-            Q(distributor__isnull=False, factory__isnull=True)
-        )
-
-        fixed_count = 0
-        skipped_count = 0
-        error_count = 0
-        fixed_orders = []
-        error_orders = []
-
-        for order in orders:
-            try:
-                with transaction.atomic():
-                    original_state = {
-                        'distributor': order.distributor_id,
-                        'factory': order.factory_id
-                    }
-
-                    # Case 1: If franchise exists but distributor is missing
-                    if order.franchise and not order.distributor:
-                        order.distributor = order.franchise.distributor
-
-                    # Case 2: If distributor exists but factory is missing
-                    if order.distributor and not order.factory:
-                        order.factory = order.distributor.factory
-
-                    # Save the order if any changes were made
-                    if (order.distributor_id != original_state['distributor'] or
-                            order.factory_id != original_state['factory']):
-                        order.save()
-                        fixed_count += 1
-                        fixed_orders.append({
-                            'order_id': order.id,
-                            'changes': {
-                                'distributor': {
-                                    'from': original_state['distributor'],
-                                    'to': order.distributor_id
-                                },
-                                'factory': {
-                                    'from': original_state['factory'],
-                                    'to': order.factory_id
-                                }
-                            }
-                        })
-                    else:
-                        skipped_count += 1
-
-            except Exception as e:
-                error_count += 1
-                error_orders.append({
-                    'order_id': order.id,
-                    'error': str(e)
-                })
-
-        return Response({
-            'summary': {
-                'total_orders_checked': orders.count(),
-                'fixed_orders': fixed_count,
-                'skipped_orders': skipped_count,
-                'error_orders': error_count
-            },
-            'fixed_orders_details': fixed_orders,
-            'error_orders_details': error_orders
-        })
