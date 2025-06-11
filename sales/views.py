@@ -1132,10 +1132,10 @@ class TopSalespersonView(generics.ListAPIView):
         if user.role == 'SuperAdmin':
             if franchise:
                 salespersons = CustomUser.objects.filter(
-                    factory=user.factory, role='SalesPerson', franchise=franchise)
+                    role='SalesPerson', franchise=franchise)
             elif distributor:
                 salespersons = CustomUser.objects.filter(
-                    factory=user.factory, role='SalesPerson', distributor=distributor)
+                    role='SalesPerson', distributor=distributor)
             else:
                 salespersons = CustomUser.objects.filter(
                     factory=user.factory, role='SalesPerson')
@@ -1273,11 +1273,10 @@ class RevenueView(generics.ListAPIView):
             # Base queryset based on user role
             if user.role == 'SuperAdmin':
                 if franchise:
-                    base_queryset = Order.objects.filter(
-                        factory=user.factory, franchise=franchise)
+                    base_queryset = Order.objects.filter(franchise=franchise)
                 elif distributor:
                     base_queryset = Order.objects.filter(
-                        factory=user.factory, distributor=distributor)
+                        distributor=distributor)
                 else:
                     base_queryset = Order.objects.filter(factory=user.factory)
             elif user.role == 'Distributor':
@@ -1389,13 +1388,13 @@ class TopProductsView(generics.ListAPIView):
             if user.role == 'SuperAdmin':
                 if franchise:
                     base_query = OrderProduct.objects.filter(
-                        order__factory=user.factory, order__franchise=franchise,
+                        order__franchise=franchise,
                         order__order_status__in=[
                             'Delivered', 'Pending', 'Indrive', 'Sent to Dash', 'Processing']
                     ).exclude(order__order_status__in=excluded_statuses)
                 elif distributor:
                     base_query = OrderProduct.objects.filter(
-                        order__factory=user.factory, order__distributor=distributor,
+                        order__distributor=distributor,
                         order__order_status__in=[
                             'Delivered', 'Pending', 'Indrive', 'Sent to Dash', 'Processing']
                     ).exclude(order__order_status__in=excluded_statuses)
@@ -2416,11 +2415,10 @@ class RevenueWithCancelledView(generics.ListAPIView):
             # Base queryset based on user role
             if user.role == 'SuperAdmin':
                 if franchise:
-                    base_queryset = Order.objects.filter(
-                        factory=user.factory, franchise=franchise)
+                    base_queryset = Order.objects.filter(franchise=franchise)
                 elif distributor:
                     base_queryset = Order.objects.filter(
-                        factory=user.factory, distributor=distributor)
+                        distributor=distributor)
                 else:
                     base_queryset = Order.objects.filter(factory=user.factory)
             elif user.role == 'Distributor':
