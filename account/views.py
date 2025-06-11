@@ -103,6 +103,7 @@ class DistributorListCreateView(generics.ListCreateAPIView):
 class FranchiseListCreateView(generics.ListCreateAPIView):
     queryset = Franchise.objects.all()
     serializer_class = FranchiseSerializer
+    
 
 
 class FactoryListCreateView(generics.ListCreateAPIView):
@@ -142,9 +143,12 @@ class UserFranchiseListView(APIView):
 
     def get(self, request):
         try:
-            # Get franchises based on the authenticated user's distributor
-            franchises = Franchise.objects.filter(
-                distributor=request.user.distributor)
+            if request.user.role == 'SuperAdmin':
+                franchises = Franchise.objects.filter(distributor__factory=request.user.factory)
+            elif request.user.role == 'Distributor':
+                franchises = Franchise.objects.filter(distributor=request.user.distributor)
+            elif request.user.role == 'Factory':
+                franchises = Franchise.objects.filter(distributor__factory=request.user.factory)
             serializer = FranchiseSerializer(franchises, many=True)
             return Response(serializer.data)
         except Exception as e:
