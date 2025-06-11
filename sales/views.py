@@ -2056,17 +2056,14 @@ class InventoryCheckView(generics.GenericAPIView):
                 if franchise:
                     inventory_items = Inventory.objects.filter(
                         franchise=franchise,
-                        status='ready_to_dispatch'
                     )
                 elif distributor:
                     inventory_items = Inventory.objects.filter(
                         distributor=distributor,
-                        status='ready_to_dispatch'
                     )
                 else:
                     inventory_items = Inventory.objects.filter(
                         factory=user.factory,
-                        status='ready_to_dispatch'
                     )
             elif user.role == 'Distributor':
                 # Check distributor inventory
