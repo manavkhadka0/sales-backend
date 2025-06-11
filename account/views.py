@@ -42,7 +42,7 @@ class UserListView(APIView):
             users = CustomUser.objects.all(factory=user.factory)
             serializer = CustomUserSerializer(users, many=True)
         elif user.role == 'Distributor':
-            users = CustomUser.objects.filter(role__in=['SalesPerson', 'Treatment Staff', 'Packaging'],
+            users = CustomUser.objects.filter(role__in=['SalesPerson', 'Treatment Staff', 'Packaging', 'Franchise'],
                                               distributor=user.distributor)
             serializer = SmallUserSerializer(users, many=True)
         elif user.role == 'Franchise':
