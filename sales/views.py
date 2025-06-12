@@ -226,7 +226,8 @@ class DistributorInventoryListView(generics.ListAPIView):
         user = self.request.user
 
         if user.role == 'SuperAdmin':
-            distributors = Distributor.objects.prefetch_related('inventory')
+            distributors = Distributor.objects.filter(
+                factory=user.factory).prefetch_related('inventory')
             inventory_summary = {
                 distributor.name: self._get_distributor_data(distributor)
                 for distributor in distributors
@@ -272,7 +273,8 @@ class FranchiseInventoryListView(generics.ListAPIView):
 
         if user.role == 'SuperAdmin':
             # Get all franchises with their distributors
-            franchises = Franchise.objects.prefetch_related(
+            franchises = Franchise.objects.filter(
+                distributor__factory=user.factory).prefetch_related(
                 'inventory', 'distributor').all()
             inventory_summary = {}
 
