@@ -38,14 +38,20 @@ class CustomUserSerializer(serializers.ModelSerializer):
         queryset=Franchise.objects.all(), write_only=True, required=False, allow_null=True)
     factory = serializers.PrimaryKeyRelatedField(
         queryset=Factory.objects.all(), write_only=True, required=False, allow_null=True)
+    password = serializers.CharField(write_only=True,)
+    distributor_name = serializers.CharField(
+        source='distributor.name', read_only=True, allow_null=True, required=False)
+    franchise_name = serializers.CharField(
+        source='franchise.name', read_only=True, allow_null=True, required=False)
+    factory_name = serializers.CharField(
+        source='factory.name', read_only=True, allow_null=True, required=False)
 
     class Meta:
         model = CustomUser
         fields = ('id', 'username', 'first_name', 'last_name', 'email',
-                  'phone_number', 'address', 'role', 'factory', 'distributor', 'franchise', 'password')
+                  'phone_number', 'address', 'role', 'factory', 'distributor', 'franchise', 'password', 'distributor_name', 'franchise_name', 'factory_name')
         # Make username read-only since we'll set it automatically
         read_only_fields = ('username',)
-        write_only_fields = ('password',)
 
     def create(self, validated_data):
         password = validated_data.pop('password')
