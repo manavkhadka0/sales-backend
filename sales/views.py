@@ -2087,6 +2087,19 @@ class InventoryCheckView(generics.GenericAPIView):
 
         try:
             if user.role == 'SuperAdmin':
+                if franchise:
+                    inventory_items = self._get_inventory_by_owner(
+                        'franchise', franchise)
+                    low_quantity_items = self._get_low_quantity_items(
+                        inventory_items, critical_threshold)
+                    return Response(self._format_inventory_response(low_quantity_items))
+                elif distributor:
+                    inventory_items = self._get_inventory_by_owner(
+                        'distributor', distributor)
+                    low_quantity_items = self._get_low_quantity_items(
+                        inventory_items, critical_threshold)
+                    return Response(self._format_inventory_response(low_quantity_items))
+
                 response_data = {
                     'factory': {'low_quantity_items': [], 'total_low_items': 0},
                     'distributors': {},
