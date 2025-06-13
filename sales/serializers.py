@@ -333,6 +333,7 @@ class SalesPersonStatisticsSerializer(serializers.Serializer):
     total_cancelled_orders = serializers.IntegerField()
     total_amount = serializers.FloatField()
     total_cancelled_amount = serializers.FloatField()
+    total_delivery_charge = serializers.FloatField()
     product_sales = ProductSalesSerializer(many=True)
     cancelled_product_sales = ProductSalesSerializer(many=True)
 

@@ -2235,6 +2235,8 @@ class SalesPersonStatisticsView(APIView):
                 total=Sum('total_amount'))['total'] or 0
             total_delivery_charge = orders.exclude(order_status__in=excluded_statuses).aggregate(
                 total=Sum('delivery_charge'))['total'] or 0
+            total_cancelled_delivery_charge = orders.filter(order_status__in=excluded_statuses).aggregate(
+                total=Sum('delivery_charge'))['total'] or 0
 
             # Get product-wise sales data
             product_sales = (
@@ -2272,6 +2274,7 @@ class SalesPersonStatisticsView(APIView):
                 'total_cancelled_orders': total_cancelled_orders,
                 'total_cancelled_amount': float(total_cancelled_amount),
                 'total_delivery_charge': float(total_delivery_charge),
+                'total_cancelled_delivery_charge': float(total_cancelled_delivery_charge),
                 'product_sales': [{
                     'product_name': p['product__product__name'],
                     'quantity_sold': p['quantity_sold']
