@@ -2758,8 +2758,6 @@ class SalesPersonOrderCSVExportView(generics.GenericAPIView):
 
                 # Calculate product price
                 product_price = order.total_amount
-                if order.prepaid_amount:
-                    product_price = order.total_amount - order.prepaid_amount
 
                 overall_orders += 1
                 overall_amount += product_price
@@ -2780,8 +2778,11 @@ class SalesPersonOrderCSVExportView(generics.GenericAPIView):
                     order.alternate_phone_number or '',  # Alternative Number
                     order.delivery_address,  # Address
                     products_str,  # Product Name
-                    product_price,  # Product Price
-                    order.payment_method,  # Payment Type
+                    # Product Price
+                    f'{product_price}',
+                    order.payment_method +
+                    # Payment Type
+                    (f' ({order.prepaid_amount})' if order.prepaid_amount else ''),
                     order.order_status,
                     order.remarks or ''  # Client Note
                 ])
