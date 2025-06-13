@@ -2189,8 +2189,7 @@ class SalesPersonStatisticsView(APIView):
             end_date = request.query_params.get('end_date')
 
             # Base queryset for orders
-            orders = Order.objects.filter(sales_person=salesperson).exclude(
-                order_status__in=excluded_statuses)
+            orders = Order.objects.filter(sales_person=salesperson)
 
             # Apply specific date filter if provided
             if specific_date and not end_date:
@@ -2226,13 +2225,33 @@ class SalesPersonStatisticsView(APIView):
                     created_at__gte=timezone.now() - timezone.timedelta(days=30))
 
             # Calculate total orders and amount
-            total_orders = orders.count()
-            total_amount = orders.aggregate(
+            total_orders = orders.exclude(
+                order_status__in=excluded_statuses).count()
+            total_cancelled_orders = orders.filter(
+                order_status__in=excluded_statuses).count()
+            total_amount = orders.exclude(order_status__in=excluded_statuses).aggregate(
+                total=Sum('total_amount'))['total'] or 0
+            total_cancelled_amount = orders.filter(order_status__in=excluded_statuses).aggregate(
                 total=Sum('total_amount'))['total'] or 0
 
             # Get product-wise sales data
             product_sales = (
-                OrderProduct.objects.filter(order__in=orders)
+                OrderProduct.objects.filter(order__in=orders.exclude(
+                    order_status__in=excluded_statuses))
+                .values(
+                    'product__product__id',
+                    'product__product__name'
+                )
+                .annotate(
+                    quantity_sold=Sum('quantity')
+                )
+                .order_by('-quantity_sold')
+            )
+
+            # Get product-wise sales data for cancelled orders
+            cancelled_product_sales = (
+                OrderProduct.objects.filter(order__in=orders.filter(
+                    order_status__in=excluded_statuses))
                 .values(
                     'product__product__id',
                     'product__product__name'
@@ -2248,11 +2267,16 @@ class SalesPersonStatisticsView(APIView):
                 'user': salesperson,
                 'total_orders': total_orders,
                 'total_amount': float(total_amount),
+                'total_cancelled_orders': total_cancelled_orders,
+                'total_cancelled_amount': float(total_cancelled_amount),
                 'product_sales': [{
                     'product_name': p['product__product__name'],
                     'quantity_sold': p['quantity_sold']
                 } for p in product_sales],
-
+                'cancelled_product_sales': [{
+                    'product_name': p['product__product__name'],
+                    'quantity_sold': p['quantity_sold']
+                } for p in cancelled_product_sales],
             }
 
             serializer = SalesPersonStatisticsSerializer(data)

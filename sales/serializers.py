@@ -330,8 +330,11 @@ class ProductSalesSerializer(serializers.Serializer):
 class SalesPersonStatisticsSerializer(serializers.Serializer):
     user = SmallUserSerializer()
     total_orders = serializers.IntegerField()
-    total_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    total_cancelled_orders = serializers.IntegerField()
+    total_amount = serializers.FloatField()
+    total_cancelled_amount = serializers.FloatField()
     product_sales = ProductSalesSerializer(many=True)
+    cancelled_product_sales = ProductSalesSerializer(many=True)
 
 
 class LocationSerializer(serializers.ModelSerializer):
