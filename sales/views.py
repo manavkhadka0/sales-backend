@@ -2202,7 +2202,7 @@ class SalesPersonStatisticsView(APIView):
                         {'error': 'Invalid date format. Use YYYY-MM-DD'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-            if specific_date and end_date:
+            elif specific_date and end_date:
                 try:
                     specific_date = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
@@ -2233,6 +2233,10 @@ class SalesPersonStatisticsView(APIView):
                 total=Sum('total_amount'))['total'] or 0
             total_cancelled_amount = orders.filter(order_status__in=excluded_statuses).aggregate(
                 total=Sum('total_amount'))['total'] or 0
+            total_delivery_charge = orders.exclude(order_status__in=excluded_statuses).aggregate(
+                total=Sum('delivery_charge'))['total'] or 0
+            total_cancelled_delivery_charge = orders.filter(order_status__in=excluded_statuses).aggregate(
+                total=Sum('delivery_charge'))['total'] or 0
 
             # Get product-wise sales data
             product_sales = (
@@ -2269,6 +2273,8 @@ class SalesPersonStatisticsView(APIView):
                 'total_amount': float(total_amount),
                 'total_cancelled_orders': total_cancelled_orders,
                 'total_cancelled_amount': float(total_cancelled_amount),
+                'total_delivery_charge': float(total_delivery_charge),
+                'total_cancelled_delivery_charge': float(total_cancelled_delivery_charge),
                 'product_sales': [{
                     'product_name': p['product__product__name'],
                     'quantity_sold': p['quantity_sold']
