@@ -2665,3 +2665,141 @@ class LocationUploadView(APIView):
             "locations_created": created,
             "locations_updated": updated
         }, status=201)
+
+
+class SalesPersonOrderCSVExportView(generics.GenericAPIView):
+    # permission_classes = [IsAuthenticated]
+
+    def get(self, request, phone_number):
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+
+        # Get date range from query parameters
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+
+        if not start_date or not end_date:
+            return Response(
+                {"error": "Both start_date and end_date are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            # Convert string dates to datetime objects
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get sales person by phone number
+        try:
+            salesperson = CustomUser.objects.get(
+                phone_number=phone_number, role='SalesPerson')
+        except CustomUser.DoesNotExist:
+            return Response(
+                {"error": "Sales person not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get orders for the sales person within date range
+        orders = Order.objects.filter(
+            sales_person=salesperson,
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date
+        ).order_by('-id')
+
+        if not orders.exists():
+            return Response(
+                {"error": "No orders found to export"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            # Create the HttpResponse object with CSV header
+            response = HttpResponse(content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="orders.csv"'
+
+            # Create CSV writer
+            writer = csv.writer(response)
+
+            # Write header row with new fields
+            writer.writerow([
+                'Date',
+                'Customer Name',
+                'Contact Number',
+                'Alternative Number',
+                'Address',
+                'Product Name',
+                'Product Price',
+                'Payment Type',
+                'Order Status',
+                'Remarks'
+            ])
+
+            # Initialize summary variables
+            total_orders = 0
+            total_amount = 0
+            total_cancelled_orders = 0
+            total_cancelled_amount = 0
+            overall_orders = 0
+            overall_amount = 0
+
+            # Write data rows
+            for order in orders:
+                # Format products string as requested
+                products = OrderProduct.objects.filter(order=order)
+                products_str = ','.join([
+                    f"{p.quantity}-{p.product.product.name}"
+                    for p in products
+                ])
+
+                # Calculate product price
+                product_price = order.total_amount
+                if order.prepaid_amount:
+                    product_price = order.total_amount - order.prepaid_amount
+
+                overall_orders += 1
+                overall_amount += product_price
+
+                # Update summary statistics
+                if order.order_status not in excluded_statuses:
+                    total_orders += 1
+                    total_amount += product_price
+
+                if order.order_status in excluded_statuses:
+                    total_cancelled_orders += 1
+                    total_cancelled_amount += product_price
+
+                writer.writerow([
+                    order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    order.full_name,  # Customer Name
+                    order.phone_number,  # Contact Number
+                    order.alternate_phone_number or '',  # Alternative Number
+                    order.delivery_address,  # Address
+                    products_str,  # Product Name
+                    product_price,  # Product Price
+                    order.payment_method,  # Payment Type
+                    order.order_status,
+                    order.remarks or ''  # Client Note
+                ])
+
+            # Add summary statistics
+            writer.writerow([])  # Empty row for spacing
+            writer.writerow(['Summary Statistics'])
+            writer.writerow(['Overall Orders', overall_orders])
+            writer.writerow(['Overall Amount', overall_amount])
+            writer.writerow(['Total Orders', total_orders])
+            writer.writerow(['Total Amount', total_amount])
+            writer.writerow(['Total Cancelled Orders', total_cancelled_orders])
+            writer.writerow(['Total Cancelled Amount', total_cancelled_amount])
+
+            return response
+
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to export orders: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
