@@ -2274,7 +2274,6 @@ class SalesPersonStatisticsView(APIView):
                 'total_cancelled_orders': total_cancelled_orders,
                 'total_cancelled_amount': float(total_cancelled_amount),
                 'total_delivery_charge': float(total_delivery_charge),
-                'total_cancelled_delivery_charge': float(total_cancelled_delivery_charge),
                 'product_sales': [{
                     'product_name': p['product__product__name'],
                     'quantity_sold': p['quantity_sold']
