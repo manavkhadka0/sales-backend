@@ -2675,7 +2675,7 @@ class SalesPersonOrderCSVExportView(generics.GenericAPIView):
             'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
 
         # Get date range from query parameters
-        start_date = request.query_params.get('start_date')
+        start_date = request.query_params.get('date')
         end_date = request.query_params.get('end_date')
 
         if not start_date or not end_date:
