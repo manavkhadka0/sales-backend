@@ -2543,9 +2543,11 @@ class RevenueWithCancelledView(generics.ListAPIView):
             # Handle date filtering
             if specific_date and not end_date:
                 try:
-                    specific_date = datetime.strptime(
+                    # Convert string to date object
+                    specific_date_obj = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
-                    base_queryset = base_queryset.filter(date=specific_date)
+                    base_queryset = base_queryset.filter(
+                        date=specific_date_obj)
                     revenue = (
                         base_queryset
                         .values('date')
@@ -2559,11 +2561,13 @@ class RevenueWithCancelledView(generics.ListAPIView):
                     )
             elif specific_date and end_date:
                 try:
-                    specific_date = datetime.strptime(
+                    # Convert strings to date objects
+                    specific_date_obj = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
-                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    end_date_obj = datetime.strptime(
+                        end_date, '%Y-%m-%d').date()
                     base_queryset = base_queryset.filter(
-                        date__gte=specific_date, date__lte=end_date)
+                        date__gte=specific_date_obj, date__lte=end_date_obj)
                     revenue = (
                         base_queryset
                         .values('date')
@@ -2580,8 +2584,8 @@ class RevenueWithCancelledView(generics.ListAPIView):
                 if filter_type == 'daily':
                     revenue = (
                         base_queryset.filter(
-                            created_at__year=today.year,
-                            created_at__month=today.month
+                            date__year=today.year,
+                            date__month=today.month
                         )
                         .values('date')
                         .annotate(period=models.F('date'), **annotation_fields)
@@ -2589,22 +2593,22 @@ class RevenueWithCancelledView(generics.ListAPIView):
                     )
                 elif filter_type == 'weekly':
                     revenue = (
-                        base_queryset.filter(created_at__year=today.year)
-                        .annotate(period=TruncWeek('created_at'))
+                        base_queryset.filter(date__year=today.year)
+                        .annotate(period=TruncWeek('date'))
                         .values('period')
                         .annotate(**annotation_fields)
                         .order_by('period')
                     )
                 elif filter_type == 'monthly':
                     revenue = (
-                        base_queryset.annotate(period=TruncMonth('created_at'))
+                        base_queryset.annotate(period=TruncMonth('date'))
                         .values('period')
                         .annotate(**annotation_fields)
                         .order_by('period')
                     )
                 elif filter_type == 'yearly':
                     revenue = (
-                        base_queryset.annotate(period=TruncYear('created_at'))
+                        base_queryset.annotate(period=TruncYear('date'))
                         .values('period')
                         .annotate(**annotation_fields)
                         .order_by('period')
