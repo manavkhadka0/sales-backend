@@ -1126,7 +1126,7 @@ class TopSalespersonView(generics.ListAPIView):
         franchise = self.request.query_params.get('franchise')
         distributor = self.request.query_params.get('distributor')
         user = self.request.user
-        filter_type = self.request.GET.get('filter')
+        filter_type = self.request.GET.get('filter', 'daily')
         specific_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
         current_date = timezone.now()
@@ -1204,7 +1204,7 @@ class TopSalespersonView(generics.ListAPIView):
         serializer = self.get_serializer(queryset, many=True)
         data = serializer.data
 
-        filter_type = request.GET.get('filter', 'all')
+        filter_type = request.GET.get('filter', 'daily')
         specific_date = request.query_params.get('date')
         end_date = request.query_params.get('end_date')
         current_date = timezone.now()
@@ -1265,17 +1265,7 @@ class TopSalespersonView(generics.ListAPIView):
                     'product__product__name'
                 )
                 .annotate(
-                    total_quantity=Sum('quantity'),
-                    total_amount=Sum(
-                        models.F('quantity') * models.F('order__total_amount') /
-                        models.Subquery(
-                            OrderProduct.objects.filter(
-                                order=models.OuterRef('order')
-                            ).values('order')
-                            .annotate(total_qty=Sum('quantity'))
-                            .values('total_qty')[:1]
-                        )
-                    )
+                    total_quantity=Sum('quantity')
                 )
                 .order_by('-total_quantity')
             )
