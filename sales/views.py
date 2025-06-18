@@ -1223,9 +1223,10 @@ class TopSalespersonView(generics.ListAPIView):
             # Apply date filtering
             if specific_date and not end_date:
                 try:
-                    specific_date = datetime.strptime(
+                    # Convert string to date object
+                    specific_date_obj = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
-                    orders_query = orders_query.filter(date=specific_date)
+                    orders_query = orders_query.filter(date=specific_date_obj)
                 except ValueError:
                     return Response(
                         {'error': 'Invalid date format. Use YYYY-MM-DD'},
@@ -1233,11 +1234,13 @@ class TopSalespersonView(generics.ListAPIView):
                     )
             elif specific_date and end_date:
                 try:
-                    specific_date = datetime.strptime(
+                    # Convert strings to date objects
+                    specific_date_obj = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
-                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    end_date_obj = datetime.strptime(
+                        end_date, '%Y-%m-%d').date()
                     orders_query = orders_query.filter(
-                        date__gte=specific_date, date__lte=end_date)
+                        date__gte=specific_date_obj, date__lte=end_date_obj)
                 except ValueError:
                     return Response(
                         {'error': 'Invalid date format. Use YYYY-MM-DD'},
