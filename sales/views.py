@@ -1127,7 +1127,7 @@ class TopSalespersonView(generics.ListAPIView):
         distributor = self.request.query_params.get('distributor')
         user = self.request.user
         filter_type = self.request.GET.get('filter')
-        specific_date = self.request.query_params.get('date')
+        specific_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
         current_date = timezone.now()
 
