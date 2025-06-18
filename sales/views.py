@@ -1127,6 +1127,8 @@ class TopSalespersonView(generics.ListAPIView):
         distributor = self.request.query_params.get('distributor')
         user = self.request.user
         filter_type = self.request.GET.get('filter')
+        specific_date = self.request.query_params.get('date')
+        end_date = self.request.query_params.get('end_date')
         current_date = timezone.now()
 
         # Define excluded statuses
@@ -1153,27 +1155,36 @@ class TopSalespersonView(generics.ListAPIView):
         else:
             return CustomUser.objects.none()
 
-        if filter_type:
+        # Initialize orders_filter
+        orders_filter = {}
+
+        # Handle date filtering
+        if specific_date and not end_date:
+            try:
+                specific_date = datetime.strptime(
+                    specific_date, '%Y-%m-%d').date()
+                orders_filter['orders__date'] = specific_date
+            except ValueError:
+                return CustomUser.objects.none()
+        elif specific_date and end_date:
+            try:
+                specific_date = datetime.strptime(
+                    specific_date, '%Y-%m-%d').date()
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                orders_filter['orders__date__gte'] = specific_date
+                orders_filter['orders__date__lte'] = end_date
+            except ValueError:
+                return CustomUser.objects.none()
+        elif filter_type:
             if filter_type == 'daily':
                 start_date = current_date.date()
-                orders_filter = {
-                    'orders__date': start_date,
-                }
+                orders_filter['orders__date'] = start_date
             elif filter_type == 'weekly':
                 start_date = current_date - timezone.timedelta(days=7)
-                orders_filter = {
-                    'orders__date__gte': start_date,
-                }
+                orders_filter['orders__date__gte'] = start_date
             elif filter_type == 'monthly':
-                # Filter for current month only
-                orders_filter = {
-                    'orders__date__year': current_date.year,
-                    'orders__date__month': current_date.month,
-                }
-            else:
-                orders_filter = {}
-        else:
-            orders_filter = {}
+                orders_filter['orders__date__year'] = current_date.year
+                orders_filter['orders__date__month'] = current_date.month
 
         # Create base queryset with time filters
         salespersons = salespersons.annotate(
@@ -1194,6 +1205,8 @@ class TopSalespersonView(generics.ListAPIView):
         data = serializer.data
 
         filter_type = request.GET.get('filter', 'all')
+        specific_date = request.query_params.get('date')
+        end_date = request.query_params.get('end_date')
         current_date = timezone.now()
 
         # Define excluded statuses
@@ -1207,15 +1220,36 @@ class TopSalespersonView(generics.ListAPIView):
                 sales_person=salesperson
             ).exclude(order_status__in=excluded_statuses)
 
-            if filter_type == 'daily':
-                orders_query = orders_query.filter(
-                    date=current_date.date())
+            # Apply date filtering
+            if specific_date and not end_date:
+                try:
+                    specific_date = datetime.strptime(
+                        specific_date, '%Y-%m-%d').date()
+                    orders_query = orders_query.filter(date=specific_date)
+                except ValueError:
+                    return Response(
+                        {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            elif specific_date and end_date:
+                try:
+                    specific_date = datetime.strptime(
+                        specific_date, '%Y-%m-%d').date()
+                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    orders_query = orders_query.filter(
+                        date__gte=specific_date, date__lte=end_date)
+                except ValueError:
+                    return Response(
+                        {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            elif filter_type == 'daily':
+                orders_query = orders_query.filter(date=current_date.date())
             elif filter_type == 'weekly':
                 orders_query = orders_query.filter(
                     date__gte=current_date - timezone.timedelta(days=7)
                 )
             elif filter_type == 'monthly':
-                # Filter for current month only
                 orders_query = orders_query.filter(
                     date__year=current_date.year,
                     date__month=current_date.month
