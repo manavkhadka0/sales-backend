@@ -2487,7 +2487,7 @@ class RevenueWithCancelledView(generics.ListAPIView):
         distributor = self.request.query_params.get('distributor')
         user = self.request.user
         filter_type = request.GET.get('filter', 'daily')  # Default to daily
-        specific_date = request.query_params.get('date')
+        specific_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         today = timezone.now().date()
 
