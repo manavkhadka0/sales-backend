@@ -2484,6 +2484,8 @@ class RevenueWithCancelledView(generics.ListAPIView):
         distributor = self.request.query_params.get('distributor')
         user = self.request.user
         filter_type = request.GET.get('filter', 'daily')  # Default to daily
+        specific_date = request.query_params.get('date')
+        end_date = request.query_params.get('end_date')
         today = timezone.now().date()
 
         # Define active order statuses
@@ -2535,43 +2537,80 @@ class RevenueWithCancelledView(generics.ListAPIView):
                 'return_pending_count': Count('id', filter=Q(order_status='Return Pending'))
             }
 
-            if filter_type == 'daily':
-                revenue = (
-                    base_queryset.filter(
-                        created_at__year=today.year,
-                        created_at__month=today.month
+            # Handle date filtering
+            if specific_date and not end_date:
+                try:
+                    specific_date = datetime.strptime(
+                        specific_date, '%Y-%m-%d').date()
+                    base_queryset = base_queryset.filter(date=specific_date)
+                    revenue = (
+                        base_queryset
+                        .values('date')
+                        .annotate(period=models.F('date'), **annotation_fields)
+                        .order_by('date')
                     )
-                    .values('date')
-                    .annotate(period=models.F('date'), **annotation_fields)
-                    .order_by('date')
-                )
-            elif filter_type == 'weekly':
-                revenue = (
-                    base_queryset.filter(created_at__year=today.year)
-                    .annotate(period=TruncWeek('created_at'))
-                    .values('period')
-                    .annotate(**annotation_fields)
-                    .order_by('period')
-                )
-            elif filter_type == 'monthly':
-                revenue = (
-                    base_queryset.annotate(period=TruncMonth('created_at'))
-                    .values('period')
-                    .annotate(**annotation_fields)
-                    .order_by('period')
-                )
-            elif filter_type == 'yearly':
-                revenue = (
-                    base_queryset.annotate(period=TruncYear('created_at'))
-                    .values('period')
-                    .annotate(**annotation_fields)
-                    .order_by('period')
-                )
+                except ValueError:
+                    return Response(
+                        {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            elif specific_date and end_date:
+                try:
+                    specific_date = datetime.strptime(
+                        specific_date, '%Y-%m-%d').date()
+                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    base_queryset = base_queryset.filter(
+                        date__gte=specific_date, date__lte=end_date)
+                    revenue = (
+                        base_queryset
+                        .values('date')
+                        .annotate(period=models.F('date'), **annotation_fields)
+                        .order_by('date')
+                    )
+                except ValueError:
+                    return Response(
+                        {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            else:
+                # Handle filter types
+                if filter_type == 'daily':
+                    revenue = (
+                        base_queryset.filter(
+                            created_at__year=today.year,
+                            created_at__month=today.month
+                        )
+                        .values('date')
+                        .annotate(period=models.F('date'), **annotation_fields)
+                        .order_by('date')
+                    )
+                elif filter_type == 'weekly':
+                    revenue = (
+                        base_queryset.filter(created_at__year=today.year)
+                        .annotate(period=TruncWeek('created_at'))
+                        .values('period')
+                        .annotate(**annotation_fields)
+                        .order_by('period')
+                    )
+                elif filter_type == 'monthly':
+                    revenue = (
+                        base_queryset.annotate(period=TruncMonth('created_at'))
+                        .values('period')
+                        .annotate(**annotation_fields)
+                        .order_by('period')
+                    )
+                elif filter_type == 'yearly':
+                    revenue = (
+                        base_queryset.annotate(period=TruncYear('created_at'))
+                        .values('period')
+                        .annotate(**annotation_fields)
+                        .order_by('period')
+                    )
 
             # Format response data with detailed status counts
             response_data = [{
                 'period': entry['period'].strftime(
-                    '%Y-%m-%d' if filter_type in ['daily', 'weekly']
+                    '%Y-%m-%d' if filter_type in ['daily', 'weekly'] or (specific_date or end_date)
                     else '%Y-%m' if filter_type == 'monthly'
                     else '%Y'
                 ),
