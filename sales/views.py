@@ -1205,7 +1205,7 @@ class TopSalespersonView(generics.ListAPIView):
         data = serializer.data
 
         filter_type = request.GET.get('filter', 'daily')
-        specific_date = request.query_params.get('date')
+        specific_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         current_date = timezone.now()
 
