@@ -25,6 +25,7 @@ from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
+import requests
 
 
 # Create your views here.
@@ -456,12 +457,30 @@ class OrderListCreateView(generics.ListCreateAPIView):
         phone_number = self.request.data.get('phone_number')
         order_products_data = self.request._full_data.get('order_products', [])
         payment_method = self.request.data.get('payment_method')
+        prepaid_amount = self.request.data.get('prepaid_amount', 0)
 
         # Get force_order flag from request data (default to False if not provided)
         force_order = self.request._full_data.get('force_order', False)
         if isinstance(force_order, str):
             # Convert string to bool if needed (e.g., from form-data)
             force_order = force_order.lower() in ['true', '1', 'yes', 'y']
+
+        # Check if customer has previously cancelled or returned orders
+        cancelled_returned_orders = Order.objects.filter(
+            phone_number=phone_number,
+            order_status__in=['Cancelled',
+                              'Returned By Customer', 'Returned By Dash', 'Return Pending']
+        ).exists()
+        if not force_order and cancelled_returned_orders:
+            # Check if prepaid_amount is provided and is greater than 0
+            if not prepaid_amount or float(prepaid_amount) <= 0:
+                error_details = {
+                    "error": "This customer has previously cancelled or returned orders. Prepayment is required before placing a new order.",
+                    "status": status.HTTP_403_FORBIDDEN,
+                    "requires_prepayment": True,
+                    "message": "Please ask for prepayment before placing the order for this customer."
+                }
+                raise serializers.ValidationError(error_details)
 
         if not force_order:
             # Check for recent orders with same phone number across ALL orders
@@ -2880,3 +2899,66 @@ class SalesPersonOrderCSVExportView(generics.GenericAPIView):
                 {"error": f"Failed to export orders: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class SendOrderToDashByIdView(APIView):
+    # permission_classes = [IsAuthenticated]
+
+    def post(self, request, order_id):
+        DASH_API_URL = "{{base_url}}/api/v1/clientOrder/add-order"
+        HEADERS = {
+            "Content-Type": "application/json",
+            # "Authorization": "Bearer <your_token>",  # Uncomment and set if needed
+        }
+
+        try:
+            order = Order.objects.get(id=order_id)
+        except Order.DoesNotExist:
+            return Response({"error": f"Order with id {order_id} does not exist."}, status=404)
+
+        if order.order_status != "Processing":
+            return Response({"error": "Order is not in Processing status."}, status=400)
+
+        order_products = OrderProduct.objects.filter(order=order)
+        product_name = ", ".join(
+            [f"{op.quantity}-{op.product.product.name}" for op in order_products]
+        )
+
+        product_price = order.total_amount
+        if order.prepaid_amount:
+            product_price = order.total_amount - order.prepaid_amount
+
+        payment_type = "pre-paid" if order.prepaid_amount and (
+            order.total_amount - order.prepaid_amount) == 0 else "cashOnDelivery"
+
+        customer = {
+            "receiver_name": order.full_name,
+            "receiver_contact": order.phone_number,
+            "receiver_alternate_number": order.alternate_phone_number or "",
+            "receiver_address": order.delivery_address,
+            "receiver_location": order.dash_location.name if order.dash_location else "",
+            "payment_type": payment_type,
+            "product_name": product_name,
+            "client_note": order.remarks or "",
+            "receiver_landmark": order.landmark or "",
+            "order_reference_id": str(order.id),
+            "product_price": float(product_price),
+        }
+
+        payload = {"customers": [customer]}
+        return Response(payload, status=200)
+        # try:
+        #     dash_response = requests.post(
+        #         DASH_API_URL, json=payload, headers=HEADERS, timeout=30)
+        #     dash_response.raise_for_status()
+        #     order.order_status = "Sent to Dash"
+        #     order.save()
+        #     return Response({
+        #         "message": "Order sent to Dash successfully.",
+        #         "dash_response": dash_response.json()
+        #     }, status=200)
+        # except requests.RequestException as e:
+        #     return Response({
+        #         "error": "Failed to send order to Dash.",
+        #         "details": str(e)
+        #     }, status=500)
