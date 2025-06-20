@@ -1,3 +1,4 @@
+import os
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from sales.models import Order, OrderProduct
@@ -9,8 +10,12 @@ from datetime import timedelta
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import ListCreateAPIView
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Reusable function for Dash login
+DASH_BASE_URL = os.getenv('DASH_BASE_URL')
 
 
 class DashListCreateView(ListCreateAPIView):
@@ -39,7 +44,7 @@ def dash_login(email, password, dash_obj=None):
     client_id = dash_obj.client_id
     client_secret = dash_obj.client_secret
     grant_type = dash_obj.grant_type
-    DASH_LOGIN_URL = "https://dashlogistics.com.np/api/v1/login/client/"
+    DASH_LOGIN_URL = f"{DASH_BASE_URL}/api/v1/login/client/"
     body = {
         "clientId": client_id,
         "clientSecret": client_secret,
@@ -119,7 +124,7 @@ class SendOrderToDashByIdView(APIView):
 
         access_token = dash_obj.access_token
 
-        DASH_API_URL = "https://dashlogistics.com.np/api/v1/clientOrder/add-order"
+        DASH_API_URL = f"{DASH_BASE_URL}/api/v1/clientOrder/add-order"
         HEADERS = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {access_token}"
