@@ -135,6 +135,9 @@ class SendOrderToDashByIdView(APIView):
         except Order.DoesNotExist:
             return Response({"error": f"Order with id {order_id} does not exist."}, status=404)
 
+        if order.order_status == "Sent to Dash":
+            return Response({"error": "Order has already been sent to Dash."}, status=400)
+
         if order.order_status != "Processing":
             return Response({"error": "Order is not in Processing status."}, status=400)
 
