@@ -116,11 +116,15 @@ class SendOrderToDashByIdView(APIView):
 
         # Check if token is missing or expired
         if not dash_obj.access_token or (dash_obj.expires_at and dash_obj.expires_at <= timezone.now()):
+            # Relogin to get fresh access token
             dash_obj, error = dash_login(
                 dash_obj.email, dash_obj.password, dash_obj=dash_obj)
             if not dash_obj:
                 status_code = error.get("status", 400)
                 return Response({"error": "Failed to refresh Dash token", **error}, status=status_code)
+
+            # Refresh the dash_obj from database to get the updated access_token
+            dash_obj.refresh_from_db()
 
         access_token = dash_obj.access_token
 
