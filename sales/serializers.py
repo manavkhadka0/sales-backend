@@ -155,7 +155,7 @@ class OrderSerializer(serializers.ModelSerializer):
                   'phone_number', 'alternate_phone_number', 'payment_method', 'dash_location',
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at',
                   'order_products', 'total_amount', 'delivery_charge', 'remarks', 'promo_code',
-                  'prepaid_amount', 'delivery_type', 'logistics', 'logistics_name', 'dash_location_name']
+                  'prepaid_amount', 'delivery_type', 'logistics', 'logistics_name', 'dash_location_name', 'dash_tracking_code']
 
     def get_logistics_name(self, obj):
         return obj.logistics.name if obj.logistics else None

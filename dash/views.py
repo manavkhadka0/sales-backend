@@ -189,6 +189,10 @@ class SendOrderToDashByIdView(APIView):
                     for item in response_data['data']['detail']
                 ]
 
+                if tracking_codes:
+                    order.dash_tracking_code = tracking_codes[0]['tracking_code']
+                    order.save()
+
             order.order_status = "Sent to Dash"
             order.save()
 

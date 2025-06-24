@@ -3,12 +3,14 @@ from account.models import Logistics
 from django.utils import timezone
 # Create your models here.
 
+
 class Location(models.Model):
     name = models.CharField(max_length=100)
     coverage_areas = models.JSONField(default=list)  # Stores list of strings
 
     def __str__(self):
         return self.name
+
 
 class Inventory(models.Model):
     STATUS_CHOICES = [
@@ -203,6 +205,8 @@ class Order(models.Model):
         PromoCode, on_delete=models.SET_NULL, null=True, blank=True)
     logistics = models.ForeignKey(
         Logistics, on_delete=models.SET_NULL, null=True, blank=True)
+    dash_tracking_code = models.CharField(
+        max_length=255, blank=True, null=True)
 
     def __str__(self):
         return f'{self.full_name} - {self.order_status}'
