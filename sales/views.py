@@ -2368,9 +2368,9 @@ class SalesPersonRevenueView(generics.GenericAPIView):
 
             # Common annotation fields with status-specific counts
             annotation_fields = {
-                'total_revenue': Sum('total_amount', filter=~Q(order_status__in=excluded_statuses), default=0),
+                'total_revenue': Sum('total_amount', default=0),
                 'total_cancelled_amount': Sum('total_amount', filter=Q(order_status__in=excluded_statuses), default=0),
-                'order_count': Count('id', filter=~Q(order_status__in=excluded_statuses)),
+                'order_count': Count('id'),
                 'cancelled_count': Count('id', filter=Q(order_status__in=excluded_statuses)),
                 # Status-specific counts for active orders
                 'pending_count': Count('id', filter=Q(order_status='Pending')),
@@ -2532,9 +2532,9 @@ class RevenueWithCancelledView(generics.ListAPIView):
 
             # Common annotation fields with status-specific counts
             annotation_fields = {
-                'total_revenue': Sum('total_amount', filter=~Q(order_status__in=excluded_statuses), default=0),
+                'total_revenue': Sum('total_amount', default=0),
                 'total_cancelled_amount': Sum('total_amount', filter=Q(order_status__in=excluded_statuses), default=0),
-                'order_count': Count('id', filter=~Q(order_status__in=excluded_statuses)),
+                'order_count': Count('id'),
                 'cancelled_count': Count('id', filter=Q(order_status__in=excluded_statuses)),
                 # Status-specific counts for active orders
                 'pending_count': Count('id', filter=Q(order_status='Pending')),
