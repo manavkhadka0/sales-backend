@@ -156,12 +156,18 @@ class SendOrderToDashByIdView(APIView):
 
         payment_type = "pre-paid" if order.prepaid_amount and (
             order.total_amount - order.prepaid_amount) == 0 else "cashOnDelivery"
+        address_parts = []
+        if getattr(order, "delivery_address", None):
+            address_parts.append(order.delivery_address)
+        if getattr(order, "city", None):
+            address_parts.append(order.city)
+        full_address = ", ".join(address_parts)
 
         customer = {
             "receiver_name": order.full_name,
             "receiver_contact": order.phone_number,
             "receiver_alternate_number": order.alternate_phone_number or "",
-            "receiver_address": order.delivery_address,
+            "receiver_address": full_address,
             "receiver_location": order.dash_location.name if order.dash_location else "",
             "payment_type": payment_type,
             "product_name": product_name,
