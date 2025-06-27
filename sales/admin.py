@@ -3,10 +3,12 @@ from unfold.admin import ModelAdmin, TabularInline
 from .models import *
 # Register your models here.
 
+
 class LocationAdmin(ModelAdmin):
     list_display = ['name', 'coverage_areas']
     list_filter = ['name', 'coverage_areas']
     search_fields = ['name', 'coverage_areas']
+
 
 class OrderProductInline(TabularInline):
     model = OrderProduct
@@ -49,3 +51,4 @@ admin.site.register(InventoryRequest, ModelAdmin)
 admin.site.register(PromoCode, ModelAdmin)
 admin.site.register(Location, LocationAdmin)
 
+admin.site.register(DatabaseMode, ModelAdmin)

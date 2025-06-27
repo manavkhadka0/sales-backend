@@ -1,3 +1,8 @@
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+import json
+from .models import DatabaseMode
+from django.http import JsonResponse
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 
@@ -26,6 +31,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 import requests
+from core.middleware import set_current_db_name, get_current_db_name
 
 
 # Create your views here.
@@ -2899,3 +2905,71 @@ class SalesPersonOrderCSVExportView(generics.GenericAPIView):
                 {"error": f"Failed to export orders: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+@csrf_exempt
+def switch_db(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    demo = data.get('demo_data', None)
+    print("demo", demo)
+    if demo is None:
+        return JsonResponse({'error': 'Missing "demo_data" key in request body'}, status=400)
+    if isinstance(demo, str):
+        demo = demo.lower() == 'true'
+    print("demo", demo)
+
+    if not isinstance(demo, bool):
+        return JsonResponse({'error': '"demo_data" must be a boolean (true or false)'}, status=400)
+
+    try:
+        # Set demo_data in both databases as per your logic
+        main_config = DatabaseMode.objects.using(
+            'default').get_or_create(pk=1)[0]
+        demo_config = DatabaseMode.objects.using('demo').get_or_create(pk=1)[0]
+
+        if demo:
+            main_config.demo_data = False
+            demo_config.demo_data = True
+            main_config.save(using='default')
+            demo_config.save(using='demo')
+            set_current_db_name(True)  # Switch to demo
+            current_mode = 'demo'
+        else:
+            main_config.demo_data = False
+            demo_config.demo_data = True
+            main_config.save(using='default')
+            demo_config.save(using='demo')
+            set_current_db_name(False)  # Switch to main
+            current_mode = 'main'
+
+        return JsonResponse({
+            'message': f'Switched to {current_mode} database',
+            'current_mode': current_mode,
+            'success': True
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': f'Failed to switch database: {str(e)}'}, status=500)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CurrentDatabaseModeView(APIView):
+    """
+    Returns which database is currently active.
+    Response: { "is_demodatabase": true/false }
+    """
+
+    def get(self, request):
+        try:
+            # Use your middleware's getter to check which DB is active
+            is_demo = get_current_db_name() == 'demo'
+            return Response({'is_demodatabase': is_demo})
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)

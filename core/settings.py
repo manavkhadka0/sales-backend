@@ -57,12 +57,17 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'core.middleware.ModelBasedDBSwitchMiddleware',
+
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+DATABASE_ROUTERS = ['core.db_router.DynamicDBRouter']
+
 
 ROOT_URLCONF = 'core.urls'
 
@@ -95,7 +100,7 @@ WSGI_APPLICATION = 'core.wsgi.application'
     }
 } """
 
-DATABASES = {
+""" DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
         'NAME': 'yachu_sales',
@@ -104,8 +109,46 @@ DATABASES = {
         'HOST': 'localhost',
         'PORT': '',
     }
-}
+} """
 
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': 'yachu_sales',
+        'USER': 'ratish',
+        'PASSWORD': 'ratish123',
+        'HOST': 'localhost',
+        'PORT': '',
+    },
+    'demo': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'dummy_db.sqlite3',
+    },
+}
+""" DATABASES = {
+    'demo': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'demo_db.sqlite3',
+    },
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    },
+} """
+""" DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': 'yachu_sales',
+        'USER': 'ratish',
+        'PASSWORD': 'ratish123',
+        'HOST': 'localhost',
+        'PORT': '',
+    },
+    'demo': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    },
+} """
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -153,11 +196,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
-    'https://height-low-vic-fair.trycloudflare.com'
+    'https://elections-go-shade-cologne.trycloudflare.com'
 ]
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
-    'https://height-low-vic-fair.trycloudflare.com'
+    'https://elections-go-shade-cologne.trycloudflare.com'
 ]
 
 # Default primary key field type

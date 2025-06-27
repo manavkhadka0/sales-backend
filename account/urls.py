@@ -4,7 +4,8 @@ from .views import (
     FranchiseListCreateView, UserListView, LoginView, UserProfileView,
     DistributorListCreateView, FranchiseByDistributorView, FactoryListCreateView,
     ChangePassword, UserFranchiseListView, UserDistributorListView, UserRetrieveUpdateDestroyView,
-    LogisticsListCreateView, LogisticsDetailView, SalesPersonListView
+    LogisticsListCreateView, LogisticsDetailView, SalesPersonListView,
+    DemoUserList
 )
 
 urlpatterns = [
@@ -32,5 +33,6 @@ urlpatterns = [
     path('logistics/<int:id>/', LogisticsDetailView.as_view(),
          name='logistics-detail'),
     path('salespersons/', SalesPersonListView.as_view(), name='salesperson-list'),
+    path('demo-users/', DemoUserList.as_view(), name='demo-user-list'),
 
 ]

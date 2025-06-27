@@ -224,3 +224,17 @@ class Commission(models.Model):
 
     def __str__(self):
         return f"{self.sales_person} - {self.franchise} - ₹{self.rate}"
+
+class DatabaseMode(models.Model):
+    demo_data = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        self.pk = 1  # Enforce singleton
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        pass  # Prevent deletion
+
+    @classmethod
+    def get_solo(cls):
+        return cls.objects.get_or_create(pk=1)[0]
