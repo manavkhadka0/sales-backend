@@ -1897,6 +1897,12 @@ class OrderCSVExportView(generics.GenericAPIView):
                 # Determine payment type
                 payment_type = "pre-paid" if order.prepaid_amount and (
                     order.total_amount - order.prepaid_amount) == 0 else "cashOnDelivery"
+                address_parts = []
+                if getattr(order, "delivery_address", None):
+                    address_parts.append(order.delivery_address)
+                if getattr(order, "city", None):
+                    address_parts.append(order.city)
+                full_address = ", ".join(address_parts)
 
                 writer.writerow([
                     order.full_name,  # Customer Name
@@ -1904,7 +1910,7 @@ class OrderCSVExportView(generics.GenericAPIView):
                     order.alternate_phone_number or '',  # Alternative Number
                     order.dash_location.name if order.dash_location else '',
                     '',
-                    order.delivery_address,  # Address
+                    full_address,  # Address
                     '',
                     products_str,  # Product Name
                     product_price,  # Product Price
