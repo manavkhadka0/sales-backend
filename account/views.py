@@ -60,6 +60,8 @@ class UserListView(APIView):
         # Only set franchise if request.user exists and has a franchise
         if request.user and request.user.role == 'Franchise':
             data['franchise'] = request.user.franchise.id
+            # Let the serializer handle all the distributor/factory logic
+            # No need to modify distributor here since serializer handles it
 
         serializer = CustomUserSerializer(data=data)
         if serializer.is_valid():

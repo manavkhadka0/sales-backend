@@ -72,16 +72,32 @@ class CustomUserSerializer(serializers.ModelSerializer):
         factory = validated_data.get('factory')
 
         if role == 'SalesPerson' and franchise:
-            # For salesperson, set distributor and factory based on franchise
-            validated_data['distributor'] = franchise.distributor
-            validated_data['factory'] = franchise.distributor.factory
+            # For salesperson, check if franchise has distributor
+            if hasattr(franchise, 'distributor') and franchise.distributor:
+                # If franchise has distributor, set both distributor and factory
+                validated_data['distributor'] = franchise.distributor
+                validated_data['factory'] = franchise.distributor.factory
+            else:
+                # If franchise has no distributor, don't set distributor
+                # but set factory from the franchise (login user's franchise)
+                if hasattr(franchise, 'factory') and franchise.factory:
+                    validated_data['factory'] = franchise.factory
+                elif factory:
+                    # Fallback to user input factory if franchise doesn't have one
+                    validated_data['factory'] = factory
         elif distributor and franchise:
             # If both distributor and franchise exist, set factory from distributor
             validated_data['factory'] = distributor.factory
         elif franchise and not distributor:
             # If only franchise exists, get distributor and factory from franchise
-            validated_data['distributor'] = franchise.distributor
-            validated_data['factory'] = franchise.distributor.factory
+            # Only set distributor if franchise has one
+            if hasattr(franchise, 'distributor') and franchise.distributor:
+                validated_data['distributor'] = franchise.distributor
+                validated_data['factory'] = franchise.distributor.factory
+            else:
+                # If franchise has no distributor, use the factory from user input
+                if factory:
+                    validated_data['factory'] = factory
 
         # Handle null values
         if 'distributor' in validated_data and validated_data['distributor'] is None:
