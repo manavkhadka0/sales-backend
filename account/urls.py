@@ -24,7 +24,7 @@ urlpatterns = [
          name='franchise-by-distributor'),
     path('distributors/<int:distributor_id>/franchises/',
          FranchiseByDistributorView.as_view(), name='franchise-by-distributor'),
-    path('change-password/', ChangePassword.as_view(), name='change-password'),
+    path('change-password/<str:phone_number>/', ChangePassword.as_view(), name='change-password'),
     path('my-franchises/', UserFranchiseListView.as_view(), name='user-franchises'),
     path('my-distributors/', UserDistributorListView.as_view(),
          name='user-distributors'),
