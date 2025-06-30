@@ -135,8 +135,11 @@ class FranchiseByDistributorView(APIView):
 
 class ChangePassword(generics.GenericAPIView):
     serializer_class = ChangePasswordSerializer
+    permission_classes = [IsAuthenticated]
 
-    def post(self, request, phone_number):
+    def post(self, request):
+        user = request.user
+        phone_number = user.phone_number
         old_password = request.data.get('old_password')
         new_password = request.data.get('new_password')
 
