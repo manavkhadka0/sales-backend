@@ -2175,7 +2175,7 @@ class InventoryCheckView(generics.GenericAPIView):
                     self._format_inventory_response(factory_low_items))
 
                 # Get distributor inventory
-                for dist in Distributor.objects.all():
+                for dist in Distributor.objects.filter(factory=user.factory):
                     dist_inventory = self._get_inventory_by_owner(
                         'distributor', dist)
                     dist_low_items = self._get_low_quantity_items(
@@ -2185,7 +2185,7 @@ class InventoryCheckView(generics.GenericAPIView):
                             dist_low_items)
 
                 # Get franchise inventory
-                for fran in Franchise.objects.all():
+                for fran in Franchise.objects.filter(distributor__factory=user.factory):
                     fran_inventory = self._get_inventory_by_owner(
                         'franchise', fran)
                     fran_low_items = self._get_low_quantity_items(
