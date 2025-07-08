@@ -3249,7 +3249,7 @@ class PackagingSentToDashSummaryCSVView(APIView):
                 address_parts.append(order.delivery_address)
             if getattr(order, "city", None):
                 address_parts.append(order.city)
-                full_address = ", ".join(address_parts)
+            full_address = ", ".join(address_parts)
             writer.writerow([
                 order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
                 order.full_name,
