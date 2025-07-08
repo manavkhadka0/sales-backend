@@ -2979,3 +2979,138 @@ class CurrentDatabaseModeView(APIView):
             return Response({'is_demodatabase': is_demo})
         except Exception as e:
             return Response({'error': str(e)}, status=500)
+
+
+class SalesSummaryExportView(APIView):
+    """
+    Exports sales summary for a given date range.
+    Query params: start_date, end_date (YYYY-MM-DD)
+    """
+    # permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+
+        if not start_date or not end_date:
+            return Response(
+                {"error": "start_date and end_date are required in YYYY-MM-DD format."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {"error": "Invalid date format. Use YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Define cancelled statuses
+        cancelled_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending'
+        ]
+
+        # Filter orders in date range
+
+        orders = Order.objects.filter(
+            created_at__date__gte=start_date_obj,
+            created_at__date__lte=end_date_obj
+        )
+        if hasattr(user, 'role') and user.role == 'Franchise' and hasattr(user, 'franchise') and user.franchise:
+            orders = orders.filter(franchise=user.franchise)
+
+        # Total orders and amount (do NOT exclude cancelled)
+        total_orders = orders.count()
+        total_amount = orders.aggregate(
+            total=Sum('total_amount'))['total'] or 0
+
+        # Cancelled orders and amount
+        total_cancelled_orders = orders.filter(
+            order_status__in=cancelled_statuses).count()
+        total_cancelled_amount = orders.filter(order_status__in=cancelled_statuses).aggregate(
+            total=Sum('total_amount'))['total'] or 0
+
+        # Gross orders/amount
+        gross_orders = total_orders - total_cancelled_orders
+        gross_amount = float(total_amount) - float(total_cancelled_amount)
+
+        # Product-wise sales (non-cancelled)
+        product_sales = (
+            OrderProduct.objects.filter(
+                order__in=orders.exclude(order_status__in=cancelled_statuses)
+            )
+            .values('product__product__id', 'product__product__name')
+            .annotate(quantity_sold=Sum('quantity'))
+            .order_by('-quantity_sold')
+        )
+
+        # Product-wise cancelled sales
+        cancelled_product_sales = (
+            OrderProduct.objects.filter(
+                order__in=orders.filter(order_status__in=cancelled_statuses)
+            )
+            .values('product__product__id', 'product__product__name')
+            .annotate(quantity_cancelled=Sum('quantity'))
+            .order_by('-quantity_cancelled')
+        )
+
+        try:
+            response = HttpResponse(content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="sales_summary_{start_date}_to_{end_date}.csv"'
+            writer = csv.writer(response)
+
+            # Report Title and Date Range
+            writer.writerow(['SALES SUMMARY REPORT'])
+            writer.writerow([f"Date Range: {start_date} to {end_date}"])
+            writer.writerow(
+                [f"Generated On: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"])
+            writer.writerow([])
+
+            # Summary Metrics Section
+            writer.writerow(['SUMMARY METRICS'])
+            writer.writerow(['Metric', 'Value'])
+            summary_rows = [
+                ('Total Orders', total_orders),
+                ('Total Cancelled Orders', total_cancelled_orders),
+                ('Gross Orders', gross_orders),
+                ('Total Amount', float(total_amount)),
+                ('Total Cancelled Amount', float(total_cancelled_amount)),
+                ('Gross Amount', gross_amount),
+            ]
+            for metric, value in summary_rows:
+                writer.writerow([metric, value])
+            writer.writerow([])  # Blank row after summary
+
+            # Product Sold Table
+            writer.writerow(['PRODUCTS SOLD'])
+            writer.writerow(['Product Name', 'Quantity Sold'])
+            for p in product_sales:
+                writer.writerow([
+                    p['product__product__name'],
+                    p['quantity_sold']
+                ])
+            if not product_sales:
+                writer.writerow(['-', 0])
+            writer.writerow([])  # Blank row
+
+            # Product Cancelled Table
+            writer.writerow(['PRODUCTS CANCELLED'])
+            writer.writerow(['Product Name', 'Quantity Cancelled'])
+            for p in cancelled_product_sales:
+                writer.writerow([
+                    p['product__product__name'],
+                    p['quantity_cancelled']
+                ])
+            if not cancelled_product_sales:
+                writer.writerow(['-', 0])
+            writer.writerow([])  # Final blank row
+
+            return response
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to export sales summary: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

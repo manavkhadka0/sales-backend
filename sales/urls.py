@@ -1,6 +1,6 @@
 # sales-backend/sales/urls.py
 from django.urls import path
-from .views import CurrentDatabaseModeView, FranchiseInventoryListView, InventoryCheckView, InventoryListCreateView, LatestOrdersView, OrderDetailUpdateView, OrderListCreateView, OrderUpdateView, CommissionPaymentView, ProductListView, InventoryDetailView, InventoryChangeLogView, Inventorylogs, FactoryInventoryListView, DistributorInventoryListView, InventoryRequestView, InventoryRequestDetailView, AllProductsListView, RawMaterialListView, RevenueWithCancelledView, SalesPersonRevenueView, SalesStatisticsView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView, OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView, SalesPersonStatisticsView, LocationUploadView, LocationSearchAPIView, SalesPersonOrderCSVExportView, switch_db
+from .views import CurrentDatabaseModeView, FranchiseInventoryListView, InventoryCheckView, InventoryListCreateView, LatestOrdersView, OrderDetailUpdateView, OrderListCreateView, OrderUpdateView, CommissionPaymentView, ProductListView, InventoryDetailView, InventoryChangeLogView, Inventorylogs, FactoryInventoryListView, DistributorInventoryListView, InventoryRequestView, InventoryRequestDetailView, AllProductsListView, RawMaterialListView, RevenueWithCancelledView, SalesPersonRevenueView, SalesStatisticsView, SalesSummaryExportView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView, OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView, SalesPersonStatisticsView, LocationUploadView, LocationSearchAPIView, SalesPersonOrderCSVExportView, switch_db
 
 urlpatterns = [
     path('inventory/', InventoryListCreateView.as_view(), name='inventory-list'),
@@ -66,6 +66,8 @@ urlpatterns = [
     path('switch-db/', switch_db),
     path('current-database/', CurrentDatabaseModeView.as_view(),
          name='current-database'),
+    path('sales-summary/', SalesSummaryExportView.as_view(), name='sales-summary'),
+
 
 
 
