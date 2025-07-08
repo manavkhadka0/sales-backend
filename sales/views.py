@@ -29,8 +29,6 @@ from datetime import datetime
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from django.db import transaction
-import requests
 from core.middleware import set_current_db_name, get_current_db_name
 
 
@@ -2986,7 +2984,7 @@ class SalesSummaryExportView(APIView):
     Exports sales summary for a given date range.
     Query params: start_date, end_date (YYYY-MM-DD)
     """
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
@@ -3000,8 +2998,10 @@ class SalesSummaryExportView(APIView):
             )
 
         try:
-            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
-            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            start_date_obj = datetime.strptime(
+                start_date, '%Y-%m-%d').date()
+            end_date_obj = datetime.strptime(
+                end_date, '%Y-%m-%d').date()
         except ValueError:
             return Response(
                 {"error": "Invalid date format. Use YYYY-MM-DD."},
@@ -3062,11 +3062,61 @@ class SalesSummaryExportView(APIView):
             response['Content-Disposition'] = f'attachment; filename="sales_summary_{start_date}_to_{end_date}.csv"'
             writer = csv.writer(response)
 
-            # Report Title and Date Range
             writer.writerow(['SALES SUMMARY REPORT'])
             writer.writerow([f"Date Range: {start_date} to {end_date}"])
             writer.writerow(
                 [f"Generated On: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"])
+            writer.writerow([])
+
+            # Report Title and Date Range
+            # 1. Write Order Data Table
+            writer.writerow(['ORDER DETAILS'])
+            writer.writerow([
+                'Date',
+                'Customer Name',
+                'Contact Number',
+                'Alternative Number',
+                'Location',
+                'Customer Landmark',
+                'Address',
+                'Product Name',
+                'Product Price',
+                'Payment Type',
+                'Order Status',
+                'Client Note'
+            ])
+
+            for order in orders:
+                products = OrderProduct.objects.filter(order=order)
+                products_str = ', '.join([
+                    f"{p.quantity}-{p.product.product.name}" for p in products
+                ])
+                product_price = order.total_amount
+                payment_type = "pre-paid" if order.prepaid_amount and (
+                    order.total_amount - order.prepaid_amount) == 0 else "cashOnDelivery"
+                address_parts = []
+                if getattr(order, "delivery_address", None):
+                    address_parts.append(order.delivery_address)
+                if getattr(order, "city", None):
+                    address_parts.append(order.city)
+                    full_address = ", ".join(address_parts)
+                writer.writerow([
+                    order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    order.full_name,
+                    order.phone_number,
+                    order.alternate_phone_number or '',
+                    order.dash_location.name if getattr(
+                        order, 'dash_location', None) else '',
+                    getattr(order, 'landmark', ''),
+                    full_address,
+                    products_str,
+                    product_price,
+                    payment_type,
+                    order.order_status,
+                    order.remarks or ''
+                ])
+
+            # 2. Blank row before summary
             writer.writerow([])
 
             # Summary Metrics Section
@@ -3114,3 +3164,120 @@ class SalesSummaryExportView(APIView):
                 {"error": f"Failed to export sales summary: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class PackagingSentToDashSummaryCSVView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if getattr(user, 'role', None) != 'Packaging':
+            return Response({"error": "Only Packaging role can access this endpoint."}, status=403)
+
+        date_str = request.query_params.get('date')
+        if not date_str:
+            return Response(
+                {"error": "date is required in YYYY-MM-DD format."},
+                status=400
+            )
+
+        try:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {"error": "Invalid date format. Use YYYY-MM-DD."},
+                status=400
+            )
+
+        orders = Order.objects.filter(
+            franchise=user.franchise,
+            order_status='Sent to Dash',
+            created_at__date=date_obj
+        )
+
+        total_amount = orders.aggregate(
+            total=Sum('total_amount'))['total'] or 0
+        total_orders = orders.count()
+
+        product_sales = (
+            OrderProduct.objects.filter(order__in=orders)
+            .values('product__product__name')
+            .annotate(quantity_sold=Sum('quantity'))
+            .order_by('-quantity_sold')
+        )
+
+        # Prepare CSV response
+        response = HttpResponse(content_type='text/csv')
+        response[
+            'Content-Disposition'] = f'attachment; filename="packaging_sent_to_dash_summary_{date_str}.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['Date', date_str])
+        writer.writerow([])
+
+        # Write summary section
+        writer.writerow(['Total Amount', float(total_amount)])
+        writer.writerow(['Total Orders', total_orders])
+        writer.writerow([])  # Blank row
+
+        # 1. Write Order Data Table
+        writer.writerow(['ORDER DETAILS'])
+        writer.writerow([
+            'Date',
+            'Customer Name',
+            'Contact Number',
+            'Alternative Number',
+            'Location',
+            'Customer Landmark',
+            'Address',
+            'Product Name',
+            'Product Price',
+            'Payment Type',
+            'Order Status',
+            'Dash Delivery Charge'
+        ])
+
+        for order in orders:
+            products = OrderProduct.objects.filter(order=order)
+            products_str = ', '.join([
+                f"{p.quantity}-{p.product.product.name}" for p in products
+            ])
+            product_price = order.total_amount
+            payment_type = "pre-paid" if order.prepaid_amount and (
+                order.total_amount - order.prepaid_amount) == 0 else "cashOnDelivery"
+            address_parts = []
+            if getattr(order, "delivery_address", None):
+                address_parts.append(order.delivery_address)
+            if getattr(order, "city", None):
+                address_parts.append(order.city)
+                full_address = ", ".join(address_parts)
+            writer.writerow([
+                order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                order.full_name,
+                order.phone_number,
+                order.alternate_phone_number or '',
+                order.dash_location.name if getattr(
+                    order, 'dash_location', None) else '',
+                getattr(order, 'landmark', ''),
+                full_address,
+                products_str,
+                product_price,
+                payment_type,
+                order.order_status,
+                ''
+            ])
+
+        # 2. Blank row before summary
+        writer.writerow([])
+
+        # Write product breakdown section
+        product_names = [p['product__product__name'] for p in product_sales]
+        quantities = [p['quantity_sold'] for p in product_sales]
+
+        if product_names:
+            writer.writerow(product_names)
+            writer.writerow(quantities)
+        else:
+            writer.writerow(['No Products'])
+            writer.writerow(['0'])
+
+        return response
