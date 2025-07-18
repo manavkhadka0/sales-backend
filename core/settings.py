@@ -183,11 +183,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
-    'https://elections-go-shade-cologne.trycloudflare.com'
+    'https://hiv-cet-able-avoid.trycloudflare.com'
 ]
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
-    'https://elections-go-shade-cologne.trycloudflare.com'
+    'https://hiv-cet-able-avoid.trycloudflare.com'
 ]
 
 # Default primary key field type

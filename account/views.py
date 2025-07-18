@@ -30,6 +30,17 @@ class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
         serializer.save()
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.is_deleted = True
+        instance.is_active = False
+        # instance.role = 'Others'
+        instance.username = f"deleted_{instance.id}"
+        instance.email = ""
+        instance.phone_number = ""
+        instance.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class UserListView(APIView):
     serializer_class = CustomUserSerializer
@@ -38,15 +49,16 @@ class UserListView(APIView):
     def get(self, request):
         user = request.user
         if user.role == 'SuperAdmin':
-            users = CustomUser.objects.filter(factory=user.factory)
+            users = CustomUser.objects.filter(
+                factory=user.factory, is_deleted=False)
             serializer = CustomUserSerializer(users, many=True)
         elif user.role == 'Distributor':
             users = CustomUser.objects.filter(role__in=['SalesPerson', 'Treatment Staff', 'Packaging', 'Franchise'],
-                                              distributor=user.distributor)
+                                              distributor=user.distributor, is_deleted=False)
             serializer = SmallUserSerializer(users, many=True)
         elif user.role == 'Franchise':
             users = CustomUser.objects.filter(role__in=['SalesPerson', 'Treatment Staff', 'Packaging'],
-                                              franchise=user.franchise)
+                                              franchise=user.franchise, is_deleted=False)
             serializer = SmallUserSerializer(users, many=True)
         else:
             return Response({'error': 'You do not have permission to view this resource.'}, status=status.HTTP_403_FORBIDDEN)
@@ -214,7 +226,8 @@ class SalesPersonListView(generics.ListAPIView):
             return CustomUser.objects.filter(
                 franchise=user.franchise,
                 role='SalesPerson',
-                is_active=True
+                is_active=True,
+                is_deleted=False
             )
         elif user.role == 'Distributor':
             # Get all sales persons for all franchises under this distributor
@@ -222,7 +235,8 @@ class SalesPersonListView(generics.ListAPIView):
             return CustomUser.objects.filter(
                 franchise__in=franchises,
                 role='SalesPerson',
-                is_active=True
+                is_active=True,
+                is_deleted=False
             )
         elif user.role == 'SuperAdmin':
             # Get all sales persons for all franchises under this factory
@@ -231,7 +245,8 @@ class SalesPersonListView(generics.ListAPIView):
             return CustomUser.objects.filter(
                 franchise__in=franchises,
                 role='SalesPerson',
-                is_active=True
+                is_active=True,
+                is_deleted=False
             )
 
         return CustomUser.objects.none()

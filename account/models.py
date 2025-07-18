@@ -53,10 +53,8 @@ class CustomUser(AbstractUser):
     commission_amount = models.DecimalField(
         max_digits=10, decimal_places=2, default=0, blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    is_deleted = models.BooleanField(default=False)
 
-    def soft_delete(self):
-        self.is_active = False
-        self.save()
 
     def __str__(self):
         return f"{self.username}"
