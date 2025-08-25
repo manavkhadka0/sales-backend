@@ -6,8 +6,20 @@ from django.contrib.auth.hashers import make_password
 from .models import CustomUser, Distributor, Franchise, Factory, Logistics
 
 # admin.site.register(CustomUser,ModelAdmin)
-admin.site.register(Distributor, ModelAdmin)
-admin.site.register(Franchise, ModelAdmin)
+
+
+class FranchiseAdmin(ModelAdmin):
+    model = Franchise
+    list_display = ('name', 'id',)
+
+
+class DistributorAdmin(ModelAdmin):
+    model = Distributor
+    list_display = ('name', 'id',)
+
+
+admin.site.register(Distributor, DistributorAdmin)
+admin.site.register(Franchise, FranchiseAdmin)
 admin.site.register(Factory, ModelAdmin)
 admin.site.register(Logistics, ModelAdmin)
 

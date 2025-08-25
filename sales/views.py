@@ -1,3 +1,4 @@
+from rest_framework.decorators import api_view
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 import json
@@ -18,7 +19,7 @@ from rest_framework import filters as rest_filters
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import serializers
 from django.utils import timezone
-from django.db.models import Count, Sum, Q
+from django.db.models import Count, Sum, Q, Max
 from django.db import models
 from django.db.models.functions import TruncMonth, TruncWeek, TruncYear
 from django.http import HttpResponse
@@ -3281,3 +3282,261 @@ class PackagingSentToDashSummaryCSVView(APIView):
             writer.writerow(['0'])
 
         return response
+
+
+class CustomOrderFilter(django_filters.FilterSet):
+    """Filtered Order API with specific filters"""
+
+    # Date range filters
+    date_from = django_filters.DateFilter(
+        field_name='created_at__date',
+        lookup_expr='gte',
+        help_text='Filter orders from this date (YYYY-MM-DD)'
+    )
+    date_to = django_filters.DateFilter(
+        field_name='created_at__date',
+        lookup_expr='lte',
+        help_text='Filter orders up to this date (YYYY-MM-DD)'
+    )
+
+    # Order date range filters
+    order_date_from = django_filters.DateFilter(
+        field_name='date',
+        lookup_expr='gte',
+        help_text='Filter by order date from (YYYY-MM-DD)'
+    )
+    order_date_to = django_filters.DateFilter(
+        field_name='date',
+        lookup_expr='lte',
+        help_text='Filter by order date up to (YYYY-MM-DD)'
+    )
+
+    # Franchise filter
+    franchise = django_filters.ModelChoiceFilter(
+        queryset=Franchise.objects.all(),
+        help_text='Filter by franchise ID'
+    )
+
+    # Total amount range filters
+    total_amount_min = django_filters.NumberFilter(
+        field_name='total_amount',
+        lookup_expr='gte',
+        help_text='Minimum total amount'
+    )
+    total_amount_max = django_filters.NumberFilter(
+        field_name='total_amount',
+        lookup_expr='lte',
+        help_text='Maximum total amount'
+    )
+
+    # Product count range filters
+    products_count_min = django_filters.NumberFilter(
+        method='filter_products_count_min',
+        help_text='Minimum number of products in order'
+    )
+    products_count_max = django_filters.NumberFilter(
+        method='filter_products_count_max',
+        help_text='Maximum number of products in order'
+    )
+
+    # More than 3 products filter
+    more_than_3_products = django_filters.BooleanFilter(
+        method='filter_more_than_3_products',
+        help_text='Filter orders with more than 3 products (true/false)'
+    )
+
+    # Multiple orders by same customer
+    multiple_orders_customer = django_filters.BooleanFilter(
+        method='filter_multiple_orders_customer',
+        help_text='Filter customers with multiple orders (true/false)'
+    )
+
+    class Meta:
+        model = Order
+        fields = []
+
+    def filter_products_count_min(self, queryset, name, value):
+        """Filter orders with minimum number of products"""
+        if value is not None:
+            return queryset.annotate(
+                products_count=Count('order_products')
+            ).filter(products_count__gte=value)
+        return queryset
+
+    def filter_products_count_max(self, queryset, name, value):
+        """Filter orders with maximum number of products"""
+        if value is not None:
+            return queryset.annotate(
+                products_count=Count('order_products')
+            ).filter(products_count__lte=value)
+        return queryset
+
+    def filter_more_than_3_products(self, queryset, name, value):
+        if value:
+            # Simple approach: get orders where total quantity > 3
+            order_ids = []
+            for order in queryset:
+                total_qty = sum(
+                    op.quantity for op in order.order_products.all())
+                max_qty = max(op.quantity for op in order.order_products.all(
+                )) if order.order_products.exists() else 0
+
+                if max_qty >= 3 or total_qty >= 3:
+                    order_ids.append(order.id)
+
+            return queryset.filter(id__in=order_ids)
+        return queryset
+
+    def filter_multiple_orders_customer(self, queryset, name, value):
+        """Filter customers with multiple orders"""
+        if value:
+            # Get customers with multiple orders
+            customers_with_multiple = Order.objects.values('phone_number')\
+                .annotate(order_count=Count('id'))\
+                .filter(order_count__gt=1)\
+                .values_list('phone_number', flat=True)
+            return queryset.filter(phone_number__in=customers_with_multiple)
+        return queryset
+
+
+@api_view(['GET'])
+def export_orders_csv_api(request):
+    """
+    Export filtered orders to CSV file (similar to SalesPersonOrderCSVExportView)
+
+    Same filters as OrderListAPIView apply here
+    """
+    import csv
+    from datetime import datetime
+
+    # Get base queryset
+    queryset = Order.objects.select_related(
+        'franchise', 'distributor', 'factory', 'sales_person',
+        'dash_location', 'promo_code'
+    ).prefetch_related('order_products__product__product')
+
+    # Annotate with products count
+    queryset = queryset.annotate(
+        products_count=Count('order_products')
+    )
+
+    # Apply filters
+    order_filter = CustomOrderFilter(request.GET, queryset=queryset)
+    filtered_orders = order_filter.qs.order_by('-id')
+
+    if not filtered_orders.exists():
+        return Response(
+            {"error": "No orders found to export"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Limit export to prevent memory issues
+    max_export_limit = 10000
+    if filtered_orders.count() > max_export_limit:
+        return Response(
+            {'error': f'Too many records to export. Limit is {max_export_limit} records.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        # Create CSV response
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="filtered_orders_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+
+        # Create CSV writer
+        writer = csv.writer(response)
+
+        # Write header row matching the existing format
+        writer.writerow([
+            'Date',
+            'Customer Name',
+            'Contact Number',
+            'Alternative Number',
+            'Address',
+            'Product Name',
+            'Product Price',
+            'Payment Type',
+            'Order Status',
+            'Remarks'
+        ])
+
+        # Excluded statuses for summary calculations
+        excluded_statuses = [
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending'
+        ]
+
+        # Initialize summary variables
+        total_orders = 0
+        total_amount = 0
+        total_cancelled_orders = 0
+        total_cancelled_amount = 0
+        overall_orders = 0
+        overall_amount = 0
+
+        # Write data rows
+        for order in filtered_orders:
+            # Format products string as in existing code
+            products = OrderProduct.objects.filter(order=order)
+            products_str = ','.join([
+                f"{p.quantity}-{p.product.product.name}"
+                for p in products
+            ])
+
+            # Calculate product price
+            product_price = float(order.total_amount)
+
+            overall_orders += 1
+            overall_amount += product_price
+
+            # Update summary statistics
+            if order.order_status not in excluded_statuses:
+                total_orders += 1
+                total_amount += product_price
+
+            if order.order_status in excluded_statuses:
+                total_cancelled_orders += 1
+                total_cancelled_amount += product_price
+
+            # Format payment type with prepaid amount if exists
+            payment_type = order.payment_method
+            if order.prepaid_amount:
+                payment_type += f' ({order.prepaid_amount})'
+
+            writer.writerow([
+                order.created_at.strftime('%Y-%m-%d %H:%M:%S'),  # Date
+                order.full_name,  # Customer Name
+                order.phone_number,  # Contact Number
+                order.alternate_phone_number or '',  # Alternative Number
+                order.delivery_address,  # Address
+                products_str,  # Product Name
+                f'{product_price}',  # Product Price
+                payment_type,  # Payment Type
+                order.order_status,  # Order Status
+                order.remarks or ''  # Remarks
+            ])
+
+        # Add summary statistics at the end
+        writer.writerow([])  # Empty row for spacing
+        writer.writerow(['Summary Statistics'])
+        writer.writerow(['Overall Orders', overall_orders])
+        writer.writerow(['Overall Amount', f'{overall_amount:.2f}'])
+        writer.writerow(['Total Orders', total_orders])
+        writer.writerow(['Total Amount', f'{total_amount:.2f}'])
+        writer.writerow(['Total Cancelled Orders', total_cancelled_orders])
+        writer.writerow(['Total Cancelled Amount',
+                        f'{total_cancelled_amount:.2f}'])
+
+        # Add applied filters information
+        writer.writerow([])  # Empty row
+        writer.writerow(['Applied Filters'])
+        for key, value in request.GET.items():
+            if value and key != 'export':
+                writer.writerow([key.replace('_', ' ').title(), value])
+
+        return response
+
+    except Exception as e:
+        return Response(
+            {"error": f"Failed to export orders: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
