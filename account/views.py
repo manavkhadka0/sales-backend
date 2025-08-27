@@ -44,7 +44,7 @@ class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
 class UserListView(APIView):
     serializer_class = CustomUserSerializer
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
@@ -60,6 +60,18 @@ class UserListView(APIView):
             users = CustomUser.objects.filter(role__in=['SalesPerson', 'Treatment Staff', 'Packaging'],
                                               franchise=user.franchise, is_deleted=False)
             serializer = SmallUserSerializer(users, many=True)
+        elif user.role == 'YDM_Rider':
+            users = CustomUser.objects.filter(
+                role="YDM_Rider", is_deleted=False)
+            serializer = SmallUserSerializer(users, many=True)
+        elif user.role == 'YDM_Logistics':
+            users = CustomUser.objects.filter(
+                role="YDM_Logistics", is_deleted=False)
+            serializer = SmallUserSerializer(users, many=True)
+        elif user.role == 'YDM_Operator':
+            users = CustomUser.objects.filter(
+                role="YDM_Operator", is_deleted=False)
+            serializer = SmallUserSerializer(users, many=True)
         else:
             return Response({'error': 'You do not have permission to view this resource.'}, status=status.HTTP_403_FORBIDDEN)
         return Response(serializer.data)
@@ -68,11 +80,15 @@ class UserListView(APIView):
         # Create a copy of the request data to modify
         data = request.data.copy()
 
-        # Only set franchise if request.user exists and has a franchise
-        if request.user and request.user.role == 'Franchise':
-            data['franchise'] = request.user.franchise.id
-            if request.user.franchise.distributor:
-                data['distributor'] = request.user.franchise.distributor.id
+        if not request.user.is_authenticated or request.user.role in ('SuperAdmin', 'YDM_Rider', 'YDM_Logistics', 'YDM_Operator'):
+            data['factory'] = None
+            data['distributor'] = None
+            data['franchise'] = None
+        else:
+            if request.user.role == 'Franchise':
+                data['franchise'] = request.user.franchise.id
+                if request.user.franchise.distributor:
+                    data['distributor'] = request.user.franchise.distributor.id
             elif request.user.factory:
                 data['factory'] = request.user.factory.id
             else:

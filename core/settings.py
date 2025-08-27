@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_filters',
     'dash',
+    'logistics',
 ]
 
 MIDDLEWARE = [
@@ -64,6 +65,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
 ]
 
 DATABASE_ROUTERS = ['core.db_router.DynamicDBRouter']
@@ -183,11 +185,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
-    'https://hiv-cet-able-avoid.trycloudflare.com'
+    'https://wichita-mothers-finite-eastern.trycloudflare.com'
 ]
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
-    'https://hiv-cet-able-avoid.trycloudflare.com'
+    'https://wichita-mothers-finite-eastern.trycloudflare.com'
 ]
 
 # Default primary key field type

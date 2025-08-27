@@ -3,6 +3,7 @@ from rest_framework import serializers
 from .models import Inventory, Order, OrderProduct, Product, InventoryChangeLog, InventoryRequest, PromoCode, Location
 from account.models import CustomUser, Logistics
 from account.serializers import SmallUserSerializer, UserSmallSerializer
+from logistics.utils import create_order_log
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -134,12 +135,6 @@ class OrderSerializer(serializers.ModelSerializer):
     order_products = OrderProductSerializer(many=True, required=False)
     promo_code = serializers.CharField(required=False, allow_null=True)
     payment_screenshot = serializers.FileField(required=False, allow_null=True)
-    logistics = serializers.PrimaryKeyRelatedField(
-        queryset=Logistics.objects.all(),
-        required=False,
-        allow_null=True,
-        write_only=True
-    )
     dash_location = serializers.PrimaryKeyRelatedField(
         queryset=Location.objects.all(),
         required=False,
@@ -147,18 +142,14 @@ class OrderSerializer(serializers.ModelSerializer):
         write_only=True
     )
     dash_location_name = serializers.SerializerMethodField(read_only=True)
-    logistics_name = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Order
-        fields = ['id', 'sales_person', 'full_name', 'city', 'delivery_address', 'landmark',
+        fields = ['id', 'order_code', 'sales_person', 'full_name', 'city', 'delivery_address', 'landmark',
                   'phone_number', 'alternate_phone_number', 'payment_method', 'dash_location',
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at',
                   'order_products', 'total_amount', 'delivery_charge', 'remarks', 'promo_code',
-                  'prepaid_amount', 'delivery_type', 'logistics', 'logistics_name', 'dash_location_name', 'dash_tracking_code']
-
-    def get_logistics_name(self, obj):
-        return obj.logistics.name if obj.logistics else None
+                  'prepaid_amount', 'delivery_type', 'logistics', 'dash_location_name', 'dash_tracking_code']
 
     def get_dash_location_name(self, obj):
         return obj.dash_location.name if obj.dash_location else None
@@ -197,6 +188,12 @@ class OrderSerializer(serializers.ModelSerializer):
             promo_code_instance.times_used += 1
             promo_code_instance.save()
 
+        old_status = order.order_status
+        new_status = ''
+
+        create_order_log(order, old_status, new_status,
+                         user=validated_data['sales_person'], comment=None)
+
         return order
 
     def update(self, instance, validated_data):
@@ -209,6 +206,7 @@ class OrderSerializer(serializers.ModelSerializer):
             for order_product_data in order_products_data:
                 OrderProduct.objects.create(
                     order=instance, **order_product_data)
+    
 
         return instance
 

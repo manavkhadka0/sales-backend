@@ -31,6 +31,7 @@ from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from core.middleware import set_current_db_name, get_current_db_name
+from logistics.utils import create_order_log
 
 
 # Create your views here.
@@ -347,7 +348,7 @@ class OrderFilter(django_filters.FilterSet):
     delivery_type = django_filters.CharFilter(
         field_name="delivery_type", lookup_expr='icontains')
     logistics = django_filters.CharFilter(
-        field_name="logistics__id", lookup_expr='exact')
+        field_name="logistics", lookup_expr='exact')
 
     class Meta:
         model = Order
@@ -362,7 +363,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
     filterset_class = OrderFilter
     filter_backends = [DjangoFilterBackend,
                        rest_filters.SearchFilter, rest_filters.OrderingFilter]
-    search_fields = ['phone_number', 'full_name']
+    search_fields = ['phone_number', 'full_name', 'order_code']
     ordering_fields = ['__all__']
     pagination_class = CustomPagination
     parser_classes = (JSONParser, FormParser, MultiPartParser)
@@ -455,6 +456,12 @@ class OrderListCreateView(generics.ListCreateAPIView):
             return Order.objects.filter(factory=user.factory).order_by('-id')
         elif user.role == 'Packaging':
             return Order.objects.filter(franchise=user.franchise, order_status__in=['Pending', 'Processing', 'Sent to Dash', 'Delivered']).order_by('-id')
+        elif user.role == 'YDM_Rider':
+            return Order.objects.filter(logistics="YDM").order_by('-id')
+        elif user.role == 'YDM_Logistics':
+            return Order.objects.filter(logistics="YDM").order_by('-id')
+        elif user.role == 'YDM_Operator':
+            return Order.objects.filter(logistics="YDM").order_by('-id')
         return Order.objects.none()
 
     def perform_create(self, serializer):
@@ -1990,11 +1997,15 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
             return Order.objects.filter(distributor=user.distributor)
         elif user.role in ['Franchise', 'SalesPerson', 'Packaging']:
             return Order.objects.filter(franchise=user.franchise)
+        elif user.role == 'YDM_Logistics':
+            return Order.objects.filter(logistics="YDM")
+
         return Order.objects.none()
 
     def update(self, request, *args, **kwargs):
         try:
             instance = self.get_object()
+            old_status = instance.order_status
             # Create a dictionary only with fields that are actually provided in the request
             modified_data = {}
 
@@ -2075,6 +2086,10 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
             )
             serializer.is_valid(raise_exception=True)
             order = serializer.save()
+
+            new_status = order.order_status
+            create_order_log(order, old_status, new_status,
+                             user=request.user, comment=None)
 
             # Handle order products if provided
             if order_products is not None:

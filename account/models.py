@@ -37,7 +37,9 @@ class CustomUser(AbstractUser):
         ('Franchise', 'Franchise'),
         ('SalesPerson', 'Sales Person'),
         ('Treatment Staff', 'Treatment Staff'),
-        ('Logistics', 'Logistics'),
+        ('YDM_Logistics', 'YDM Logistics'),
+        ('YDM_Rider', 'YDM Rider'),
+        ('YDM_Operator', 'YDM Operator'),
         ('Packaging', 'Packaging'),
         ('Others', 'Others')
     )
@@ -55,9 +57,9 @@ class CustomUser(AbstractUser):
     is_active = models.BooleanField(default=True)
     is_deleted = models.BooleanField(default=False)
 
-
     def __str__(self):
         return f"{self.username}"
+
 
 class Logistics(models.Model):
     name = models.CharField(max_length=255)
@@ -65,4 +67,3 @@ class Logistics(models.Model):
 
     def __str__(self):
         return self.name
-

@@ -1,6 +1,9 @@
 from django.db import models
 from account.models import Logistics
 from django.utils import timezone
+import uuid
+import random
+import string
 # Create your models here.
 
 
@@ -143,6 +146,15 @@ class PromoCode(models.Model):
         return f"{self.code} - {self.discount_percentage}%"
 
 
+def generate_order_id():
+    """
+    Generate a shorter unique order ID
+    Format: ORD-XXXXXXXX (first 8 characters from UUID)
+    """
+    uuid_str = str(uuid.uuid4()).replace('-', '').upper()
+    return f"ORD-{uuid_str[:8]}"
+
+
 class Order(models.Model):
     PAYMENT_CHOICES = [
         ('Cash on Delivery', 'Cash on Delivery'),
@@ -155,17 +167,26 @@ class Order(models.Model):
         ('Pending', 'Pending'),
         ('Processing', 'Processing'),
         ('Sent to Dash', 'Sent to Dash'),
+        ('Sent to YDM', 'Sent to YDM'),
         ('Delivered', 'Delivered'),
         ('Indrive', 'Indrive'),
         ('Cancelled', 'Cancelled'),
         ('Returned By Customer', 'Returned By Customer'),
         ('Returned By Dash', 'Returned By Dash'),
         ('Return Pending', 'Return Pending'),
+        ('Out For Delivery', 'Out For Delivery'),
+        ('Rescheduled', 'Rescheduled'),
     ]
     DELIVERY_ADDRESS_CHOICES = [
         ('Inside valley', 'Inside valley'),
         ('Outside valley', 'Outside valley'),
     ]
+    LOGISTICS_CHOICES = [
+        ('YDM', 'YDM'),
+        ('DASH', 'DASH'),
+    ]
+    order_code = models.CharField(
+        max_length=20, default=generate_order_id, null=True, blank=True)
     franchise = models.ForeignKey(
         'account.Franchise', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
     distributor = models.ForeignKey(
@@ -203,13 +224,18 @@ class Order(models.Model):
     remarks = models.TextField(blank=True)
     promo_code = models.ForeignKey(
         PromoCode, on_delete=models.SET_NULL, null=True, blank=True)
-    logistics = models.ForeignKey(
-        Logistics, on_delete=models.SET_NULL, null=True, blank=True)
+    logistics = models.CharField(
+        max_length=255, choices=LOGISTICS_CHOICES, default='YDM', null=True, blank=True)
     dash_tracking_code = models.CharField(
         max_length=255, blank=True, null=True)
 
     def __str__(self):
         return f'{self.full_name} - {self.order_status}'
+
+    def save(self, *args, **kwargs):
+        if not self.order_code:
+            self.order_code = generate_order_id()
+        super().save(*args, **kwargs)
 
 
 class Commission(models.Model):
@@ -224,6 +250,7 @@ class Commission(models.Model):
 
     def __str__(self):
         return f"{self.sales_person} - {self.franchise} - ₹{self.rate}"
+
 
 class DatabaseMode(models.Model):
     demo_data = models.BooleanField(default=False)

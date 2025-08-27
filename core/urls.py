@@ -26,5 +26,6 @@ urlpatterns = [
     path('api/sales/', include('sales.urls')),
     path('api/baliyo/', include('baliyo.urls')),
     path('api/dash/', include('dash.urls')),
+    path('api/', include('logistics.urls')),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) \
     + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

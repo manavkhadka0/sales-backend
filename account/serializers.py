@@ -98,6 +98,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
                 # If franchise has no distributor, use the factory from user input
                 if factory:
                     validated_data['factory'] = factory
+        
 
         # Handle null values
         if 'distributor' in validated_data and validated_data['distributor'] is None:
