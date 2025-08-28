@@ -130,7 +130,7 @@ class SmallUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ('id', 'first_name', 'last_name', 'email', 'phone_number', 'role',
-                  'franchise')
+                  'franchise', 'address')
 
 
 class LoginSerializer(serializers.Serializer):
