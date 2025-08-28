@@ -44,3 +44,18 @@ class OrderComment(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.order.order_code} - {self.comment}"
+
+class AssignOrder(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='assign_orders')
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, null=True, blank=True)
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-assigned_at']
+        indexes = [
+            models.Index(fields=['order', '-assigned_at']),
+            models.Index(fields=['user', '-assigned_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.order.order_code}" 

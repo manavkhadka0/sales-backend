@@ -1,5 +1,8 @@
-
 # views.py
+from rest_framework.views import APIView
+from .serializers import AssignOrderSerializer
+from .models import AssignOrder, Order, CustomUser
+from rest_framework.permissions import IsAuthenticated
 from datetime import date, timedelta
 from calendar import monthrange
 from datetime import date
@@ -13,15 +16,36 @@ from django.shortcuts import get_object_or_404
 from sales.models import Order
 # You'll need to create this serializer
 from sales.serializers import OrderSerializer
-from .serializers import OrderChangeLogSerializer, OrderCommentSerializer
+from .serializers import OrderChangeLogSerializer, OrderCommentSerializer, OrderCommentDetailSerializer, OrderCommentDetailSerializer
 from rest_framework import generics
 from .models import OrderComment
+from account.models import CustomUser
+from account.serializers import SmallUserSerializer
+from rest_framework.filters import SearchFilter
+
+
+class GetYDMRiderView(generics.ListAPIView):
+    queryset = CustomUser.objects.all()
+    serializer_class = SmallUserSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [SearchFilter]
+    search_fields = ['first_name', 'phone_number', 'address']
+
+    def get_queryset(self):
+        return CustomUser.objects.filter(role='YDM_Rider')
 
 
 class OrderCommentListCreateView(generics.ListCreateAPIView):
     queryset = OrderComment.objects.all()
     serializer_class = OrderCommentSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 
 class OrderCommentRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
@@ -38,7 +62,7 @@ def track_order(request):
     serializer = OrderSerializer(order)
     order_change_log = OrderChangeLogSerializer(
         order.change_logs.all(), many=True)
-    order_comment = OrderCommentSerializer(
+    order_comment = OrderCommentDetailSerializer(
         order.comments.all(), many=True)
 
     return Response({
@@ -244,3 +268,55 @@ def daily_orders_by_franchise(request, franchise_id):
         "franchise_id": franchise_id,
         "days": list(qs),
     })
+
+
+class AssignOrderView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user_id = request.data.get("user_id")
+        order_ids = request.data.get("order_ids")
+
+        if not user_id or not order_ids:
+            return Response(
+                {"detail": "user_id and order_ids are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # validate user (must be rider)
+        try:
+            user = CustomUser.objects.get(id=user_id, role="YDM_Rider")
+        except CustomUser.DoesNotExist:
+            return Response(
+                {"detail": "User not found or is not a YDM Rider"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # validate orders
+        orders = Order.objects.filter(
+            id__in=order_ids).prefetch_related("assign_orders__user")
+        if orders.count() != len(order_ids):
+            return Response(
+                {"detail": "One or more orders not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        assignments = []
+        skipped = []
+
+        for order in orders:
+            existing_assignment = order.assign_orders.first()
+            if existing_assignment:
+                rider_name = existing_assignment.user.first_name or existing_assignment.user.username
+                skipped.append({
+                    "order_code": order.order_code,
+                    "assigned_to": rider_name,
+                })
+            else:
+                assignment = AssignOrder.objects.create(order=order, user=user)
+                assignments.append(assignment)
+
+        return Response({
+            "assigned": AssignOrderSerializer(assignments, many=True).data,
+            "skipped": skipped,
+        }, status=status.HTTP_201_CREATED)

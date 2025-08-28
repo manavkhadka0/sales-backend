@@ -142,6 +142,7 @@ class OrderSerializer(serializers.ModelSerializer):
         write_only=True
     )
     dash_location_name = serializers.SerializerMethodField(read_only=True)
+    ydm_rider = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Order
@@ -149,7 +150,12 @@ class OrderSerializer(serializers.ModelSerializer):
                   'phone_number', 'alternate_phone_number', 'payment_method', 'dash_location',
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at',
                   'order_products', 'total_amount', 'delivery_charge', 'remarks', 'promo_code',
-                  'prepaid_amount', 'delivery_type', 'logistics', 'dash_location_name', 'dash_tracking_code']
+                  'prepaid_amount', 'delivery_type', 'logistics', 'dash_location_name', 'dash_tracking_code', 'ydm_rider']
+
+    def get_ydm_rider(self, obj):
+        # Get the assigned user using select_related to optimize the query
+        assignment = obj.assign_orders.select_related('user').first()
+        return assignment.user.username if assignment and assignment.user else None
 
     def get_dash_location_name(self, obj):
         return obj.dash_location.name if obj.dash_location else None
@@ -206,7 +212,6 @@ class OrderSerializer(serializers.ModelSerializer):
             for order_product_data in order_products_data:
                 OrderProduct.objects.create(
                     order=instance, **order_product_data)
-    
 
         return instance
 

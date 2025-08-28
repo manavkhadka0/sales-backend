@@ -1,5 +1,7 @@
 from rest_framework import serializers
-from . models import OrderChangeLog, OrderComment
+from . models import OrderChangeLog, OrderComment, AssignOrder
+from sales.models import Order
+from account.models import CustomUser
 from account.serializers import SmallUserSerializer
 
 
@@ -12,8 +14,21 @@ class OrderChangeLogSerializer(serializers.ModelSerializer):
 
 
 class OrderCommentSerializer(serializers.ModelSerializer):
-    user = SmallUserSerializer()
 
     class Meta:
         model = OrderComment
-        fields = '__all__'
+        fields = ['id', 'order', 'user', 'comment', 'created_at', 'updated_at']
+
+
+class OrderCommentDetailSerializer(serializers.ModelSerializer):
+    user = SmallUserSerializer(read_only=True)
+
+    class Meta:
+        model = OrderComment
+        fields = ['id', 'order', 'user', 'comment', 'created_at', 'updated_at']
+
+
+class AssignOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssignOrder
+        fields = ["id", "order", "user", "assigned_at"]

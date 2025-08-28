@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from .serializers import ChangePasswordSerializer
+from rest_framework import serializers
 
 
 class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
@@ -23,6 +24,9 @@ class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer):
         instance = serializer.instance
         new_phone = serializer.validated_data.get('phone_number')
+
+        if CustomUser.objects.filter(phone_number=new_phone).exists():
+            return Response({"error": "Phone number already exists"}, status=status.HTTP_400_BAD_REQUEST)
 
         # If phone number is being updated, update username as well
         if new_phone and new_phone != instance.phone_number:
