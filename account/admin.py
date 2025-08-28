@@ -29,6 +29,7 @@ class CustomUserAdmin(ModelAdmin):
     list_display = ('first_name', 'phone_number', 'distributor__name',
                     'franchise__name', 'role', 'total_orders')  # Add other fields as necessary
     list_filter = ('role', 'distributor__name')
+    search_fields = ('first_name', 'phone_number')
 
     def total_orders(self, obj):
         return obj.orders.count()  # Count the related orders for the user
