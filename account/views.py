@@ -60,17 +60,13 @@ class UserListView(APIView):
             users = CustomUser.objects.filter(role__in=['SalesPerson', 'Treatment Staff', 'Packaging'],
                                               franchise=user.franchise, is_deleted=False)
             serializer = SmallUserSerializer(users, many=True)
-        elif user.role == 'YDM_Rider':
-            users = CustomUser.objects.filter(
-                role="YDM_Rider", is_deleted=False)
-            serializer = SmallUserSerializer(users, many=True)
         elif user.role == 'YDM_Logistics':
             users = CustomUser.objects.filter(
-                role="YDM_Logistics", is_deleted=False)
+                role__in=["YDM_Logistics", "YDM_Operator", "YDM_Rider"], is_deleted=False)
             serializer = SmallUserSerializer(users, many=True)
         elif user.role == 'YDM_Operator':
             users = CustomUser.objects.filter(
-                role="YDM_Operator", is_deleted=False)
+                role__in=["YDM_Operator", "YDM_Rider"], is_deleted=False)
             serializer = SmallUserSerializer(users, many=True)
         else:
             return Response({'error': 'You do not have permission to view this resource.'}, status=status.HTTP_403_FORBIDDEN)
@@ -84,6 +80,7 @@ class UserListView(APIView):
             data['factory'] = None
             data['distributor'] = None
             data['franchise'] = None
+            data['is_active'] = False
         else:
             if request.user.role == 'Franchise':
                 data['franchise'] = request.user.franchise.id

@@ -1,10 +1,13 @@
 
 # views.py
-from rest_framework.decorators import api_view
+from datetime import date, timedelta
+from calendar import monthrange
+from datetime import date
+from django.utils import timezone
 from django.db.models import Sum, Count
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from sales.models import Order
@@ -105,3 +108,139 @@ def get_franchise_order_stats(request, franchise_id):
             'success': False,
             'message': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def get_complete_dashboard_stats(request, franchise_id):
+    """
+    Get all dashboard statistics in a single function
+    """
+    try:
+        today = timezone.now().date()
+        exclude_status = ['Sent to Dash',]
+
+        # Base queryset - filter by user's organization
+        orders = Order.objects.filter(franchise_id=franchise_id).exclude(
+            order_status__in=exclude_status)
+        user = request.user
+
+        # Helper function to get stats
+        def get_status_stats(statuses):
+            if isinstance(statuses, str):
+                statuses = [statuses]
+            filtered = orders.filter(order_status__in=statuses)
+            result = filtered.aggregate(
+                count=Count('id'),
+                total=Sum('total_amount')
+            )
+            return {
+                'nos': result['count'] or 0,
+                'amount': float(result['total'] or 0)
+            }
+
+        # Helper function for payment stats
+        def get_payment_stats(payment_method, statuses=None):
+            filtered = orders.filter(payment_method=payment_method)
+            if statuses:
+                if isinstance(statuses, str):
+                    statuses = [statuses]
+                filtered = filtered.filter(order_status__in=statuses)
+            result = filtered.aggregate(
+                count=Count('id'),
+                total=Sum('total_amount')
+            )
+            return {
+                'nos': result['count'] or 0,
+                'amount': float(result['total'] or 0)
+            }
+
+        # Helper function for logistics stats
+        def get_logistics_stats(logistics_type, statuses=None):
+            filtered = orders.filter(logistics=logistics_type)
+            if statuses:
+                if isinstance(statuses, str):
+                    statuses = [statuses]
+                filtered = filtered.filter(order_status__in=statuses)
+            result = filtered.aggregate(
+                count=Count('id'),
+                total=Sum('total_amount')
+            )
+            return {
+                'nos': result['count'] or 0,
+                'amount': float(result['total'] or 0)
+            }
+
+        # Calculate delivery performance percentages
+        completed_orders = orders.filter(
+            order_status__in=['Delivered', 'Cancelled']).count()
+        delivered_count = orders.filter(order_status='Delivered').count()
+        cancelled_count = orders.filter(order_status='Cancelled').count()
+
+        delivered_percentage = round(
+            (delivered_count / completed_orders) * 100, 2) if completed_orders > 0 else 0
+        cancelled_percentage = round(
+            (cancelled_count / completed_orders) * 100, 2) if completed_orders > 0 else 0
+
+        # Today's orders queryset
+        todays_orders = orders.filter(date=today)
+
+        # Complete dashboard data
+        data = {
+            'overall_statistics': {
+                'Total Orders': get_status_stats(['Pending', 'Processing', 'Delivered', 'Cancelled', 'Rescheduled', 'Out For Delivery', 'Returned By Customer', 'Returned By Dash']),
+                'Total COD': get_payment_stats('Cash on Delivery'),
+                'Total RTV': get_status_stats(['Returned By Customer', 'Returned By Dash', 'Return Pending']),
+                'Total Delivery Charge': {
+                    'nos': orders.count(),
+                    'amount': float(orders.aggregate(total=Sum('delivery_charge'))['total'] or 0)
+                },
+                'Total Pending COD': get_payment_stats('Cash on Delivery', ['Pending', 'Processing', 'Out For Delivery', 'Rescheduled']),
+            },
+
+            'todays_statistics': {
+                'Todays Orders': todays_orders.count(),
+                'Todays Delivery': todays_orders.filter(order_status='Delivered').count(),
+                'Todays Rescheduled': todays_orders.filter(order_status='Rescheduled').count(),
+                'Todays Cancellation': todays_orders.filter(order_status='Cancelled').count(),
+            },
+
+            'delivery_performance': {
+                'Delivered Percentage': delivered_percentage,
+                'Cancelled Percentage': cancelled_percentage
+            },
+        }
+
+        return Response({
+            'success': True,
+            'data': data
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def daily_orders_by_franchise(request, franchise_id):
+    """
+    Return daily order counts for the given franchise_id
+    in the current month only (no missing days filled).
+    """
+    today = date.today()
+    year, month = today.year, today.month
+
+    qs = (
+        Order.objects
+        .filter(franchise_id=franchise_id, logistics='YDM', date__year=year, date__month=month)
+        .values('date')
+        .annotate(count=Count('id'))
+        .order_by('date')
+    )
+
+    return Response({
+        "franchise_id": franchise_id,
+        "days": list(qs),
+    })

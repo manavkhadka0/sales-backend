@@ -98,7 +98,6 @@ class CustomUserSerializer(serializers.ModelSerializer):
                 # If franchise has no distributor, use the factory from user input
                 if factory:
                     validated_data['factory'] = factory
-        
 
         # Handle null values
         if 'distributor' in validated_data and validated_data['distributor'] is None:
@@ -130,7 +129,7 @@ class SmallUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ('id', 'first_name', 'last_name', 'phone_number', 'role',
+        fields = ('id', 'first_name', 'last_name', 'email', 'phone_number', 'role',
                   'franchise')
 
 
