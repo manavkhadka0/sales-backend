@@ -18,7 +18,7 @@ from sales.models import Order
 from sales.serializers import OrderSerializer
 from .serializers import OrderChangeLogSerializer, OrderCommentSerializer, OrderCommentDetailSerializer, OrderCommentDetailSerializer
 from rest_framework import generics
-from .models import OrderComment
+from .models import OrderComment, AssignOrder
 from account.models import CustomUser
 from account.serializers import SmallUserSerializer
 from rest_framework.filters import SearchFilter
@@ -302,21 +302,69 @@ class AssignOrderView(APIView):
             )
 
         assignments = []
-        skipped = []
 
         for order in orders:
             existing_assignment = order.assign_orders.first()
             if existing_assignment:
-                rider_name = existing_assignment.user.first_name or existing_assignment.user.username
-                skipped.append({
-                    "order_code": order.order_code,
-                    "assigned_to": rider_name,
-                })
+                continue
             else:
                 assignment = AssignOrder.objects.create(order=order, user=user)
                 assignments.append(assignment)
 
         return Response({
             "assigned": AssignOrderSerializer(assignments, many=True).data,
-            "skipped": skipped,
         }, status=status.HTTP_201_CREATED)
+
+    def patch(self, request):
+        user_id = request.data.get("user_id")
+        order_ids = request.data.get("order_ids")
+
+        if not user_id or not order_ids:
+            return Response(
+                {"detail": "user_id and order_ids are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # validate user (must be rider)
+        try:
+            user = CustomUser.objects.get(id=user_id, role="YDM_Rider")
+        except CustomUser.DoesNotExist:
+            return Response(
+                {"detail": "User not found or is not a YDM Rider"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # validate orders
+        orders = Order.objects.filter(
+            id__in=order_ids).prefetch_related("assign_orders__user")
+        if orders.count() != len(order_ids):
+            return Response(
+                {"detail": "One or more orders not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        updated = []
+
+        for order in orders:
+            # Update or create assignment for each order
+            assign_order, created = AssignOrder.objects.update_or_create(
+                order=order,
+                defaults={'user': user}
+            )
+
+            if created:
+                updated.append({
+                    "order_code": order.order_code,
+                    "status": "assigned",
+                    "assigned_to": user.first_name or user.username
+                })
+            else:
+                updated.append({
+                    "order_code": order.order_code,
+                    "status": "reassigned",
+                    "assigned_to": user.first_name or user.username
+                })
+
+        return Response({
+            "updated": updated,
+        }, status=status.HTTP_200_OK)

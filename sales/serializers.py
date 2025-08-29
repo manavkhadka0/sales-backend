@@ -155,7 +155,7 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_ydm_rider(self, obj):
         # Get the assigned user using select_related to optimize the query
         assignment = obj.assign_orders.select_related('user').first()
-        return assignment.user.username if assignment and assignment.user else None
+        return assignment.user.phone_number if assignment and assignment.user else None
 
     def get_dash_location_name(self, obj):
         return obj.dash_location.name if obj.dash_location else None

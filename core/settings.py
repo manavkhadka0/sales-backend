@@ -185,11 +185,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
-    'https://wichita-mothers-finite-eastern.trycloudflare.com'
+    'https://shower-guam-reynolds-benefits.trycloudflare.com'
 ]
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
-    'https://wichita-mothers-finite-eastern.trycloudflare.com'
+    'https://shower-guam-reynolds-benefits.trycloudflare.com'
 ]
 
 # Default primary key field type

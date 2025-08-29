@@ -32,6 +32,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from core.middleware import set_current_db_name, get_current_db_name
 from logistics.utils import create_order_log
+from logistics.models import AssignOrder
 
 
 # Create your views here.
@@ -457,7 +458,13 @@ class OrderListCreateView(generics.ListCreateAPIView):
         elif user.role == 'Packaging':
             return Order.objects.filter(franchise=user.franchise, order_status__in=['Pending', 'Processing', 'Sent to Dash', 'Delivered']).order_by('-id')
         elif user.role == 'YDM_Rider':
-            return Order.objects.filter(logistics="YDM").order_by('-id')
+            assigned_order_ids = AssignOrder.objects.filter(
+                user=user
+            ).values_list('order_id', flat=True)
+            return Order.objects.filter(
+                id__in=assigned_order_ids,
+                logistics="YDM"
+            ).order_by('-id')
         elif user.role == 'YDM_Logistics':
             return Order.objects.filter(logistics="YDM").order_by('-id')
         elif user.role == 'YDM_Operator':
@@ -484,12 +491,30 @@ class OrderListCreateView(generics.ListCreateAPIView):
                               'Returned By Customer', 'Returned By Dash', 'Return Pending']
         ).exists()
         if not force_order and cancelled_returned_orders:
+            recent_order = Order.objects.filter(
+                phone_number=phone_number,
+                order_status__in=['Cancelled',
+                                  'Returned By Customer', 'Returned By Dash', 'Return Pending']
+            ).first()
             # Check if prepaid_amount is provided and is greater than 0
             if not prepaid_amount or float(prepaid_amount) <= 0:
                 error_details = {
-                    "error": "This customer has previously cancelled or returned orders. Prepayment is required before placing a new order.",
+                    "error": "This customer has previously cancelled or returned orders. Ask For Prepayment before placing a new order or Force Order.",
                     "status": status.HTTP_403_FORBIDDEN,
                     "requires_prepayment": True,
+                    "existing_order": {
+                        "order_id": recent_order.id,
+                        "created_at": recent_order.created_at,
+                        "salesperson": {
+                            "name": recent_order.sales_person.get_full_name() or recent_order.sales_person.first_name,
+                            "phone": recent_order.sales_person.phone_number
+                        },
+                        "location": {
+                            "franchise": recent_order.franchise.name if recent_order.franchise else None,
+                            "distributor": recent_order.distributor.name if recent_order.distributor else None
+                        },
+                        "order_status": recent_order.order_status,
+                    },
                     "message": "Please ask for prepayment before placing the order for this customer."
                 }
                 raise serializers.ValidationError(error_details)
@@ -519,7 +544,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
                         "location": {
                             "franchise": recent_order.franchise.name if recent_order.franchise else None,
                             "distributor": recent_order.distributor.name if recent_order.distributor else None
-                        }
+                        },
+                        "order_status": recent_order.order_status,
                     }
                 }
                 raise serializers.ValidationError(error_details)
@@ -1519,28 +1545,42 @@ class TopProductsView(generics.ListAPIView):
                         models.Subquery(
                             OrderProduct.objects.filter(
                                 order=models.OuterRef('order')
-                            ).values('order')
-                            .annotate(total_qty=Sum('quantity'))
-                            .values('total_qty')[:1]
+                            ).values('order').annotate(
+                                total_qty=Sum('quantity')
+                            ).values('total_qty')[:1]
                         )
                     )
                 ).order_by('-total_quantity')  # Get top 5 by quantity
             )
 
-            # Format the response data
-            response_data = [{
-                'product_id': item['product__product__id'],
-                'product_name': item['product__product__name'],
-                'total_quantity': item['total_quantity'],
-                'total_amount': round(float(item['total_amount']), 2) if item['total_amount'] else 0.0
-            } for item in top_products]
+            # Calculate total revenue
+            total_revenue = sum(item['total_amount'] for item in top_products)
 
-            return Response({
-                'filter_type': filter_type or 'all',
-                'user_role': user.role,
-                'count': len(response_data),
-                'data': response_data
-            })
+            # Format the response with percentages
+            product_data = []
+            for item in top_products:
+                percentage = (item['total_amount'] /
+                              total_revenue * 100) if total_revenue > 0 else 0
+                product_data.append({
+                    'product_id': item['product__product__id'],
+                    'product_name': item['product__product__name'],
+                    'total_quantity': item['total_quantity'],
+                    'total_amount': round(float(item['total_amount']), 2) if item['total_amount'] else 0.0
+                })
+
+            # Sort by revenue percentage in descending order
+            product_data.sort(key=lambda x: x['total_amount'], reverse=True)
+
+            response_data = {
+                'total_revenue': round(float(total_revenue), 2),
+                'products': product_data,
+                'revenue_distribution': {
+                    'labels': [item['product_name'] for item in product_data],
+                    'percentages': [item['total_amount'] for item in product_data]
+                }
+            }
+
+            return Response(response_data)
 
         except Exception as e:
             return Response(
@@ -2278,7 +2318,8 @@ class SalesPersonStatisticsView(APIView):
                 try:
                     specific_date = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
-                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    end_date = datetime.strptime(
+                        end_date, '%Y-%m-%d').date()
                     orders = orders.filter(
                         created_at__date__gte=specific_date, created_at__date__lte=end_date)
                 except ValueError:
@@ -2414,6 +2455,7 @@ class SalesPersonRevenueView(generics.GenericAPIView):
             # Handle date range queries
             if specific_date:
                 try:
+                    # Convert string to date object
                     specific_date = datetime.strptime(
                         specific_date, '%Y-%m-%d').date()
                     if end_date:
@@ -2436,7 +2478,7 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
             else:
-                # Handle filter type queries
+                # Handle filter types
                 if filter_type == 'daily':
                     revenue = (
                         base_queryset.filter(
@@ -3026,8 +3068,7 @@ class SalesSummaryExportView(APIView):
 
         # Define cancelled statuses
         cancelled_statuses = [
-            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending'
-        ]
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
 
         # Filter orders in date range
 
@@ -3058,8 +3099,13 @@ class SalesSummaryExportView(APIView):
             OrderProduct.objects.filter(
                 order__in=orders.exclude(order_status__in=cancelled_statuses)
             )
-            .values('product__product__id', 'product__product__name')
-            .annotate(quantity_sold=Sum('quantity'))
+            .values(
+                'product__product__id',
+                'product__product__name'
+            )
+            .annotate(
+                quantity_sold=Sum('quantity')
+            )
             .order_by('-quantity_sold')
         )
 
@@ -3068,8 +3114,13 @@ class SalesSummaryExportView(APIView):
             OrderProduct.objects.filter(
                 order__in=orders.filter(order_status__in=cancelled_statuses)
             )
-            .values('product__product__id', 'product__product__name')
-            .annotate(quantity_cancelled=Sum('quantity'))
+            .values(
+                'product__product__id',
+                'product__product__name'
+            )
+            .annotate(
+                quantity_cancelled=Sum('quantity')
+            )
             .order_by('-quantity_cancelled')
         )
 
@@ -3095,6 +3146,7 @@ class SalesSummaryExportView(APIView):
                 'Location',
                 'Customer Landmark',
                 'Address',
+                'Customer Order ID',
                 'Product Name',
                 'Product Price',
                 'Payment Type',
@@ -3105,7 +3157,8 @@ class SalesSummaryExportView(APIView):
             for order in orders:
                 products = OrderProduct.objects.filter(order=order)
                 products_str = ', '.join([
-                    f"{p.quantity}-{p.product.product.name}" for p in products
+                    f"{p.quantity}-{p.product.product.name}"
+                    for p in products
                 ])
                 product_price = order.total_amount
                 payment_type = "pre-paid" if order.prepaid_amount and (
@@ -3116,6 +3169,7 @@ class SalesSummaryExportView(APIView):
                 if getattr(order, "city", None):
                     address_parts.append(order.city)
                 full_address = ", ".join(address_parts)
+
                 writer.writerow([
                     order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
                     order.full_name,
@@ -3125,6 +3179,7 @@ class SalesSummaryExportView(APIView):
                         order, 'dash_location', None) else '',
                     getattr(order, 'landmark', ''),
                     full_address,
+                    '',
                     products_str,
                     product_price,
                     payment_type,
@@ -3255,7 +3310,8 @@ class PackagingSentToDashSummaryCSVView(APIView):
         for order in orders:
             products = OrderProduct.objects.filter(order=order)
             products_str = ', '.join([
-                f"{p.quantity}-{p.product.product.name}" for p in products
+                f"{p.quantity}-{p.product.product.name}"
+                for p in products
             ])
             product_price = order.total_amount
             payment_type = "pre-paid" if order.prepaid_amount and (
@@ -3266,6 +3322,7 @@ class PackagingSentToDashSummaryCSVView(APIView):
             if getattr(order, "city", None):
                 address_parts.append(order.city)
             full_address = ", ".join(address_parts)
+
             writer.writerow([
                 order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
                 order.full_name,
@@ -3477,8 +3534,7 @@ def export_orders_csv_api(request):
 
         # Excluded statuses for summary calculations
         excluded_statuses = [
-            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending'
-        ]
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
 
         # Initialize summary variables
         total_orders = 0
