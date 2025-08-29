@@ -350,11 +350,23 @@ class OrderFilter(django_filters.FilterSet):
         field_name="delivery_type", lookup_expr='icontains')
     logistics = django_filters.CharFilter(
         field_name="logistics", lookup_expr='exact')
+    is_assigned = django_filters.BooleanFilter(
+        method='filter_by_assigned_status',
+        label='Filter by assignment status'
+    )
+
+    def filter_by_assigned_status(self, queryset, name, value):
+        if value is not None:
+            if value:  # If True, return assigned orders
+                return queryset.filter(assign_orders__isnull=False)
+            # If False, return unassigned orders
+            return queryset.filter(assign_orders__isnull=True)
+        return queryset
 
     class Meta:
         model = Order
         fields = ['distributor', 'sales_person', 'order_status',
-                  'date', 'start_date', 'end_date', 'city', 'oil_type', 'payment_method', 'delivery_type', 'logistics', 'franchise']
+                  'date', 'start_date', 'end_date', 'city', 'oil_type', 'payment_method', 'delivery_type', 'logistics', 'franchise', 'is_assigned']
 
 
 class OrderListCreateView(generics.ListCreateAPIView):
@@ -667,9 +679,15 @@ class OrderUpdateView(generics.UpdateAPIView):
     def update(self, request, *args, **kwargs):
         order = self.get_object()
         previous_status = order.order_status
+        comment = request.data.get('comment', None)
 
         response = super().update(request, *args, **kwargs)
         order.refresh_from_db()
+
+        new_status = order.order_status
+        if new_status != previous_status:
+            create_order_log(order, previous_status, new_status,
+                             user=request.user, comment=comment)
 
         # Handle order cancellation and returns
         if (
@@ -2046,6 +2064,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
         try:
             instance = self.get_object()
             old_status = instance.order_status
+            comment = request.data.get('comment', None)
             # Create a dictionary only with fields that are actually provided in the request
             modified_data = {}
 
@@ -2129,7 +2148,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
 
             new_status = order.order_status
             create_order_log(order, old_status, new_status,
-                             user=request.user, comment=None)
+                             user=request.user, comment=comment)
 
             # Handle order products if provided
             if order_products is not None:

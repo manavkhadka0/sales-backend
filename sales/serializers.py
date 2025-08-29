@@ -194,12 +194,6 @@ class OrderSerializer(serializers.ModelSerializer):
             promo_code_instance.times_used += 1
             promo_code_instance.save()
 
-        old_status = order.order_status
-        new_status = ''
-
-        create_order_log(order, old_status, new_status,
-                         user=validated_data['sales_person'], comment=None)
-
         return order
 
     def update(self, instance, validated_data):

@@ -144,7 +144,7 @@ def get_complete_dashboard_stats(request, franchise_id):
         exclude_status = ['Sent to Dash',]
 
         # Base queryset - filter by user's organization
-        orders = Order.objects.filter(franchise_id=franchise_id).exclude(
+        orders = Order.objects.filter(franchise_id=franchise_id, logistics='YDM').exclude(
             order_status__in=exclude_status)
         user = request.user
 
