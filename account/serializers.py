@@ -45,11 +45,13 @@ class CustomUserSerializer(serializers.ModelSerializer):
         source='franchise.name', read_only=True, allow_null=True, required=False)
     factory_name = serializers.CharField(
         source='factory.name', read_only=True, allow_null=True, required=False)
+    franchise_id = serializers.CharField(
+        source='franchise.id', read_only=True, allow_null=True, required=False)
 
     class Meta:
         model = CustomUser
         fields = ('id', 'username', 'first_name', 'last_name', 'email',
-                  'phone_number', 'address', 'role', 'factory', 'distributor', 'franchise', 'password', 'distributor_name', 'franchise_name', 'factory_name')
+                  'phone_number', 'address', 'role', 'factory', 'distributor', 'franchise', 'password', 'distributor_name', 'franchise_name', 'factory_name', 'franchise_id')
         # Make username read-only since we'll set it automatically
         read_only_fields = ('username',)
 
