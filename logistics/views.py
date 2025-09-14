@@ -101,12 +101,12 @@ def get_franchise_order_stats(request, franchise_id):
         # Calculate statistics
         data = {
             'order_processing': {
-                'Order Placed': get_status_stats('Pending'),
+                'Order Placed': get_status_stats('Sent to YDM'),
                 # Map to appropriate status
                 'Order Picked': get_status_stats([]),
                 # Map to appropriate status
-                'Order Verified': get_status_stats([]),
-                'Order Processing': get_status_stats('Processing'),
+                'Order Verified': get_status_stats('Verified'),
+                'Order Processing': get_status_stats('Out For Delivery'),
             },
             'order_dispatched': {
                 # Map to appropriate status
