@@ -2100,8 +2100,8 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
             if modified_data.get('logistics') == 'YDM':
                 modified_data['order_status'] = 'Sent to YDM'
 
-            if modified_data.get('logistics') == 'DASH':
-                modified_data['order_status'] = 'Sent to Dash'
+            if modified_data.get('logistics') == 'DASH' and instance.order_status == 'Sent to YDM':
+                modified_data['order_status'] = 'Pending'
 
             if modified_data.get('order_status') == 'Sent to YDM':
                 modified_data['logistics'] = 'YDM'
