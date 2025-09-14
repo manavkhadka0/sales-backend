@@ -687,11 +687,17 @@ class OrderUpdateView(generics.UpdateAPIView):
             order.logistics = logistics
             if logistics == 'YDM':
                 order.order_status = 'Sent to YDM'
+            elif logistics == 'Dash':
+                order.order_status = 'Sent to Dash'
             order.save()
 
         if order_status == 'Sent to YDM':
             order.order_status = order_status
             order.logistics = 'YDM'
+            order.save()
+        elif order_status == 'Sent to Dash':
+            order.order_status = order_status
+            order.logistics = 'Dash'
             order.save()
 
         response = super().update(request, *args, **kwargs)
@@ -2094,8 +2100,14 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
             if modified_data.get('logistics') == 'YDM':
                 modified_data['order_status'] = 'Sent to YDM'
 
+            if modified_data.get('logistics') == 'Dash':
+                modified_data['order_status'] = 'Sent to Dash'
+
             if modified_data.get('order_status') == 'Sent to YDM':
                 modified_data['logistics'] = 'YDM'
+
+            if modified_data.get('order_status') == 'Sent to Dash':
+                modified_data['logistics'] = 'Dash'
 
             # Check if order_products is provided and parse it
             if 'order_products' in request.data:

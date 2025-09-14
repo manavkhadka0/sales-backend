@@ -144,8 +144,21 @@ class FranchiseListCreateView(generics.ListCreateAPIView):
 
 
 class YDMFranchiseListCreateView(generics.ListAPIView):
-    queryset = Franchise.objects.all()
     serializer_class = YDMFranchiseSerializer
+
+    def get_queryset(self):
+        from django.db.models import Count, Q
+        from sales.models import Order
+
+        # Annotate each franchise with the count of new orders
+        return Franchise.objects.annotate(
+            new_orders=Count(
+                'order_set',
+                filter=Q(order__logistics='YDM',
+                         order__order_status='Sent to YDM'),
+                distinct=True
+            )
+        ).order_by('-new_orders')
 
 
 class FactoryListCreateView(generics.ListCreateAPIView):
