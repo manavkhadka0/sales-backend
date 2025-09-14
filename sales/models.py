@@ -186,7 +186,7 @@ class Order(models.Model):
         ('YDM', 'YDM'),
         ('DASH', 'DASH'),
         ('Pick and Drop', 'Pick and Drop'),
-        ('NPM', 'NPM'),
+        ('NCM', 'NCM'),
     ]
     order_code = models.CharField(
         max_length=20, default=generate_order_id, null=True, blank=True)
