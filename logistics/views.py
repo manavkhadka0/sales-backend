@@ -103,6 +103,7 @@ def get_franchise_order_stats(request, franchise_id):
 
         # Calculate statistics
         data = {
+            'Total Orders': get_status_stats(['Sent to YDM', 'Verified', 'Out For Delivery', 'Rescheduled', 'Delivered', 'Cancelled', 'Returned By Customer', 'Returned By YDM', 'Return Pending']),
             'order_processing': {
                 'Order Placed': get_status_stats('Sent to YDM'),
                 'Order Verified': get_status_stats('Verified'),
