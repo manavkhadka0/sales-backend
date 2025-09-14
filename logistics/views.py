@@ -206,7 +206,8 @@ def get_complete_dashboard_stats(request, franchise_id):
         completed_orders = orders.filter(
             order_status__in=['Delivered', 'Cancelled']).count()
         delivered_count = orders.filter(order_status='Delivered').count()
-        cancelled_count = orders.filter(order_status='Cancelled').count()
+        cancelled_count = orders.filter(
+            order_status='Returned Pending').count()
 
         delivered_percentage = round(
             (delivered_count / completed_orders) * 100, 2) if completed_orders > 0 else 0
