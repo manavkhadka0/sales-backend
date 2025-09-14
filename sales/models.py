@@ -166,6 +166,7 @@ class Order(models.Model):
     ORDER_STATUS_CHOICES = [
         ('Pending', 'Pending'),
         ('Processing', 'Processing'),
+        ('Verified', 'Verified'),
         ('Sent to Dash', 'Sent to Dash'),
         ('Sent to YDM', 'Sent to YDM'),
         ('Delivered', 'Delivered'),
