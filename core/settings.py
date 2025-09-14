@@ -185,11 +185,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
-    'https://shower-guam-reynolds-benefits.trycloudflare.com'
+    'https://delay-watched-objectives-hood.trycloudflare.com'
 ]
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
-    'https://shower-guam-reynolds-benefits.trycloudflare.com'
+    'https://delay-watched-objectives-hood.trycloudflare.com'
 ]
 
 # Default primary key field type
