@@ -36,7 +36,7 @@ class YDMFranchiseSerializer(serializers.ModelSerializer):
 
     def get_franchise_contact_numbers(self, obj):
         users = CustomUser.objects.filter(
-            franchise=obj).values('first_name', 'last_name', 'phone_number')
+            franchise=obj, role='Franchise').values('first_name', 'last_name', 'phone_number')
         return list(users)
 
 
@@ -139,15 +139,17 @@ class UserSmallSerializer(serializers.ModelSerializer):
     franchise = serializers.StringRelatedField(read_only=True)
     distributor = serializers.StringRelatedField(read_only=True)
     factory = serializers.StringRelatedField(read_only=True)
-    franchise_contact = serializers.SerializerMethodField()
+    franchise_contact_numbers = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
         fields = ('id', 'first_name', 'last_name', 'phone_number',
-                  'franchise', 'distributor', 'factory', 'franchise_contact')
+                  'franchise', 'distributor', 'factory', 'franchise_contact_numbers')
 
-    def get_franchise_contact(self, obj):
-        return CustomUser.objects.filter(franchise=obj.franchise).values('phone_number')
+    def get_franchise_contact_numbers(self, obj):
+        users = CustomUser.objects.filter(
+            franchise=obj, role='Franchise').values('first_name', 'last_name', 'phone_number')
+        return list(users)
 
 
 class SmallUserSerializer(serializers.ModelSerializer):
