@@ -144,7 +144,7 @@ class UserSmallSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ('id', 'first_name', 'last_name', 'phone_number',
-                  'franchise', 'distributor', 'factory', 'franchise_contact')
+                  'franchise', 'distributor', 'factory')
 
     # def get_franchise_contact(self, obj):
     #     users = CustomUser.objects.filter(franchise=obj.franchise, role='Franchise').values(
