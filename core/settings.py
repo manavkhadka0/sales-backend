@@ -185,11 +185,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
-    'https://delay-watched-objectives-hood.trycloudflare.com'
+    'https://haiti-alan-waste-features.trycloudflare.com'
 ]
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
-    'https://delay-watched-objectives-hood.trycloudflare.com'
+    'https://haiti-alan-waste-features.trycloudflare.com'
 ]
 
 # Default primary key field type
