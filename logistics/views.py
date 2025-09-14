@@ -382,6 +382,55 @@ class AssignOrderView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class UpdateOrderStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        order_ids = request.data.get("order_ids")
+        status_value = request.data.get("status")
+
+        if not order_ids or not status_value:
+            return Response(
+                {"detail": "order_ids and status are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate status value (add more statuses as per your Order model)
+        valid_statuses = ['Verified', 'Sent to YDM', 'Delivered', 'Cancelled', 'Rescheduled',
+                          'Out For Delivery', 'Returned By Customer', 'Return Pending']
+        if status_value not in valid_statuses:
+            return Response(
+                {"detail": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate orders exist
+        orders = Order.objects.filter(id__in=order_ids)
+        if orders.count() != len(order_ids):
+            return Response(
+                {"detail": "One or more orders not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        updated_orders = []
+        for order in orders:
+            if order.order_status != status_value:
+                order.order_status = status_value
+                order.save()
+                updated_orders.append({
+                    "order_id": order.id,
+                    "order_code": order.order_code,
+                    "previous_status": order.order_status,
+                    "new_status": status_value,
+                    "updated_at": order.updated_at
+                })
+
+        return Response({
+            "message": f"Successfully updated status for {len(updated_orders)} orders",
+            "updated_orders": updated_orders
+        }, status=status.HTTP_200_OK)
+
+
 class FranchisePaymentDashboardAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
