@@ -475,12 +475,12 @@ class OrderListCreateView(generics.ListCreateAPIView):
             ).values_list('order_id', flat=True)
             return Order.objects.filter(
                 id__in=assigned_order_ids,
-                logistics="YDM"
+                logistics="YDM",
             ).order_by('-id')
         elif user.role == 'YDM_Logistics':
-            return Order.objects.filter(logistics="YDM").order_by('-id')
+            return Order.objects.filter(logistics="YDM", order_status='Sent to YDM').order_by('-id')
         elif user.role == 'YDM_Operator':
-            return Order.objects.filter(logistics="YDM").order_by('-id')
+            return Order.objects.filter(logistics="YDM", order_status='Sent to YDM').order_by('-id')
         return Order.objects.none()
 
     def perform_create(self, serializer):
@@ -681,11 +681,17 @@ class OrderUpdateView(generics.UpdateAPIView):
         previous_status = order.order_status
         comment = request.data.get('comment', None)
         logistics = request.data.get('logistics', None)
+        order_status = request.data.get('order_status', None)
 
         if logistics:
             order.logistics = logistics
             if logistics == 'YDM':
                 order.order_status = 'Sent to YDM'
+            order.save()
+
+        if order_status == 'Sent to YDM':
+            order.order_status = order_status
+            order.logistics = 'YDM'
             order.save()
 
         response = super().update(request, *args, **kwargs)
