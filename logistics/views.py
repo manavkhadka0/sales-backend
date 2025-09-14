@@ -82,7 +82,7 @@ def get_franchise_order_stats(request, franchise_id):
         orders = Order.objects.filter(
             franchise_id=franchise_id,
             logistics='YDM'
-        )
+        ).exclude(order_status__in=['Pending', 'Processing', 'Sent to Dash', 'Indrive', 'Return By Dash'])
 
         # Helper function to get stats
         def get_status_stats(statuses):
@@ -141,7 +141,8 @@ def get_complete_dashboard_stats(request, franchise_id):
     """
     try:
         today = timezone.now().date()
-        exclude_status = ['Sent to Dash',]
+        exclude_status = ['Pending', 'Processing',
+                          'Sent to Dash', 'Indrive', 'Return By Dash']
 
         # Base queryset - filter by user's organization
         orders = Order.objects.filter(franchise_id=franchise_id, logistics='YDM').exclude(
@@ -262,7 +263,7 @@ def daily_orders_by_franchise(request, franchise_id):
         .values('date')
         .annotate(count=Count('id'))
         .order_by('date')
-    )
+    ).exclude(order_status__in=['Pending', 'Processing', 'Sent to Dash', 'Indrive', 'Return By Dash'])
 
     return Response({
         "franchise_id": franchise_id,
