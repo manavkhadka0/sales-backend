@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import CustomUser, Distributor, Franchise, Factory, Logistics
+from sales.models import Order
 
 
 class FactorySerializer(serializers.ModelSerializer):
@@ -15,9 +16,28 @@ class DistributorSerializer(serializers.ModelSerializer):
 
 
 class FranchiseSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Franchise
         fields = '__all__'
+
+
+class YDMFranchiseSerializer(serializers.ModelSerializer):
+    new_order_count = serializers.SerializerMethodField()
+    franchise_contact_numbers = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Franchise
+        fields = ['id', 'name', 'short_form', 'distributor',
+                  'new_order_count', 'franchise_contact_numbers']
+
+    def get_new_order_count(self, obj):
+        return Order.objects.filter(logistics='YDM', franchise=obj, order_status='Sent to YDM').count()
+
+    def get_franchise_contact_numbers(self, obj):
+        users = CustomUser.objects.filter(
+            franchise=obj, role='Franchise').values('first_name', 'last_name', 'phone_number')
+        return list(users)
 
 
 class UserSerializer(serializers.ModelSerializer):

@@ -5,6 +5,7 @@ from .views import (
     DistributorListCreateView, FranchiseByDistributorView, FactoryListCreateView,
     ChangePassword, UserFranchiseListView, UserDistributorListView, UserRetrieveUpdateDestroyView,
     LogisticsListCreateView, LogisticsDetailView, SalesPersonListView,
+    YDMFranchiseListCreateView,
     DemoUserList
 )
 
@@ -22,6 +23,8 @@ urlpatterns = [
          name='distributor-list-create'),
     path('franchises/', FranchiseListCreateView.as_view(),
          name='franchise-by-distributor'),
+    path('ydm-franchises/', YDMFranchiseListCreateView.as_view(),
+         name='ydm-franchise-list-create'),
     path('distributors/<int:distributor_id>/franchises/',
          FranchiseByDistributorView.as_view(), name='franchise-by-distributor'),
     path('change-password/', ChangePassword.as_view(), name='change-password'),

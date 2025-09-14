@@ -7,7 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import AllowAny
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-from .serializers import ChangePasswordSerializer
+from .serializers import ChangePasswordSerializer, YDMFranchiseSerializer
 from rest_framework import serializers
 
 
@@ -141,6 +141,11 @@ class DistributorListCreateView(generics.ListCreateAPIView):
 class FranchiseListCreateView(generics.ListCreateAPIView):
     queryset = Franchise.objects.all()
     serializer_class = FranchiseSerializer
+
+
+class YDMFranchiseListCreateView(generics.ListAPIView):
+    queryset = Franchise.objects.all()
+    serializer_class = YDMFranchiseSerializer
 
 
 class FactoryListCreateView(generics.ListCreateAPIView):
