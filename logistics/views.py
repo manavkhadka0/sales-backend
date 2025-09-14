@@ -222,6 +222,7 @@ def get_complete_dashboard_stats(request, franchise_id):
             'overall_statistics': {
                 'Total Orders': get_status_stats(['Sent to YDM', 'Verified', 'Out For Delivery', 'Rescheduled', 'Delivered', 'Cancelled', 'Returned By Customer', 'Returned By YDM', 'Return Pending']),
                 'Total COD': get_status_stats(['Sent to YDM', 'Verified', 'Out For Delivery', 'Rescheduled', 'Delivered']),
+                'Total Delivered': get_status_stats('Delivered'),
                 'Total RTV': get_status_stats('Return Pending'),
                 'Total Cancelled': get_status_stats(['Cancelled', 'Returned By Customer', 'Returned By YDM']),
                 'Total Delivery Charge': {
