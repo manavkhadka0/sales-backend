@@ -91,27 +91,24 @@ def get_franchise_order_stats(request, franchise_id):
             filtered = orders.filter(order_status__in=statuses)
             result = filtered.aggregate(
                 count=Count('id'),
-                total=Sum('total_amount')
+                total=Sum('total_amount'),
+                prepaid=Sum('prepaid_amount')
             )
+            total = float(result['total'] or 0)
+            prepaid = float(result['prepaid'] or 0)
             return {
                 'nos': result['count'] or 0,
-                'amount': float(result['total'] or 0)
+                'amount': total - prepaid
             }
 
         # Calculate statistics
         data = {
             'order_processing': {
                 'Order Placed': get_status_stats('Sent to YDM'),
-                # Map to appropriate status
-                'Order Picked': get_status_stats([]),
-                # Map to appropriate status
                 'Order Verified': get_status_stats('Verified'),
-                'Order Processing': get_status_stats('Out For Delivery'),
             },
             'order_dispatched': {
-                # Map to appropriate status
                 'Received At Branch': get_status_stats([]),
-                # Map to appropriate status (excluding Sent to Dash)
                 'Out For Delivery': get_status_stats('Out For Delivery'),
                 'Rescheduled': get_status_stats('Rescheduled'),
             },
@@ -156,11 +153,14 @@ def get_complete_dashboard_stats(request, franchise_id):
             filtered = orders.filter(order_status__in=statuses)
             result = filtered.aggregate(
                 count=Count('id'),
-                total=Sum('total_amount')
+                total=Sum('total_amount'),
+                prepaid=Sum('prepaid_amount')
             )
+            total = float(result['total'] or 0)
+            prepaid = float(result['prepaid'] or 0)
             return {
                 'nos': result['count'] or 0,
-                'amount': float(result['total'] or 0)
+                'amount': total - prepaid
             }
 
         # Helper function for payment stats
@@ -172,11 +172,14 @@ def get_complete_dashboard_stats(request, franchise_id):
                 filtered = filtered.filter(order_status__in=statuses)
             result = filtered.aggregate(
                 count=Count('id'),
-                total=Sum('total_amount')
+                total=Sum('total_amount'),
+                prepaid=Sum('prepaid_amount')
             )
+            total = float(result['total'] or 0)
+            prepaid = float(result['prepaid'] or 0)
             return {
                 'nos': result['count'] or 0,
-                'amount': float(result['total'] or 0)
+                'amount': total - prepaid
             }
 
         # Helper function for logistics stats
@@ -188,11 +191,14 @@ def get_complete_dashboard_stats(request, franchise_id):
                 filtered = filtered.filter(order_status__in=statuses)
             result = filtered.aggregate(
                 count=Count('id'),
-                total=Sum('total_amount')
+                total=Sum('total_amount'),
+                prepaid=Sum('prepaid_amount')
             )
+            total = float(result['total'] or 0)
+            prepaid = float(result['prepaid'] or 0)
             return {
                 'nos': result['count'] or 0,
-                'amount': float(result['total'] or 0)
+                'amount': total - prepaid
             }
 
         # Calculate delivery performance percentages
@@ -212,7 +218,7 @@ def get_complete_dashboard_stats(request, franchise_id):
         # Complete dashboard data
         data = {
             'overall_statistics': {
-                'Total Orders': get_status_stats(['Pending', 'Processing', 'Delivered', 'Cancelled', 'Rescheduled', 'Out For Delivery', 'Returned By Customer', 'Returned By Dash']),
+                'Total Orders': get_status_stats(['Sent to YDM', 'Verified', 'Out For Delivery', 'Rescheduled', 'Delivered', 'Cancelled', 'Returned By Customer', 'Return Pending']),
                 'Total COD': get_payment_stats('Cash on Delivery'),
                 'Total RTV': get_status_stats(['Returned By Customer', 'Returned By Dash', 'Return Pending']),
                 'Total Delivery Charge': {
