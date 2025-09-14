@@ -680,14 +680,16 @@ class OrderUpdateView(generics.UpdateAPIView):
         order = self.get_object()
         previous_status = order.order_status
         comment = request.data.get('comment', None)
+        logistics = request.data.get('logistics', None)
+
+        if logistics:
+            order.logistics = logistics
+            if logistics == 'YDM':
+                order.order_status = 'Sent to YDM'
+            order.save()
 
         response = super().update(request, *args, **kwargs)
         order.refresh_from_db()
-
-        # If logistics is YDM, update status to 'Sent to YDM'
-        if order.logistics == 'YDM':
-            order.order_status = 'Sent to YDM'
-            order.save()
 
         new_status = order.order_status
         if new_status != previous_status:
