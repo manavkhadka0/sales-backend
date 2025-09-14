@@ -237,7 +237,7 @@ def get_complete_dashboard_stats(request, franchise_id):
                 'Todays Orders': todays_orders.count(),
                 'Todays Delivery': todays_orders.filter(order_status='Delivered').count(),
                 'Todays Rescheduled': todays_orders.filter(order_status='Rescheduled').count(),
-                'Todays Cancellation': todays_orders.filter(order_status='Returned Pending').count(),
+                'Todays Cancellation': todays_orders.filter(order_status='Returned By YDM').count(),
             },
 
             'delivery_performance': {
