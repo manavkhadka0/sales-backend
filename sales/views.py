@@ -478,9 +478,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 logistics="YDM",
             ).order_by('-id')
         elif user.role == 'YDM_Logistics':
-            return Order.objects.filter(logistics="YDM").order_by('-id').exclude(order_status__in=['Pending', 'Processing', 'Sent to Dash', 'Indrive', 'Return By Dash'])
+            return Order.objects.filter(logistics="YDM", order_status='Sent to YDM').order_by('-id')
         elif user.role == 'YDM_Operator':
-            return Order.objects.filter(logistics="YDM").order_by('-id').exclude(order_status__in=['Pending', 'Processing', 'Sent to Dash', 'Indrive', 'Return By Dash'])
+            return Order.objects.filter(logistics="YDM", order_status='Sent to YDM').order_by('-id')
         return Order.objects.none()
 
     def perform_create(self, serializer):
