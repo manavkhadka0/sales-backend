@@ -2087,8 +2087,15 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
             if 'logistics' in request.data:
                 modified_data['logistics'] = request.data.get('logistics')
 
+            if 'order_status' in request.data:
+                modified_data['order_status'] = request.data.get(
+                    'order_status')
+
             if modified_data.get('logistics') == 'YDM':
                 modified_data['order_status'] = 'Sent to YDM'
+
+            if modified_data.get('order_status') == 'Sent to YDM':
+                modified_data['logistics'] = 'YDM'
 
             # Check if order_products is provided and parse it
             if 'order_products' in request.data:
