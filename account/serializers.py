@@ -139,11 +139,15 @@ class UserSmallSerializer(serializers.ModelSerializer):
     franchise = serializers.StringRelatedField(read_only=True)
     distributor = serializers.StringRelatedField(read_only=True)
     factory = serializers.StringRelatedField(read_only=True)
+    franchise_contact = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
         fields = ('id', 'first_name', 'last_name', 'phone_number',
-                  'franchise', 'distributor', 'factory')
+                  'franchise', 'distributor', 'factory', 'franchise_contact')
+
+    def get_franchise_contact(self, obj):
+        return CustomUser.objects.filter(franchise=obj.franchise).values('phone_number')
 
 
 class SmallUserSerializer(serializers.ModelSerializer):
