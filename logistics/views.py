@@ -309,6 +309,10 @@ class AssignOrderView(APIView):
                 continue
             else:
                 assignment = AssignOrder.objects.create(order=order, user=user)
+                # Update order status to 'Out For Delivery' when assigned to rider
+                if order.order_status != 'Out For Delivery':
+                    order.order_status = 'Out For Delivery'
+                    order.save()
                 assignments.append(assignment)
 
         return Response({
@@ -352,17 +356,24 @@ class AssignOrderView(APIView):
                 defaults={'user': user}
             )
 
+            # Update order status to 'Out For Delivery' when assigned to rider
+            if order.order_status != 'Out For Delivery':
+                order.order_status = 'Out For Delivery'
+                order.save()
+
             if created:
                 updated.append({
                     "order_code": order.order_code,
                     "status": "assigned",
-                    "assigned_to": user.first_name or user.username
+                    "assigned_to": user.first_name or user.username,
+                    "order_status": "Out For Delivery"
                 })
             else:
                 updated.append({
                     "order_code": order.order_code,
                     "status": "reassigned",
-                    "assigned_to": user.first_name or user.username
+                    "assigned_to": user.first_name or user.username,
+                    "order_status": "Out For Delivery"
                 })
 
         return Response({
@@ -411,6 +422,7 @@ class FranchisePaymentDashboardAPIView(APIView):
                 "pending_amount": str(pending_amount),
             }
         )
+
 
 class FranchisePaymentLogAPIView(APIView):
     permission_classes = [IsAuthenticated]
