@@ -108,14 +108,13 @@ def get_franchise_order_stats(request, franchise_id):
                 'Order Verified': get_status_stats('Verified'),
             },
             'order_dispatched': {
-                'Received At Branch': get_status_stats([]),
                 'Out For Delivery': get_status_stats('Out For Delivery'),
                 'Rescheduled': get_status_stats('Rescheduled'),
             },
             'order_status': {
                 'Delivered': get_status_stats('Delivered'),
-                'Cancelled': get_status_stats('Cancelled'),
-                'Pending RTV': get_status_stats(['Returned By Customer', 'Returned By Dash']),
+                'Cancelled': get_status_stats('Returned By YDM'),
+                'Pending RTV': get_status_stats('Return Pending'),
             }
         }
 
@@ -150,7 +149,8 @@ def get_complete_dashboard_stats(request, franchise_id):
         def get_status_stats(statuses):
             if isinstance(statuses, str):
                 statuses = [statuses]
-            filtered = orders.filter(order_status__in=statuses)
+            filtered = orders.filter(
+                logistics='YDM', order_status__in=statuses)
             result = filtered.aggregate(
                 count=Count('id'),
                 total=Sum('total_amount'),
@@ -218,9 +218,9 @@ def get_complete_dashboard_stats(request, franchise_id):
         # Complete dashboard data
         data = {
             'overall_statistics': {
-                'Total Orders': get_status_stats(['Sent to YDM', 'Verified', 'Out For Delivery', 'Rescheduled', 'Delivered', 'Cancelled', 'Returned By Customer', 'Return Pending']),
-                'Total COD': get_payment_stats('Cash on Delivery'),
-                'Total RTV': get_status_stats(['Returned By Customer', 'Returned By Dash', 'Return Pending']),
+                'Total Orders': get_status_stats(['Sent to YDM', 'Verified', 'Out For Delivery', 'Rescheduled', 'Delivered', 'Cancelled', 'Returned By Customer', 'Returned By YDM', 'Return Pending']),
+                'Total COD': get_payment_stats('Cash on Delivery', ['Sent to YDM', 'Verified', 'Out For Delivery', 'Rescheduled', 'Delivered']),
+                'Total RTV': get_status_stats(['Returned By Customer', 'Returned By YDM', 'Return Pending']),
                 'Total Delivery Charge': {
                     'nos': orders.count(),
                     'amount': float(orders.aggregate(total=Sum('delivery_charge'))['total'] or 0)
