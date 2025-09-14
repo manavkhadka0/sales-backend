@@ -17,7 +17,7 @@ class OrderProductInline(TabularInline):
 
 class OrderAdmin(ModelAdmin):
     list_display = ['full_name', 'date', 'get_sales_person_name', 'product_name',
-                    'delivery_address', 'phone_number', 'payment_method', 'total_amount', 'prepaid_amount', 'order_status']
+                    'delivery_address', 'phone_number', 'payment_method', 'total_amount', 'prepaid_amount', 'order_status', 'logistics']
     list_filter = ['sales_person', 'order_products__product__product',
                    'order_status', 'created_at']
     search_fields = ['full_name', 'phone_number', 'sales_person__first_name']

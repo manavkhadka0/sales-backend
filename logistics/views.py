@@ -1,7 +1,7 @@
 # views.py
 from rest_framework.views import APIView
 from .serializers import AssignOrderSerializer
-from .models import AssignOrder, Order, CustomUser
+from .models import AssignOrder, Order, CustomUser, FranchisePaymentLog
 from rest_framework.permissions import IsAuthenticated
 from datetime import date, timedelta
 from calendar import monthrange
@@ -16,10 +16,10 @@ from django.shortcuts import get_object_or_404
 from sales.models import Order
 # You'll need to create this serializer
 from sales.serializers import OrderSerializer
-from .serializers import OrderChangeLogSerializer, OrderCommentSerializer, OrderCommentDetailSerializer, OrderCommentDetailSerializer
+from .serializers import OrderChangeLogSerializer, OrderCommentSerializer, OrderCommentDetailSerializer, OrderCommentDetailSerializer, FranchisePaymentLogSerializer
 from rest_framework import generics
 from .models import OrderComment, AssignOrder
-from account.models import CustomUser
+from account.models import CustomUser, Franchise
 from account.serializers import SmallUserSerializer
 from rest_framework.filters import SearchFilter
 
@@ -368,3 +368,60 @@ class AssignOrderView(APIView):
         return Response({
             "updated": updated,
         }, status=status.HTTP_200_OK)
+
+
+class FranchisePaymentDashboardAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, franchise_id):
+        """API endpoint showing payment details for a specific franchise"""
+
+        # Get franchise
+        franchise = get_object_or_404(Franchise, id=franchise_id)
+
+        # Orders
+        orders = Order.objects.filter(franchise=franchise, logistics="YDM")
+
+        total_order_amount = (
+            orders.aggregate(total=Sum("total_amount"))[
+                "total"] or Decimal("0")
+        )
+
+        total_orders = orders.count()
+        total_deduction = Decimal("100") * total_orders
+        gross_amount = total_order_amount - total_deduction
+
+        # Payments
+        total_paid = (
+            FranchisePaymentLog.objects.filter(franchise=franchise).aggregate(
+                total=Sum("amount_paid")
+            )["total"]
+            or Decimal("0")
+        )
+
+        pending_amount = gross_amount - total_paid
+
+        return Response(
+            {
+                "total_orders": total_orders,
+                "total_order_amount": str(total_order_amount),
+                "total_deduction": str(total_deduction),
+                "gross_amount": str(gross_amount),
+                "total_paid": str(total_paid),
+                "pending_amount": str(pending_amount),
+            }
+        )
+
+class FranchisePaymentLogAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, franchise_id):
+        """API endpoint showing payment details for a specific franchise"""
+
+        # Get franchise
+        franchise = get_object_or_404(Franchise, id=franchise_id)
+
+        # Payments
+        payments = FranchisePaymentLog.objects.filter(franchise=franchise)
+
+        return Response(FranchisePaymentLogSerializer(payments, many=True).data)

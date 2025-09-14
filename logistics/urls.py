@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import track_order, get_franchise_order_stats, OrderCommentListCreateView, OrderCommentRetrieveUpdateDestroyView, get_complete_dashboard_stats, daily_orders_by_franchise, AssignOrderView, GetYDMRiderView
+from .views import track_order, get_franchise_order_stats, OrderCommentListCreateView, OrderCommentRetrieveUpdateDestroyView, get_complete_dashboard_stats, daily_orders_by_franchise, AssignOrderView, GetYDMRiderView, FranchisePaymentDashboardAPIView, FranchisePaymentLogAPIView
 
 urlpatterns = [
     path('track-order/', track_order, name='track-order'),
@@ -16,4 +16,8 @@ urlpatterns = [
          daily_orders_by_franchise, name='daily_stats_by_franchise'),
     path('logistics/assign-order/', AssignOrderView.as_view(), name='assign-order'),
     path('logistics/ydm-riders/', GetYDMRiderView.as_view(), name='ydm-rider'),
+    path('logistics/franchise/<int:franchise_id>/payment-dashboard/',
+         FranchisePaymentDashboardAPIView.as_view(), name='franchise_payment_dashboard'),
+    path('logistics/franchise/<int:franchise_id>/payment-log/',
+         FranchisePaymentLogAPIView.as_view(), name='franchise_payment_log'),
 ]

@@ -184,6 +184,8 @@ class Order(models.Model):
     LOGISTICS_CHOICES = [
         ('YDM', 'YDM'),
         ('DASH', 'DASH'),
+        ('Pick and Drop', 'Pick and Drop'),
+        ('NPM', 'NPM'),
     ]
     order_code = models.CharField(
         max_length=20, default=generate_order_id, null=True, blank=True)

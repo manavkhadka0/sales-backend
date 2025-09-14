@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from . models import OrderChangeLog, OrderComment, AssignOrder
+from . models import OrderChangeLog, OrderComment, AssignOrder, FranchisePaymentLog
 from sales.models import Order
 from account.models import CustomUser
 from account.serializers import SmallUserSerializer
@@ -32,3 +32,10 @@ class AssignOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssignOrder
         fields = ["id", "order", "user", "assigned_at"]
+
+
+class FranchisePaymentLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FranchisePaymentLog
+        fields = ["id", "franchise", "paid_by", "amount_paid",
+                  "payment_method", "notes", "payment_date"]
