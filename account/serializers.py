@@ -147,7 +147,9 @@ class UserSmallSerializer(serializers.ModelSerializer):
                   'franchise', 'distributor', 'factory', 'franchise_contact')
 
     def get_franchise_contact(self, obj):
-        return CustomUser.objects.filter(franchise=obj.franchise).values('phone_number')
+        users = CustomUser.objects.filter(franchise=obj.franchise).values(
+            'first_name', 'last_name', 'phone_number')
+        return list(users)
 
 
 class SmallUserSerializer(serializers.ModelSerializer):
