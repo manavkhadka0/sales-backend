@@ -688,7 +688,7 @@ class OrderUpdateView(generics.UpdateAPIView):
             if logistics == 'YDM':
                 order.order_status = 'Sent to YDM'
             elif logistics == 'DASH' and previous_status == 'Sent to YDM':
-                order.order_status = 'Sent to Dash'
+                order.order_status = 'Pending'
             order.save()
 
         if order_status == 'Sent to YDM':
