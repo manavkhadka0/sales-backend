@@ -174,6 +174,7 @@ class Order(models.Model):
         ('Cancelled', 'Cancelled'),
         ('Returned By Customer', 'Returned By Customer'),
         ('Returned By Dash', 'Returned By Dash'),
+        ('Returned By YDM', 'Returned By YDM'),
         ('Return Pending', 'Return Pending'),
         ('Out For Delivery', 'Out For Delivery'),
         ('Rescheduled', 'Rescheduled'),
