@@ -8,7 +8,8 @@ class OrderChangeLogAdmin(ModelAdmin):
     list_display = ('order', 'user', 'old_status',
                     'new_status', 'comment', 'changed_at')
     list_filter = ('order', 'user', 'old_status', 'new_status', 'changed_at')
-    search_fields = ('order', 'user', 'old_status', 'new_status', 'comment')
+    search_fields = ('order__order_code', 'user__first_name',
+                     'old_status', 'new_status', 'comment')
     ordering = ('-changed_at',)
 
 
