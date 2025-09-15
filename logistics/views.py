@@ -170,11 +170,13 @@ def get_complete_dashboard_stats(request, franchise_id):
             }
 
         valid_orders = Order.objects.filter(
-            ~Q(order_status__in=['Cancelled', 'Return Pending'])
+            ~Q(order_status__in=['Cancelled', 'Return Pending']),
+            logistics='YDM'
         ).count()
 
         cancelled_orders = Order.objects.filter(
-            Q(order_status__in=['Cancelled', 'Return Pending'])
+            Q(order_status__in=['Cancelled', 'Return Pending']),
+            logistics='YDM'
         ).count()
 
         # Calculate total charges
