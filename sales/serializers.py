@@ -176,7 +176,7 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_sent_to_ydm_date(self, obj):
         sent_to_ydm_log = obj.change_logs.filter(
-            new_status='sent to ydm'
+            new_status='Sent to YDM'
         ).order_by('changed_at').first()
 
         if sent_to_ydm_log:
