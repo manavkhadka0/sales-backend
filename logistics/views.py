@@ -1,4 +1,7 @@
 # views.py
+from decimal import Decimal
+from django_filters.rest_framework import DjangoFilterBackend
+from django_filters import rest_framework as django_filters
 from django.db.models import Q, Sum, Case, When, IntegerField
 from .models import OrderChangeLog
 from rest_framework.views import APIView
@@ -15,7 +18,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-from sales.models import Order
+from sales.models import Order, OrderProduct
 # You'll need to create this serializer
 from sales.serializers import OrderSerializer
 from .serializers import OrderChangeLogSerializer, OrderCommentSerializer, OrderCommentDetailSerializer, OrderCommentDetailSerializer, FranchisePaymentLogSerializer
@@ -24,6 +27,11 @@ from .models import OrderComment, AssignOrder
 from account.models import CustomUser, Franchise
 from account.serializers import SmallUserSerializer
 from rest_framework.filters import SearchFilter
+from rest_framework.response import Response
+from rest_framework import status
+from django.http import HttpResponse
+import csv
+
 
 DELIVERY_CHARGE = 100
 CANCELLED_CHARGE = 0
@@ -205,24 +213,24 @@ def get_complete_dashboard_stats(request, franchise_id):
             """
             # First, get the first status change for each order today
             from django.db.models import Min
-            
+
             # Get the minimum changed_at for each order with the given status(es)
             order_changes = OrderChangeLog.objects.filter(
                 changed_at__date=today,
                 order__franchise_id=franchise_id,
                 order__logistics='YDM'
             )
-            
+
             if isinstance(status, (list, tuple)):
                 order_changes = order_changes.filter(new_status__in=status)
             else:
                 order_changes = order_changes.filter(new_status=status)
-            
+
             # Get the first change log for each order
             first_changes = order_changes.values('order_id').annotate(
                 first_change=Min('id')
             ).values_list('first_change', flat=True)
-            
+
             # Count the number of unique orders with the first status change matching our criteria
             return len(first_changes)
 
@@ -530,3 +538,120 @@ class FranchisePaymentLogAPIView(APIView):
         payments = FranchisePaymentLog.objects.filter(franchise=franchise)
 
         return Response(FranchisePaymentLogSerializer(payments, many=True).data)
+
+
+class OrderFilter(django_filters.FilterSet):
+    franchise = django_filters.CharFilter(
+        field_name="franchise__id", lookup_expr="exact")
+    order_status = django_filters.CharFilter(
+        field_name="order_status", lookup_expr="exact")
+
+    # for date range
+    start_date = django_filters.DateFilter(
+        field_name="created_at", lookup_expr="date__gte")
+    end_date = django_filters.DateFilter(
+        field_name="created_at", lookup_expr="date__lte")
+
+    class Meta:
+        model = Order
+        fields = [
+            "franchise",
+            "order_status",
+            "start_date",
+            "end_date",
+        ]
+
+
+class ExportOrdersCSVView(APIView):
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = OrderFilter
+
+    def get(self, request):
+
+        # Apply filters
+        qs = Order.objects.filter(logistics="YDM")
+
+        # let django-filter handle query params
+        filtered_qs = OrderFilter(request.GET, queryset=qs).qs
+
+        if not filtered_qs.exists():
+            return Response({"error": "No orders found for given filters."}, status=404)
+
+        # aggregations
+        total_amount = filtered_qs.aggregate(
+            total=Sum("total_amount"))["total"] or 0
+        total_orders = filtered_qs.count()
+
+        product_sales = (
+            OrderProduct.objects.filter(order__in=filtered_qs)
+            .values("product__product__name")
+            .annotate(quantity_sold=Sum("quantity"))
+            .order_by("-quantity_sold")
+        )
+
+        # CSV response
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="packaging_sent_to_dash_summary.csv"'
+        writer = csv.writer(response)
+
+        # summary
+        writer.writerow(["Total Amount", float(total_amount)])
+        writer.writerow(["Total Orders", total_orders])
+        writer.writerow([])
+
+        # Orders table
+        writer.writerow(["ORDER DETAILS"])
+        writer.writerow([
+            "Date", "Customer Name", "Contact Number", "Alternative Number",
+            "Location", "Customer Landmark", "Address",
+            "Product Name(s)", "Product Price", "Payment Type",
+            "Order Status",
+        ])
+
+        for order in filtered_qs:
+            products = OrderProduct.objects.filter(order=order)
+            products_str = ", ".join(
+                [f"{p.quantity}-{p.product.product.name}" for p in products])
+            product_price = order.total_amount
+            payment_type = (
+                "pre-paid" if order.prepaid_amount and (order.total_amount - order.prepaid_amount) == 0
+                else "cashOnDelivery"
+            )
+            address_parts = []
+            if getattr(order, "delivery_address", None):
+                address_parts.append(order.delivery_address)
+            if getattr(order, "city", None):
+                address_parts.append(order.city)
+            full_address = ", ".join(address_parts)
+
+            latest_change_log = order.change_logs.order_by(
+                '-changed_at').first()
+            changed_at_str = latest_change_log.changed_at.strftime(
+                "%Y-%m-%d %H:%M:%S") if latest_change_log else ""
+
+            writer.writerow([
+                changed_at_str,
+                order.full_name,
+                order.phone_number,
+                order.alternate_phone_number or "",
+                order.dash_location.name if getattr(
+                    order, "dash_location", None) else "",
+                getattr(order, "landmark", ""),
+                full_address,
+                products_str,
+                product_price,
+                payment_type,
+                order.order_status,
+            ])
+
+        # product breakdown
+        writer.writerow([])
+        if product_sales:
+            writer.writerow([p["product__product__name"]
+                            for p in product_sales])
+            writer.writerow([p["quantity_sold"] for p in product_sales])
+        else:
+            writer.writerow(["No Products"])
+            writer.writerow(["0"])
+
+        return response
