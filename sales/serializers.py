@@ -145,6 +145,7 @@ class OrderSerializer(serializers.ModelSerializer):
     ydm_rider = serializers.SerializerMethodField(read_only=True)
     ydm_rider_name = serializers.SerializerMethodField(read_only=True)
     comments = serializers.SerializerMethodField(read_only=True)
+    sent_to_ydm_date = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Order
@@ -152,7 +153,8 @@ class OrderSerializer(serializers.ModelSerializer):
                   'phone_number', 'alternate_phone_number', 'payment_method', 'dash_location',
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at',
                   'order_products', 'total_amount', 'delivery_charge', 'remarks', 'promo_code',
-                  'prepaid_amount', 'delivery_type', 'logistics', 'dash_location_name', 'dash_tracking_code', 'ydm_rider', 'ydm_rider_name', 'comments']
+                  'prepaid_amount', 'delivery_type', 'logistics', 'dash_location_name',
+                  'dash_tracking_code', 'ydm_rider', 'ydm_rider_name', 'comments', 'sent_to_ydm_date']
 
     def get_ydm_rider(self, obj):
         # Get the assigned user using select_related to optimize the query
@@ -170,6 +172,15 @@ class OrderSerializer(serializers.ModelSerializer):
         latest_comment = obj.comments.order_by('-id').first()
         if latest_comment:
             return OrderCommentSerializer(latest_comment).data
+        return None
+
+    def get_sent_to_ydm_date(self, obj):
+        sent_to_ydm_log = obj.change_logs.filter(
+            new_status='sent to ydm'
+        ).order_by('changed_at').first()
+
+        if sent_to_ydm_log:
+            return sent_to_ydm_log.changed_at
         return None
 
     def create(self, validated_data):
