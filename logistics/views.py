@@ -1,4 +1,5 @@
 # views.py
+from .models import OrderChangeLog
 from rest_framework.views import APIView
 from .serializers import AssignOrderSerializer
 from .models import AssignOrder, Order, CustomUser, FranchisePaymentLog
@@ -216,7 +217,7 @@ def get_complete_dashboard_stats(request, franchise_id):
             (cancelled_count / completed_orders) * 100, 2) if completed_orders > 0 else 0
 
         # Today's orders queryset
-        todays_orders = orders.filter(date=today)
+        todays_orders = orders.filter(created_at__date=today)
 
         # Complete dashboard data
         data = {
@@ -230,7 +231,7 @@ def get_complete_dashboard_stats(request, franchise_id):
                     'nos': orders.count(),
                     'amount': float(orders.aggregate(total=Sum('delivery_charge'))['total'] or 0)
                 },
-                'Total Pending COD': get_payment_stats('Cash on Delivery', ['Pending', 'Processing', 'Out For Delivery', 'Rescheduled']),
+                'Total Pending COD': get_status_stats(['Sent to YDM', 'Verified', 'Out For Delivery', 'Rescheduled', 'Delivered']),
             },
 
             'todays_statistics': {
@@ -263,22 +264,39 @@ def get_complete_dashboard_stats(request, franchise_id):
 def daily_orders_by_franchise(request, franchise_id):
     """
     Return daily order counts for the given franchise_id
+    based on when orders were marked as 'Sent to YDM' status
     in the current month only (no missing days filled).
     """
+    from django.db.models.functions import TruncDate
+
     today = date.today()
     year, month = today.year, today.month
 
+    # Get all orders that were marked as 'Sent to YDM' for this franchise in current month
     qs = (
-        Order.objects
-        .filter(franchise_id=franchise_id, logistics='YDM', date__year=year, date__month=month)
-        .values('date')
+        OrderChangeLog.objects
+        .filter(
+            order__franchise_id=franchise_id,
+            order__logistics='YDM',
+            new_status='Sent to YDM',
+            changed_at__year=year,
+            changed_at__month=month
+        )
+        .annotate(change_date=TruncDate('changed_at'))
+        .values('change_date')
         .annotate(count=Count('id'))
-        .order_by('date')
-    ).exclude(order_status__in=['Pending', 'Processing', 'Sent to Dash', 'Indrive', 'Return By Dash'])
+        .order_by('change_date')
+    )
+
+    # Format the results to match the previous response structure
+    formatted_days = [
+        {'date': item['change_date'], 'count': item['count']}
+        for item in qs
+    ]
 
     return Response({
         "franchise_id": franchise_id,
-        "days": list(qs),
+        "days": formatted_days,
     })
 
 
