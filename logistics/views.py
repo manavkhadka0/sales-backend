@@ -194,26 +194,37 @@ def get_complete_dashboard_stats(request, franchise_id):
 
         def get_todays_orders_by_status(status):
             """
-            Helper function to get count of orders with specific status(es) change today
+            Helper function to get count of orders with specific status(es) change today.
+            Only counts the first status change for each order to avoid duplicates.
 
             Args:
                 status: A single status string or a list/tuple of status strings
 
             Returns:
-                int: Count of orders matching the status criteria
+                int: Count of unique orders with status change matching the criteria
             """
-            qs = OrderChangeLog.objects.filter(
+            # First, get the first status change for each order today
+            from django.db.models import Min
+            
+            # Get the minimum changed_at for each order with the given status(es)
+            order_changes = OrderChangeLog.objects.filter(
                 changed_at__date=today,
                 order__franchise_id=franchise_id,
                 order__logistics='YDM'
             )
-
+            
             if isinstance(status, (list, tuple)):
-                qs = qs.filter(new_status__in=status)
+                order_changes = order_changes.filter(new_status__in=status)
             else:
-                qs = qs.filter(new_status=status)
-
-            return qs.count()
+                order_changes = order_changes.filter(new_status=status)
+            
+            # Get the first change log for each order
+            first_changes = order_changes.values('order_id').annotate(
+                first_change=Min('id')
+            ).values_list('first_change', flat=True)
+            
+            # Count the number of unique orders with the first status change matching our criteria
+            return len(first_changes)
 
         # Get today's order counts by status
         todays_orders_count = get_todays_orders_by_status('Sent to YDM')
