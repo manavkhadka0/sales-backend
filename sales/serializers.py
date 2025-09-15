@@ -143,6 +143,7 @@ class OrderSerializer(serializers.ModelSerializer):
     )
     dash_location_name = serializers.SerializerMethodField(read_only=True)
     ydm_rider = serializers.SerializerMethodField(read_only=True)
+    comments = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Order
@@ -150,7 +151,7 @@ class OrderSerializer(serializers.ModelSerializer):
                   'phone_number', 'alternate_phone_number', 'payment_method', 'dash_location',
                   'payment_screenshot', 'order_status', 'date', 'created_at', 'updated_at',
                   'order_products', 'total_amount', 'delivery_charge', 'remarks', 'promo_code',
-                  'prepaid_amount', 'delivery_type', 'logistics', 'dash_location_name', 'dash_tracking_code', 'ydm_rider']
+                  'prepaid_amount', 'delivery_type', 'logistics', 'dash_location_name', 'dash_tracking_code', 'ydm_rider', 'comments']
 
     def get_ydm_rider(self, obj):
         # Get the assigned user using select_related to optimize the query
@@ -159,6 +160,12 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_dash_location_name(self, obj):
         return obj.dash_location.name if obj.dash_location else None
+
+    def get_comments(self, obj):
+        latest_comment = obj.comments.order_by('-id').first()
+        if latest_comment:
+            return OrderCommentSerializer(latest_comment).data
+        return None
 
     def create(self, validated_data):
         order_products_data = validated_data.pop('order_products', [])
