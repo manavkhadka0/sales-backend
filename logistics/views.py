@@ -170,10 +170,10 @@ def get_complete_dashboard_stats(request, franchise_id):
             }
 
         valid_orders = Order.objects.filter(franchise_id=franchise_id, logistics='YDM').exclude(
-            order_status__in=['Cancelled', 'Return Pending']).count()
+            order_status__in=['Cancelled', 'Return Pending', 'Returned By Customer', 'Returned By YDM']).count()
 
         cancelled_orders = Order.objects.filter(franchise_id=franchise_id, logistics='YDM', order_status__in=[
-                                                'Cancelled', 'Return Pending']).count()
+                                                'Cancelled', 'Return Pending', 'Returned By Customer', 'Returned By YDM']).count()
 
         # Calculate total charges
         valid_charge = valid_orders * DELIVERY_CHARGE
