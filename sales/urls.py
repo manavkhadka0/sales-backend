@@ -1,6 +1,6 @@
 # sales-backend/sales/urls.py
 from django.urls import path
-from .views import export_orders_csv_api, CurrentDatabaseModeView, FranchiseInventoryListView, InventoryCheckView, InventoryListCreateView, LatestOrdersView, OrderDetailUpdateView, OrderListCreateView, OrderUpdateView, CommissionPaymentView, ProductListView, InventoryDetailView, InventoryChangeLogView, Inventorylogs, FactoryInventoryListView, DistributorInventoryListView, InventoryRequestView, InventoryRequestDetailView, AllProductsListView, RawMaterialListView, RevenueWithCancelledView, SalesPersonRevenueView, SalesStatisticsView, SalesSummaryExportView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView, OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView, SalesPersonStatisticsView, LocationUploadView, LocationSearchAPIView, SalesPersonOrderCSVExportView, switch_db, PackagingSentToDashSummaryCSVView, calculate_delivery_charges
+from .views import export_orders_csv_api, CurrentDatabaseModeView, FranchiseInventoryListView, InventoryCheckView, InventoryListCreateView, LatestOrdersView, OrderDetailUpdateView, OrderListCreateView, OrderUpdateView, CommissionPaymentView, ProductListView, InventoryDetailView, InventoryChangeLogView, Inventorylogs, FactoryInventoryListView, DistributorInventoryListView, InventoryRequestView, InventoryRequestDetailView, AllProductsListView, RawMaterialListView, RevenueWithCancelledView, SalesPersonRevenueView, SalesStatisticsView, SalesSummaryExportView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView, OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView, SalesPersonStatisticsView, LocationUploadView, LocationSearchAPIView, SalesPersonOrderCSVExportView, switch_db, PackagingSentToDashSummaryCSVView
 
 urlpatterns = [
     path('inventory/', InventoryListCreateView.as_view(), name='inventory-list'),
@@ -47,7 +47,6 @@ urlpatterns = [
     path('revenue-by-product/', RevenueByProductView.as_view(),
          name='revenue-by-product'),
     path('inventory-check/', InventoryCheckView.as_view(), name='inventory-check'),
-    path('delivery-charges/', calculate_delivery_charges, name='delivery-charges'),
 
     path('export-csv/', OrderCSVExportView.as_view(), name='export-csv'),
     path('promo-codes/', PromoCodeListCreateView.as_view(), name='promo-code-list'),

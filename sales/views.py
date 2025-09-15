@@ -37,36 +37,6 @@ from core.middleware import set_current_db_name, get_current_db_name
 from logistics.utils import create_order_log
 from logistics.models import AssignOrder
 
-DELIVERY_CHARGE = 100
-CANCELLED_CHARGE = 0
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def calculate_delivery_charges(request):
-
-    # Get counts for different order statuses
-    valid_orders = Order.objects.filter(
-        ~Q(order_status__in=['Cancelled', 'Return Pending'])
-    ).count()
-
-    cancelled_orders = Order.objects.filter(
-        Q(order_status__in=['Cancelled', 'Return Pending'])
-    ).count()
-
-    # Calculate total charges
-    valid_charge = valid_orders * DELIVERY_CHARGE
-    cancelled_charge = cancelled_orders * CANCELLED_CHARGE
-    total_charge = valid_charge + cancelled_charge
-
-    return Response({
-        'total_delivery_charge': total_charge,
-        'valid_orders': valid_orders,
-        'cancelled_orders': cancelled_orders,
-        'valid_charge': valid_charge,
-        'cancelled_charge': cancelled_charge,
-    })
-
 
 # Create your views here.
 
