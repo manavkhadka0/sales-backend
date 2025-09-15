@@ -25,6 +25,9 @@ from account.models import CustomUser, Franchise
 from account.serializers import SmallUserSerializer
 from rest_framework.filters import SearchFilter
 
+DELIVERY_CHARGE = 100
+CANCELLED_CHARGE = 0
+
 
 class GetYDMRiderView(generics.ListAPIView):
     queryset = CustomUser.objects.all()
@@ -166,6 +169,19 @@ def get_complete_dashboard_stats(request, franchise_id):
                 'amount': total - prepaid
             }
 
+        valid_orders = Order.objects.filter(
+            ~Q(order_status__in=['Cancelled', 'Return Pending'])
+        ).count()
+
+        cancelled_orders = Order.objects.filter(
+            Q(order_status__in=['Cancelled', 'Return Pending'])
+        ).count()
+
+        # Calculate total charges
+        valid_charge = valid_orders * DELIVERY_CHARGE
+        cancelled_charge = cancelled_orders * CANCELLED_CHARGE
+        total_charge = valid_charge + cancelled_charge
+
         # Calculate delivery performance percentages
         completed_orders = orders.filter(
             order_status__in=['Delivered', 'Returned By YDM']).count()
@@ -218,7 +234,7 @@ def get_complete_dashboard_stats(request, franchise_id):
                 'Total Cancelled': get_status_stats(['Cancelled', 'Returned By Customer', 'Returned By YDM']),
                 'Total Delivery Charge': {
                     'nos': orders.count(),
-                    'amount': float(orders.aggregate(total=Sum('delivery_charge'))['total'] or 0)
+                    'amount': total_charge
                 },
                 'Total Pending COD': get_status_stats(['Sent to YDM', 'Verified', 'Out For Delivery', 'Rescheduled', 'Delivered']),
             },
@@ -505,34 +521,3 @@ class FranchisePaymentLogAPIView(APIView):
         payments = FranchisePaymentLog.objects.filter(franchise=franchise)
 
         return Response(FranchisePaymentLogSerializer(payments, many=True).data)
-
-
-DELIVERY_CHARGE = 100
-CANCELLED_CHARGE = 0
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def calculate_delivery_charges(request):
-
-    # Get counts for different order statuses
-    valid_orders = Order.objects.filter(
-        ~Q(order_status__in=['Cancelled', 'Return Pending'])
-    ).count()
-
-    cancelled_orders = Order.objects.filter(
-        Q(order_status__in=['Cancelled', 'Return Pending'])
-    ).count()
-
-    # Calculate total charges
-    valid_charge = valid_orders * DELIVERY_CHARGE
-    cancelled_charge = cancelled_orders * CANCELLED_CHARGE
-    total_charge = valid_charge + cancelled_charge
-
-    return Response({
-        'total_delivery_charge': total_charge,
-        'valid_orders': valid_orders,
-        'cancelled_orders': cancelled_orders,
-        'valid_charge': valid_charge,
-        'cancelled_charge': cancelled_charge,
-    })

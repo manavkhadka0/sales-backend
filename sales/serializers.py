@@ -1,9 +1,9 @@
 from django.utils import timezone
 from rest_framework import serializers
 from .models import Inventory, Order, OrderProduct, Product, InventoryChangeLog, InventoryRequest, PromoCode, Location
-from account.models import CustomUser, Logistics
+from account.models import CustomUser
 from account.serializers import SmallUserSerializer, UserSmallSerializer
-from logistics.utils import create_order_log
+from logistics.serializers import OrderCommentSerializer
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -143,6 +143,7 @@ class OrderSerializer(serializers.ModelSerializer):
     )
     dash_location_name = serializers.SerializerMethodField(read_only=True)
     ydm_rider = serializers.SerializerMethodField(read_only=True)
+    comments = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Order
@@ -159,6 +160,12 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_dash_location_name(self, obj):
         return obj.dash_location.name if obj.dash_location else None
+
+    def get_comments(self, obj):
+        latest_comment = obj.comments.order_by('-id').first()
+        if latest_comment:
+            return OrderCommentSerializer(latest_comment).data
+        return None
 
     def create(self, validated_data):
         order_products_data = validated_data.pop('order_products', [])
