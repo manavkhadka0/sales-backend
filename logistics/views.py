@@ -169,15 +169,11 @@ def get_complete_dashboard_stats(request, franchise_id):
                 'amount': total - prepaid
             }
 
-        valid_orders = Order.objects.filter(
-            ~Q(order_status__in=['Cancelled', 'Return Pending']),
-            logistics='YDM'
-        ).count()
+        valid_orders = Order.objects.filter(logistics='YDM').exclude(
+            order_status__in=['Cancelled', 'Return Pending']).count()
 
-        cancelled_orders = Order.objects.filter(
-            Q(order_status__in=['Cancelled', 'Return Pending']),
-            logistics='YDM'
-        ).count()
+        cancelled_orders = Order.objects.filter(logistics='YDM', order_status__in=[
+                                                'Cancelled', 'Return Pending']).count()
 
         # Calculate total charges
         valid_charge = valid_orders * DELIVERY_CHARGE
