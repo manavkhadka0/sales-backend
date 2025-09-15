@@ -165,45 +165,6 @@ def get_complete_dashboard_stats(request, franchise_id):
                 'amount': total - prepaid
             }
 
-        # Helper function for payment stats
-        def get_payment_stats(payment_method, statuses=None):
-            filtered = orders.filter(
-                logistics='YDM', payment_method=payment_method)
-            if statuses:
-                if isinstance(statuses, str):
-                    statuses = [statuses]
-                filtered = filtered.filter(order_status__in=statuses)
-            result = filtered.aggregate(
-                count=Count('id'),
-                total=Sum('total_amount'),
-                prepaid=Sum('prepaid_amount')
-            )
-            total = float(result['total'] or 0)
-            prepaid = float(result['prepaid'] or 0)
-            return {
-                'nos': result['count'] or 0,
-                'amount': total - prepaid
-            }
-
-        # Helper function for logistics stats
-        def get_logistics_stats(logistics_type, statuses=None):
-            filtered = orders.filter(logistics=logistics_type)
-            if statuses:
-                if isinstance(statuses, str):
-                    statuses = [statuses]
-                filtered = filtered.filter(order_status__in=statuses)
-            result = filtered.aggregate(
-                count=Count('id'),
-                total=Sum('total_amount'),
-                prepaid=Sum('prepaid_amount')
-            )
-            total = float(result['total'] or 0)
-            prepaid = float(result['prepaid'] or 0)
-            return {
-                'nos': result['count'] or 0,
-                'amount': total - prepaid
-            }
-
         # Calculate delivery performance percentages
         completed_orders = orders.filter(
             order_status__in=['Delivered', 'Returned By YDM']).count()
@@ -216,8 +177,35 @@ def get_complete_dashboard_stats(request, franchise_id):
         cancelled_percentage = round(
             (cancelled_count / completed_orders) * 100, 2) if completed_orders > 0 else 0
 
-        # Today's orders queryset
-        todays_orders = orders.filter(created_at__date=today)
+        def get_todays_orders_by_status(status):
+            """
+            Helper function to get count of orders with specific status(es) change today
+
+            Args:
+                status: A single status string or a list/tuple of status strings
+
+            Returns:
+                int: Count of orders matching the status criteria
+            """
+            qs = OrderChangeLog.objects.filter(
+                changed_at__date=today,
+                order__franchise_id=franchise_id,
+                order__logistics='YDM'
+            )
+
+            if isinstance(status, (list, tuple)):
+                qs = qs.filter(new_status__in=status)
+            else:
+                qs = qs.filter(new_status=status)
+
+            return qs.count()
+
+        # Get today's order counts by status
+        todays_orders_count = get_todays_orders_by_status('Sent to YDM')
+        todays_deliveries_count = get_todays_orders_by_status('Delivered')
+        todays_rescheduled_count = get_todays_orders_by_status('Rescheduled')
+        todays_cancellations_count = get_todays_orders_by_status(
+            'Returned By YDM')
 
         # Complete dashboard data
         data = {
@@ -235,10 +223,10 @@ def get_complete_dashboard_stats(request, franchise_id):
             },
 
             'todays_statistics': {
-                'Todays Orders': todays_orders.count(),
-                'Todays Delivery': todays_orders.filter(order_status='Delivered').count(),
-                'Todays Rescheduled': todays_orders.filter(order_status='Rescheduled').count(),
-                'Todays Cancellation': todays_orders.filter(order_status='Returned By YDM').count(),
+                'Todays Orders': todays_orders_count,
+                'Todays Delivery': todays_deliveries_count,
+                'Todays Rescheduled': todays_rescheduled_count,
+                'Todays Cancellation': todays_cancellations_count,
             },
 
             'delivery_performance': {
