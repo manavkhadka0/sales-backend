@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'django_filters',
     'dash',
     'logistics',
+    'lucky_draw',
 ]
 
 MIDDLEWARE = [
@@ -185,11 +186,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
-    'https://delay-watched-objectives-hood.trycloudflare.com'
+    'https://not-violations-senators-theoretical.trycloudflare.com'
 ]
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
-    'https://delay-watched-objectives-hood.trycloudflare.com'
+    'https://not-violations-senators-theoretical.trycloudflare.com'
 ]
 
 # Default primary key field type

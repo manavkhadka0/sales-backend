@@ -27,5 +27,6 @@ urlpatterns = [
     path('api/baliyo/', include('baliyo.urls')),
     path('api/dash/', include('dash.urls')),
     path('api/', include('logistics.urls')),
+    path('api/', include('lucky_draw.urls')),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) \
     + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

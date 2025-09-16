@@ -546,11 +546,31 @@ class OrderFilter(django_filters.FilterSet):
     order_status = django_filters.CharFilter(
         field_name="order_status", lookup_expr="exact")
 
-    # for date range
-    start_date = django_filters.DateFilter(
-        field_name="created_at", lookup_expr="date__gte")
-    end_date = django_filters.DateFilter(
-        field_name="created_at", lookup_expr="date__lte")
+    # for date range - filtering based on first 'sent to YDM' status change
+    start_date = django_filters.DateFilter(method='filter_by_ydm_date')
+    end_date = django_filters.DateFilter(method='filter_by_ydm_date')
+
+    def filter_by_ydm_date(self, queryset, name, value):
+        # Get the most recent 'sent to YDM' status change for each order
+        from django.db.models import Max, Subquery, OuterRef
+
+        # Subquery to get the most recent 'sent to YDM' change for each order
+        latest_ydm_changes = OrderChangeLog.objects.filter(
+            order_id=OuterRef('pk'),
+            new_status='Sent to YDM'
+        ).order_by('-changed_at').values('changed_at')[:1]
+
+        # Apply the date filter to the input queryset (which already has other filters applied)
+        filtered_queryset = queryset.annotate(
+            last_ydm_change=Subquery(latest_ydm_changes)
+        ).exclude(last_ydm_change__isnull=True)
+
+        if name == 'start_date':
+            # Filter for orders where the most recent 'sent to YDM' is on or after start_date
+            return filtered_queryset.filter(last_ydm_change__date__gte=value)
+        else:  # end_date
+            # Filter for orders where the most recent 'sent to YDM' is on or before end_date
+            return filtered_queryset.filter(last_ydm_change__date__lte=value)
 
     class Meta:
         model = Order
