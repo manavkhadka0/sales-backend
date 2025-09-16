@@ -588,55 +588,49 @@ class ExportOrdersCSVView(APIView):
 
     def get(self, request):
 
-        # Apply filters
         qs = Order.objects.filter(logistics="YDM")
 
-        # let django-filter handle query params
+        # Apply filters
         filtered_qs = OrderFilter(request.GET, queryset=qs).qs
 
         if not filtered_qs.exists():
             return Response({"error": "No orders found for given filters."}, status=404)
 
-        # aggregations
-        total_amount = filtered_qs.aggregate(
-            total=Sum("total_amount"))["total"] or 0
-        total_orders = filtered_qs.count()
-
-        product_sales = (
-            OrderProduct.objects.filter(order__in=filtered_qs)
-            .values("product__product__name")
-            .annotate(quantity_sold=Sum("quantity"))
-            .order_by("-quantity_sold")
-        )
-
-        # CSV response
         response = HttpResponse(content_type="text/csv")
-        response["Content-Disposition"] = 'attachment; filename="packaging_sent_to_dash_summary.csv"'
+        response["Content-Disposition"] = 'attachment; filename="orders_export.csv"'
         writer = csv.writer(response)
 
-        # summary
-        writer.writerow(["Total Amount", float(total_amount)])
-        writer.writerow(["Total Orders", total_orders])
-        writer.writerow([])
-
-        # Orders table
-        writer.writerow(["ORDER DETAILS"])
+        # --- CSV HEADER ---
         writer.writerow([
-            "Date", "Customer Name", "Contact Number", "Alternative Number",
-            "Location", "Customer Landmark", "Address",
-            "Product Name(s)", "Product Price", "Payment Type",
-            "Order Status",
+            "Date", "Customer Name", "Contact Number", "Alternative Number", "Address",
+            "Product Name(s)", 'Pre-Paid Amount', "Collection Amount", "Delivery Charge",
+            "Net Amount", "Payment Type", "Order Status"
         ])
+
+        total_product_price = 0
+        total_net_amount = 0
 
         for order in filtered_qs:
             products = OrderProduct.objects.filter(order=order)
             products_str = ", ".join(
-                [f"{p.quantity}-{p.product.product.name}" for p in products])
-            product_price = order.total_amount
+                [f"{p.quantity}-{p.product.product.name}" for p in products]
+            )
+
+            product_price = float(order.total_amount -
+                                  (order.prepaid_amount or 0))
+            delivery_charge = 100
+            net_amount = product_price - delivery_charge
+
+            # accumulate totals
+            total_product_price += product_price
+            total_net_amount += net_amount
+
             payment_type = (
-                "pre-paid" if order.prepaid_amount and (order.total_amount - order.prepaid_amount) == 0
+                "pre-paid"
+                if order.prepaid_amount and (order.total_amount - order.prepaid_amount) == 0
                 else "cashOnDelivery"
             )
+
             address_parts = []
             if getattr(order, "delivery_address", None):
                 address_parts.append(order.delivery_address)
@@ -646,32 +640,31 @@ class ExportOrdersCSVView(APIView):
 
             latest_change_log = order.change_logs.order_by(
                 '-changed_at').first()
-            changed_at_str = latest_change_log.changed_at.strftime(
-                "%Y-%m-%d %H:%M:%S") if latest_change_log else ""
+            changed_at_str = (
+                latest_change_log.changed_at.strftime("%Y-%m-%d")
+                if latest_change_log else ""
+            )
 
             writer.writerow([
                 changed_at_str,
                 order.full_name,
                 order.phone_number,
                 order.alternate_phone_number or "",
-                order.dash_location.name if getattr(
-                    order, "dash_location", None) else "",
-                getattr(order, "landmark", ""),
                 full_address,
                 products_str,
+                order.prepaid_amount,
                 product_price,
+                delivery_charge,
+                net_amount,
                 payment_type,
                 order.order_status,
             ])
 
-        # product breakdown
+        # --- TOTAL ROW AT THE END ---
         writer.writerow([])
-        if product_sales:
-            writer.writerow([p["product__product__name"]
-                            for p in product_sales])
-            writer.writerow([p["quantity_sold"] for p in product_sales])
-        else:
-            writer.writerow(["No Products"])
-            writer.writerow(["0"])
+        writer.writerow([
+            "", "", "", "", "", "TOTALS", "",
+            total_product_price, "", total_net_amount, "", ""
+        ])
 
         return response
