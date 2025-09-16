@@ -123,7 +123,6 @@ class CustomerGiftSerializer(serializers.ModelSerializer):
         model = Customer
         fields = [
             "full_name",
-            "phone_number",
             "gift",
             "prize_details",
             "date_of_purchase",
