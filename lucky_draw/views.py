@@ -123,24 +123,34 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
 
                 # Only include gifts that haven't exceeded their daily limit
                 if already_assigned < offer.daily_quantity:
-                    # Calculate assignment percentage
-                    assigned_percentage = (
-                        already_assigned / offer.daily_quantity) * 100
+                    # Calculate weight with strong preference for less assigned gifts
+                    remaining_slots = offer.daily_quantity - already_assigned
 
-                    # Higher weight for less assigned gifts (inverse percentage)
-                    # Weight ranges from 100 (0% assigned) to 1 (99% assigned)
-                    weight = max(1, 100 - assigned_percentage)
-
-                    # If gift appears in multiple offers, combine weights
-                    if gift in gift_weights:
-                        gift_weights[gift] += weight
+                    # Weight based on remaining slots (more remaining = higher weight)
+                    # This creates a strong preference hierarchy
+                    if already_assigned == 0:
+                        weight = 1000  # Very high priority for unassigned gifts
+                    elif already_assigned == 1:
+                        weight = 100   # Medium priority for once-assigned gifts
+                    elif already_assigned == 2:
+                        weight = 10    # Low priority for twice-assigned gifts
                     else:
-                        gift_weights[gift] = weight
+                        weight = 1     # Minimum priority for heavily assigned gifts
+
+                    gift_weights[gift] = weight
 
         if not gift_weights:
             customer.prize_details = "Thank you for your purchase!"
             customer.save()
             return
+
+        # Debug: Print current gift assignment status (remove this in production)
+        for gift, weight in gift_weights.items():
+            assigned_count = Customer.objects.filter(
+                date_of_purchase=today_date,
+                gift=gift
+            ).count()
+            print(f"{gift.name}: assigned {assigned_count}/3, weight {weight}")
 
         # Step 3: Weighted random selection based on assignment percentages
         gifts = list(gift_weights.keys())
@@ -176,7 +186,6 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
             return str(sales_count) in offer.sale_numbers
 
         return False
-
 
 @api_view(["GET"])
 def GetGiftList(request):
