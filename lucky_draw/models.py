@@ -216,7 +216,6 @@ class Customer(models.Model):
     lucky_draw_system = models.ForeignKey(
         LuckyDrawSystem, on_delete=models.CASCADE, related_name='customers')
     full_name = models.CharField(max_length=255, blank=True, null=True)
-    phone_number = models.CharField(max_length=20, blank=True, null=True)
     gift = models.ManyToManyField(
         GiftItem, blank=True)
     prize_details = models.CharField(max_length=900, default="Thank You")

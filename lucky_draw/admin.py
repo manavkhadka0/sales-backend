@@ -41,7 +41,6 @@ admin.site.register(IMEINO, IMEIAdmin)
 class CustomerAdmin(ModelAdmin):
     list_display = (
         'full_name',
-        'phone_number',
         'prize_details',
         'date_of_purchase',
     )

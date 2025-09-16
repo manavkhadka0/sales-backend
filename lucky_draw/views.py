@@ -32,7 +32,6 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
     def create(self, request, *args, **kwargs):
         lucky_draw_system = request.data.get("lucky_draw_system")
         full_name = request.data.get("full_name")
-        phone_number = request.data.get("phone_number")
         if lucky_draw_system is None:
             return Response(
                 {"error": "lucky_draw_system is required."},
@@ -50,7 +49,6 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
         customer = Customer.objects.create(
             lucky_draw_system=lucky_draw,
             full_name=full_name,
-            phone_number=phone_number,
         )
 
         self.assign_gift(customer)
@@ -73,7 +71,7 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
         sales_today.save()
         sales_count = sales_today.sales_count
 
-        phone_number = customer.phone_number
+        phone_number = customer.full_name 
 
         # ------------------ FIXED OFFERS ------------------ #
         fixed_offer = FixOffer.objects.filter(
