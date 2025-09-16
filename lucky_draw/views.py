@@ -1,3 +1,5 @@
+from rest_framework import generics, status
+import random
 from sales.models import Order
 from rest_framework import generics
 from rest_framework.response import Response
@@ -71,7 +73,7 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
         sales_today.save()
         sales_count = sales_today.sales_count
 
-        phone_number = customer.full_name 
+        phone_number = customer.full_name
 
         # ------------------ FIXED OFFERS ------------------ #
         fixed_offer = FixOffer.objects.filter(
@@ -109,47 +111,48 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
             customer.save()
             return
 
-        # Step 2: pick the offer with the **highest condition value** only
-        highest_offer = max(
-            matching_offers, key=lambda o: int(o.offer_condition_value))
+        # Step 2: Collect all gifts from ALL matching offers with percentage-based weights
+        gift_weights = {}
 
-        # Step 3: group gifts by category (major, minor, grand)
-        offers_by_category = {}
-        for gift in highest_offer.gift.all():
-            offers_by_category.setdefault(gift.category, []).append(gift)
-
-        assigned_gifts = []
-
-        # Step 4: assign **one gift per category** based on lowest assigned percentage
-        for category, gifts in offers_by_category.items():
-            best_gift = None
-            lowest_ratio = None
-            for gift in gifts:
+        for offer in matching_offers:
+            for gift in offer.gift.all():
                 already_assigned = Customer.objects.filter(
                     date_of_purchase=today_date,
                     gift=gift
                 ).count()
-                total_quantity = max(highest_offer.daily_quantity, 1)
-                assigned_ratio = already_assigned / total_quantity
 
-                if lowest_ratio is None or assigned_ratio < lowest_ratio:
-                    lowest_ratio = assigned_ratio
-                    best_gift = gift
+                # Only include gifts that haven't exceeded their daily limit
+                if already_assigned < offer.daily_quantity:
+                    # Calculate assignment percentage
+                    assigned_percentage = (
+                        already_assigned / offer.daily_quantity) * 100
 
-            if best_gift:
-                customer.gift.add(best_gift)
-                assigned_gifts.append(best_gift)
+                    # Higher weight for less assigned gifts (inverse percentage)
+                    # Weight ranges from 100 (0% assigned) to 1 (99% assigned)
+                    weight = max(1, 100 - assigned_percentage)
 
-        # Step 5: save prize details
-        if assigned_gifts:
-            gift_names = ", ".join([gift.name for gift in assigned_gifts])
-            customer.prize_details = f"Congratulations! You've won {gift_names}"
-        else:
+                    # If gift appears in multiple offers, combine weights
+                    if gift in gift_weights:
+                        gift_weights[gift] += weight
+                    else:
+                        gift_weights[gift] = weight
+
+        if not gift_weights:
             customer.prize_details = "Thank you for your purchase!"
+            customer.save()
+            return
 
+        # Step 3: Weighted random selection based on assignment percentages
+        gifts = list(gift_weights.keys())
+        weights = list(gift_weights.values())
+        selected_gift = random.choices(gifts, weights=weights, k=1)[0]
+
+        customer.gift.add(selected_gift)
+        customer.prize_details = f"Congratulations! You've won {selected_gift.name}"
         customer.save()
 
-    # ---------------- OFFER CHECKING ---------------- #
+    # ---------------- OFFER CHECKING (unchanged) ---------------- #
+
     def check_offer_condition(self, offer, sales_count):
         today_date = timezone.now().date()
         today_time = timezone.now().time()
