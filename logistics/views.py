@@ -253,7 +253,7 @@ def get_complete_dashboard_stats(request, franchise_id):
                     'nos': orders.count(),
                     'amount': total_charge
                 },
-                'Total Pending COD': get_status_stats('Delivered')-total_charge,
+                'Total Pending COD': get_status_stats('Delivered'),
             },
 
             'todays_statistics': {
