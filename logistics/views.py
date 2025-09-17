@@ -177,8 +177,8 @@ def get_complete_dashboard_stats(request, franchise_id):
                 'amount': total - prepaid
             }
 
-        valid_orders = Order.objects.filter(franchise_id=franchise_id, logistics='YDM').exclude(
-            order_status__in=['Cancelled', 'Return Pending', 'Returned By Customer', 'Returned By YDM']).count()
+        valid_orders = Order.objects.filter(
+            franchise_id=franchise_id, logistics='YDM').filter(order_status='Delivered').count()
 
         cancelled_orders = Order.objects.filter(franchise_id=franchise_id, logistics='YDM', order_status__in=[
                                                 'Cancelled', 'Return Pending', 'Returned By Customer', 'Returned By YDM']).count()
@@ -253,7 +253,7 @@ def get_complete_dashboard_stats(request, franchise_id):
                     'nos': orders.count(),
                     'amount': total_charge
                 },
-                'Total Pending COD': get_status_stats(['Sent to YDM', 'Verified', 'Out For Delivery', 'Rescheduled', 'Delivered']),
+                'Total Pending COD': get_status_stats('Delivered'),
             },
 
             'todays_statistics': {
