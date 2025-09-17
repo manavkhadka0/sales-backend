@@ -3480,6 +3480,15 @@ class CustomOrderFilter(django_filters.FilterSet):
         help_text='Filter customers with multiple orders (true/false)'
     )
 
+    oil_bottle_total_min = django_filters.NumberFilter(
+        method='filter_oil_bottle_total_min',
+        help_text='Minimum total quantity of items with name containing "oil bottle"'
+    )
+    oil_bottle_only = django_filters.BooleanFilter(
+        method='filter_oil_bottle_only',
+        help_text='Filter orders containing only items with name containing "oil bottle" (true/false)'
+    )
+
     class Meta:
         model = Order
         fields = []
