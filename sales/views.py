@@ -3527,6 +3527,38 @@ class CustomOrderFilter(django_filters.FilterSet):
             return queryset.filter(phone_number__in=customers_with_multiple)
         return queryset
 
+    def filter_oil_bottle_total_min(self, queryset, name, value):
+        """Filter orders where total quantity of items with name containing 'oil bottle' is >= value"""
+        if value is not None:
+            annotated = queryset.annotate(
+                oil_bottle_qty=Sum(
+                    'order_products__quantity',
+                    filter=Q(
+                        order_products__product__product__name__icontains='oil bottle')
+                )
+            )
+            return annotated.filter(oil_bottle_qty__gte=value)
+        return queryset
+
+    def filter_oil_bottle_only(self, queryset, name, value):
+        """If true, return orders that contain only items whose name contains 'oil bottle'."""
+        if value:
+            annotated = queryset.annotate(
+                non_oil_item_count=Count(
+                    'order_products',
+                    filter=~Q(
+                        order_products__product__product__name__icontains='oil bottle')
+                ),
+                oil_bottle_qty=Sum(
+                    'order_products__quantity',
+                    filter=Q(
+                        order_products__product__product__name__icontains='oil bottle')
+                )
+            )
+            # Only oil-bottle items and at least one such item
+            return annotated.filter(non_oil_item_count=0, oil_bottle_qty__gt=0)
+        return queryset
+
 
 @api_view(['GET'])
 def export_orders_csv_api(request):
