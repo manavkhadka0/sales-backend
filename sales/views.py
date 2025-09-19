@@ -1176,10 +1176,21 @@ class LatestOrdersView(generics.ListAPIView):
     serializer_class = OrderSerializer
 
 
+class UserInventoryLogFilter(django_filters.FilterSet):
+    changed_at = django_filters.CharFilter(
+        field_name='changed_at', lookup_expr='icontains')
+
+    class Meta:
+        model = InventoryChangeLog
+        fields = ['changed_at']
+
+
 class UserInventoryLogs(generics.ListAPIView):
     serializer_class = InventoryChangeLogSerializer
     pagination_class = CustomPagination
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = UserInventoryLogFilter
 
     def get_queryset(self):
         user = self.request.user

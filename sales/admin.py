@@ -43,8 +43,6 @@ class InventoryAdmin(ModelAdmin):
 
 
 class InventoryChangeLogAdmin(ModelAdmin):
-    list_display = ['inventory', 'user',
-                    'old_quantity', 'new_quantity', 'action']
     list_filter = ['changed_at']
 
 
