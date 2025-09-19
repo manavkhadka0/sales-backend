@@ -366,3 +366,16 @@ class LocationSerializer(serializers.ModelSerializer):
 
 class FileUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
+
+
+class InventorySnapshotSerializer(serializers.Serializer):
+    inventory_id = serializers.IntegerField()
+    product_id = serializers.IntegerField()
+    product_name = serializers.CharField()
+    quantity = serializers.IntegerField()
+    status = serializers.CharField()
+    location_type = serializers.CharField()
+    location_name = serializers.CharField()
+    last_updated = serializers.DateTimeField()
+    last_action = serializers.CharField()
+    updated_by = serializers.CharField()

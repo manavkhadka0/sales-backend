@@ -1,6 +1,6 @@
 # sales-backend/sales/urls.py
 from django.urls import path
-from .views import export_orders_csv_api, CurrentDatabaseModeView, FranchiseInventoryListView, InventoryCheckView, InventoryListCreateView, LatestOrdersView, OrderDetailUpdateView, OrderListCreateView, OrderUpdateView, CommissionPaymentView, ProductListView, InventoryDetailView, InventoryChangeLogView, Inventorylogs, FactoryInventoryListView, DistributorInventoryListView, InventoryRequestView, InventoryRequestDetailView, AllProductsListView, RawMaterialListView, RevenueWithCancelledView, SalesPersonRevenueView, SalesStatisticsView, SalesSummaryExportView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView, OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView, SalesPersonStatisticsView, LocationUploadView, LocationSearchAPIView, SalesPersonOrderCSVExportView, switch_db, PackagingSentToDashSummaryCSVView
+from .views import export_orders_csv_api, CurrentDatabaseModeView, FranchiseInventoryListView, InventoryCheckView, InventoryListCreateView, LatestOrdersView, OrderDetailUpdateView, OrderListCreateView, OrderUpdateView, CommissionPaymentView, ProductListView, InventoryDetailView, InventoryChangeLogView, Inventorylogs, FactoryInventoryListView, DistributorInventoryListView, InventoryRequestView, InventoryRequestDetailView, AllProductsListView, RawMaterialListView, RevenueWithCancelledView, SalesPersonRevenueView, SalesStatisticsView, SalesSummaryExportView, UserInventoryLogs, TopSalespersonView, RevenueView, TopProductsView, DashboardStatsView, RevenueByProductView, OrderCSVExportView, PromoCodeListCreateView, ValidatePromoCodeView, PromoCodeDetailView, SalesPersonStatisticsView, LocationUploadView, LocationSearchAPIView, SalesPersonOrderCSVExportView, switch_db, PackagingSentToDashSummaryCSVView, InventoryDateSnapshotView
 
 urlpatterns = [
     path('inventory/', InventoryListCreateView.as_view(), name='inventory-list'),
@@ -18,6 +18,9 @@ urlpatterns = [
          name='inventory-request'),
     path('inventory-request/<int:pk>/',
          InventoryRequestDetailView.as_view(), name='inventory-request-detail'),
+
+    path('inventory-date-product/', InventoryDateSnapshotView.as_view(),
+         name='inventory-date-product'),
 
     path('log/', Inventorylogs.as_view(), name='log'),
     path('user-inventory-logs/', UserInventoryLogs.as_view(),

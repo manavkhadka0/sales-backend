@@ -1,3 +1,9 @@
+from .serializers import InventorySnapshotSerializer
+from django.db.models import Q
+from sales.models import Inventory, InventoryChangeLog, Product
+from rest_framework import generics, status
+from datetime import datetime, time
+from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework.decorators import api_view
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -3720,3 +3726,186 @@ def export_orders_csv_api(request):
             {"error": f"Failed to export orders: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+class InventoryDateSnapshotView(generics.GenericAPIView):
+    """
+    Get inventory snapshot at end of a specific date
+
+    Usage Examples:
+    - GET /api/inventory-date-snapshot/?date=2024-01-15
+    - GET /api/inventory-date-snapshot/?date=2024-01-15&product_id=1
+    - GET /api/inventory-date-snapshot/?date=2024-01-15&status=ready_to_dispatch
+
+    Returns: All inventory items with their quantities as they were at the end of the specified date
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = InventorySnapshotSerializer
+
+    def get(self, request, *args, **kwargs):
+        # Get query parameters
+        date_param = request.query_params.get('date')
+        product_id = request.query_params.get('product_id')
+        inventory_status = request.query_params.get('status')
+
+        if not date_param:
+            return Response({
+                'error': 'Date parameter is required. Format: YYYY-MM-DD',
+                'example': 'GET /api/inventory-date-snapshot/?date=2024-01-15'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Parse the date
+        try:
+            target_date = parse_date(date_param)
+            if not target_date:
+                # Try parsing as datetime and extract date
+                target_datetime = parse_datetime(date_param)
+                if target_datetime:
+                    target_date = target_datetime.date()
+                else:
+                    raise ValueError("Invalid date format")
+        except (ValueError, TypeError):
+            return Response({
+                'error': 'Invalid date format. Use YYYY-MM-DD',
+                'examples': ['2024-01-15', '2024-12-31']
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Set end of day for the target date (23:59:59)
+        end_of_day = datetime.combine(target_date, time.max)
+
+        user = request.user
+        snapshot_data = []
+
+        # Build role-based inventory filter
+        try:
+            inventory_queryset = self._get_user_inventories(
+                user, end_of_day, product_id, inventory_status)
+        except ValueError as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # Process each inventory item
+        for inventory in inventory_queryset:
+            snapshot_item = self._get_inventory_snapshot_item(
+                inventory, end_of_day)
+            if snapshot_item:
+                snapshot_data.append(snapshot_item)
+
+        # Sort by product name for consistency
+        snapshot_data.sort(key=lambda x: x['product_name'])
+
+        return Response({
+            'date': target_date.strftime('%Y-%m-%d'),
+            'end_time': end_of_day.strftime('%Y-%m-%d %H:%M:%S'),
+            'total_products': len(snapshot_data),
+            'user_role': getattr(user, 'role', 'Unknown'),
+            'filters_applied': {
+                'product_id': product_id,
+                'status': inventory_status
+            },
+            'results': snapshot_data
+        })
+
+    def _get_user_inventories(self, user, end_of_day, product_id=None, inventory_status=None):
+        """Get inventories based on user role and filters"""
+
+        # Base filter - only inventories that existed by the target date
+        base_filter = Q(created_at__lte=end_of_day)
+
+        # Apply role-based filtering
+        if not hasattr(user, 'role'):
+            raise ValueError('User role not found')
+
+        if user.role == 'SuperAdmin':
+            if hasattr(user, 'factory'):
+                base_filter &= Q(factory=user.factory)
+            else:
+                raise ValueError('SuperAdmin user must have factory assigned')
+
+        elif user.role == 'Distributor':
+            if hasattr(user, 'distributor'):
+                base_filter &= Q(distributor=user.distributor)
+            else:
+                raise ValueError(
+                    'Distributor user must have distributor assigned')
+
+        elif user.role == 'Franchise':
+            if hasattr(user, 'franchise'):
+                base_filter &= Q(franchise=user.franchise)
+            else:
+                raise ValueError('Franchise user must have franchise assigned')
+
+        elif user.role == 'SalesPerson':
+            # For sales person, get inventories they have interacted with
+            inventory_ids = InventoryChangeLog.objects.filter(
+                user=user,
+                changed_at__lte=end_of_day
+            ).values_list('inventory_id', flat=True).distinct()
+            base_filter &= Q(id__in=inventory_ids)
+        else:
+            raise ValueError(f'Invalid user role: {user.role}')
+
+        # Apply additional filters
+        if product_id:
+            base_filter &= Q(product_id=product_id)
+        if inventory_status:
+            base_filter &= Q(status=inventory_status)
+
+        return Inventory.objects.filter(base_filter).select_related(
+            'product', 'factory', 'distributor', 'franchise'
+        )
+
+    def _get_inventory_snapshot_item(self, inventory, end_of_day):
+        """Get snapshot data for a single inventory item"""
+
+        # Get the latest change log for this inventory up to the target date
+        latest_log = InventoryChangeLog.objects.filter(
+            inventory=inventory,
+            changed_at__lte=end_of_day
+        ).order_by('-changed_at').first()
+
+        if latest_log:
+            # Use quantity from the latest log
+            current_quantity = latest_log.new_quantity
+            last_updated = latest_log.changed_at
+            last_action = latest_log.get_action_display()
+            updated_by = latest_log.user.get_full_name() or latest_log.user.username
+        else:
+            # If no change logs exist up to this date, check if inventory existed
+            if inventory.created_at <= end_of_day:
+                # Use the original quantity from inventory
+                current_quantity = inventory.quantity
+                last_updated = inventory.created_at
+                last_action = "Initial Creation"
+                updated_by = "System"
+            else:
+                # Skip this inventory as it didn't exist at the target date
+                return None
+
+        # Determine location type and name
+        location_type, location_name = self._get_location_info(inventory)
+
+        return {
+            'inventory_id': inventory.id,
+            'product_id': inventory.product.id,
+            'product_name': inventory.product.name,
+            'quantity': current_quantity,
+            'status': inventory.get_status_display(),
+            'location_type': location_type,
+            'location_name': location_name,
+            'last_updated': last_updated,
+            'last_action': last_action,
+            'updated_by': updated_by,
+        }
+
+    def _get_location_info(self, inventory):
+        """Get location type and name for inventory"""
+        if inventory.factory:
+            return "Factory", str(inventory.factory)
+        elif inventory.distributor:
+            return "Distributor", str(inventory.distributor)
+        elif inventory.franchise:
+            return "Franchise", str(inventory.franchise)
+        else:
+            return "Unknown", "No Location Set"
