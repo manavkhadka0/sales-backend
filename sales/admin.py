@@ -45,7 +45,7 @@ class InventoryAdmin(ModelAdmin):
 class InventoryChangeLogAdmin(ModelAdmin):
     list_display = ['inventory', 'user',
                     'old_quantity', 'new_quantity', 'action']
-    list_filter = ['created_at']
+    list_filter = ['changed_at']
 
 
 admin.site.register(Product, ProductAdmin)
