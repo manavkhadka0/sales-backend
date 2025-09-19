@@ -3891,12 +3891,7 @@ class InventoryDateSnapshotView(generics.GenericAPIView):
             'product_id': inventory.product.id,
             'product_name': inventory.product.name,
             'quantity': current_quantity,
-            'status': inventory.get_status_display(),
-            'location_type': location_type,
-            'location_name': location_name,
-            'last_updated': last_updated,
-            'last_action': last_action,
-            'updated_by': updated_by,
+
         }
 
     def _get_location_info(self, inventory):
