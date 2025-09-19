@@ -42,11 +42,17 @@ class InventoryAdmin(ModelAdmin):
     list_filter = ['distributor', 'franchise', 'factory']
 
 
+class InventoryChangeLogAdmin(ModelAdmin):
+    list_display = ['inventory', 'user',
+                    'old_quantity', 'new_quantity', 'action']
+    list_filter = ['created_at']
+
+
 admin.site.register(Product, ProductAdmin)
 admin.site.register(Order, OrderAdmin)
 admin.site.register(Inventory, InventoryAdmin)
 admin.site.register(Commission, ModelAdmin)
-admin.site.register(InventoryChangeLog, ModelAdmin)
+admin.site.register(InventoryChangeLog, InventoryChangeLogAdmin)
 admin.site.register(InventoryRequest, ModelAdmin)
 admin.site.register(PromoCode, ModelAdmin)
 admin.site.register(Location, LocationAdmin)
