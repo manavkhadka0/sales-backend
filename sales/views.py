@@ -3796,14 +3796,6 @@ class InventoryDateSnapshotView(generics.GenericAPIView):
         snapshot_data.sort(key=lambda x: x['product_name'])
 
         return Response({
-            'date': target_date.strftime('%Y-%m-%d'),
-            'end_time': end_of_day.strftime('%Y-%m-%d %H:%M:%S'),
-            'total_products': len(snapshot_data),
-            'user_role': getattr(user, 'role', 'Unknown'),
-            'filters_applied': {
-                'product_id': product_id,
-                'status': inventory_status
-            },
             'results': snapshot_data
         })
 
