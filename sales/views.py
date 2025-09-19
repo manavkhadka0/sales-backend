@@ -1054,7 +1054,7 @@ class SalesStatisticsView(generics.GenericAPIView):
         """Helper method to get statistics for a queryset"""
         # Define excluded statuses
         excluded_statuses = [
-            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Return Pending']
+            'Cancelled', 'Returned By Customer', 'Returned By Dash', 'Returned By YDM', 'Return Pending']
 
         # Calculate yesterday's date
         yesterday = today - timezone.timedelta(days=1)
