@@ -700,6 +700,7 @@ def daily_delivered_orders(request, franchise_id):
 
     # Format response
     results = []
+    running_balance = Decimal("0.00")
     for row in per_day:
         d = row["delivered_date"]
         delivered_count = row["delivered_count"] or 0
@@ -713,6 +714,7 @@ def daily_delivered_orders(request, franchise_id):
         per_day_balance = (
             delivered_total_amount_val - delivery_charge_amount - invoice_paid_val
         )
+        running_balance += per_day_balance
         results.append(
             {
                 "date": d,
@@ -721,6 +723,7 @@ def daily_delivered_orders(request, franchise_id):
                 "delivered_cod_amount": str(delivery_charge_amount),
                 "invoice_paid_amount": str(invoice_paid_val),
                 "balance": str(per_day_balance),
+                "cumulative_balance": str(running_balance),
             }
         )
 
