@@ -1,7 +1,6 @@
 from django.db import models
 from django.utils import timezone
-from sales.models import Order
-from account.models import CustomUser
+
 
 
 class Organization(models.Model):

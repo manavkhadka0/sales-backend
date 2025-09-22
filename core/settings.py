@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "dash",
     "logistics",
     "lucky_draw",
+    "sales_fest",
 ]
 
 MIDDLEWARE = [
@@ -183,11 +184,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "https://arizona-senior-pic-mega.trycloudflare.com",
+    "https://field-ensures-reform-tell.trycloudflare.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
-    "https://arizona-senior-pic-mega.trycloudflare.com",
+    "https://field-ensures-reform-tell.trycloudflare.com",
 ]
 
 # Default primary key field type

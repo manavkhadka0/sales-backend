@@ -4,16 +4,27 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, Min, Sum
+from django.db.models import (
+    Count,
+    DecimalField,
+    ExpressionWrapper,
+    F,
+    Min,
+    OuterRef,
+    Subquery,
+    Sum,
+    Value,
+)
 from django.db.models.functions import Coalesce, TruncDate
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters import rest_framework as django_filters
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import generics, status
+from rest_framework import generics, serializers, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.filters import SearchFilter
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
     AllowAny,
     IsAuthenticated,
@@ -22,7 +33,7 @@ from rest_framework.permissions import (
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from account.models import CustomUser, Franchise
+from account.models import CustomUser
 from account.serializers import SmallUserSerializer
 from sales.models import OrderProduct
 
@@ -31,17 +42,19 @@ from sales.serializers import OrderSerializer
 
 from .models import (
     AssignOrder,
-    FranchisePaymentLog,
+    Invoice,
     Order,
     OrderChangeLog,
     OrderComment,
+    ReportInvoice,
 )
 from .serializers import (
     AssignOrderSerializer,
-    FranchisePaymentLogSerializer,
+    InvoiceSerializer,
     OrderChangeLogSerializer,
     OrderCommentDetailSerializer,
     OrderCommentSerializer,
+    ReportInvoiceSerializer,
 )
 
 DELIVERY_CHARGE = 100
@@ -322,9 +335,30 @@ def get_complete_dashboard_stats(request, franchise_id):
                 },
                 "Total Pending COD": {
                     "nos": get_status_stats("Delivered")["nos"],
-                    "amount": max(
-                        0, get_status_stats("Delivered")["amount"] - total_charge
-                    ),
+                    # Deduct approved invoice paid amounts from pending COD
+                    "amount": (
+                        lambda: (
+                            lambda delivered_amount, approved_paid: max(
+                                0, delivered_amount - total_charge - approved_paid
+                            )
+                        )(
+                            get_status_stats("Delivered")["amount"],
+                            float(
+                                Invoice.objects.filter(
+                                    franchise_id=franchise_id, is_approved=True
+                                )
+                                .aggregate(total=Sum("paid_amount"))
+                                .get("total")
+                                or 0
+                            ),
+                        )
+                    )(),
+                    "has_invoices": Invoice.objects.filter(
+                        franchise_id=franchise_id, is_approved=False
+                    ).exists(),
+                    "number_of_invoices": Invoice.objects.filter(
+                        franchise_id=franchise_id, is_approved=False
+                    ).count(),
                 },
             },
             "todays_statistics": {
@@ -337,6 +371,89 @@ def get_complete_dashboard_stats(request, franchise_id):
                 "Delivered Percentage": delivered_percentage,
                 "Cancelled Percentage": cancelled_percentage,
             },
+        }
+
+        return Response({"success": True, "data": data}, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {"success": False, "message": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+def get_total_pending_cod(request, franchise_id):
+    """
+    Return only the "Total Pending COD" stats as a separate endpoint.
+
+    Logic mirrors the calculation used in get_complete_dashboard_stats:
+    - nos: number of Delivered orders
+    - amount: max(0, Delivered COD amount - total_charge)
+    where total_charge = (valid_delivered_orders * DELIVERY_CHARGE) + (cancelled_orders * CANCELLED_CHARGE)
+    """
+    try:
+        exclude_status = [
+            "Pending",
+            "Processing",
+            "Sent to Dash",
+            "Indrive",
+            "Return By Dash",
+        ]
+
+        orders = Order.objects.filter(
+            franchise_id=franchise_id, logistics="YDM"
+        ).exclude(order_status__in=exclude_status)
+
+        # Helper function to get stats (count and COD amount) for given status list
+        def get_status_stats(statuses):
+            if isinstance(statuses, str):
+                statuses = [statuses]
+            filtered = orders.filter(logistics="YDM", order_status__in=statuses)
+            result = filtered.aggregate(
+                count=Count("id"),
+                total=Sum("total_amount"),
+                prepaid=Sum("prepaid_amount"),
+            )
+            total = float(result["total"] or 0)
+            prepaid = float(result["prepaid"] or 0)
+            return {"nos": result["count"] or 0, "amount": total - prepaid}
+
+        # Compute charges identical to dashboard logic
+        valid_orders = (
+            Order.objects.filter(franchise_id=franchise_id, logistics="YDM")
+            .filter(order_status="Delivered")
+            .count()
+        )
+
+        cancelled_orders = Order.objects.filter(
+            franchise_id=franchise_id,
+            logistics="YDM",
+            order_status__in=[
+                "Cancelled",
+                "Return Pending",
+                "Returned By Customer",
+                "Returned By YDM",
+            ],
+        ).count()
+
+        valid_charge = valid_orders * DELIVERY_CHARGE
+        cancelled_charge = cancelled_orders * CANCELLED_CHARGE
+        total_charge = valid_charge + cancelled_charge
+
+        delivered_stats = get_status_stats("Delivered")
+        # Deduct approved invoice paid amounts from pending COD
+        approved_paid = (
+            Invoice.objects.filter(franchise_id=franchise_id, is_approved=True)
+            .aggregate(total=Sum("paid_amount"))
+            .get("total")
+            or 0
+        )
+        data = {
+            "amount": max(
+                0,
+                float(delivered_stats["amount"]) - total_charge - float(approved_paid),
+            ),
         }
 
         return Response({"success": True, "data": data}, status=status.HTTP_200_OK)
@@ -488,6 +605,128 @@ def daily_orders_by_franchise(request, franchise_id):
             "filter_type": "daily",
             "data": formatted_days,
         }
+    )
+
+
+@api_view(["GET"])
+def daily_delivered_orders(request, franchise_id):
+    """
+    Return per-day delivered order stats for the current month for a franchise:
+    - delivered_count
+    - delivered_total_amount (sum of total_amount)
+    - delivered_cod_amount (sum of total_amount - prepaid_amount)
+
+    Notes:
+    - Uses OrderChangeLog with new_status="Delivered" and groups by the day (TruncDate)
+    - Restricts to current month (server timezone) and logistics="YDM"
+    - De-duplicates per (change_date, order_id) to avoid double-counting
+    - Optional query param `month` (YYYY-MM) can be supported later if needed
+    """
+    today = timezone.now().date()
+    year, month = today.year, today.month
+
+    # Step 1: For each order, get its FIRST Delivered change within current month
+
+    first_delivered_dt = Subquery(
+        OrderChangeLog.objects.filter(
+            order_id=OuterRef("pk"),
+            new_status="Delivered",
+            changed_at__year=year,
+            changed_at__month=month,
+        )
+        .order_by("changed_at")
+        .values("changed_at")[:1]
+    )
+
+    delivered_orders = (
+        Order.objects.filter(franchise_id=franchise_id, logistics="YDM")
+        .annotate(first_delivered_dt=first_delivered_dt)
+        .exclude(first_delivered_dt__isnull=True)
+        .annotate(delivered_date=TruncDate(F("first_delivered_dt")))
+    )
+
+    # Step 2: Aggregate per delivered_date (count orders once and sum COD = total - prepaid)
+    per_day = (
+        delivered_orders.values("delivered_date")
+        .annotate(
+            delivered_count=Count("id"),
+            delivered_total_amount=Sum(
+                ExpressionWrapper(
+                    Coalesce(
+                        F("total_amount"),
+                        Value(
+                            Decimal("0.00"),
+                            output_field=DecimalField(max_digits=12, decimal_places=2),
+                        ),
+                    )
+                    - Coalesce(
+                        F("prepaid_amount"),
+                        Value(
+                            Decimal("0.00"),
+                            output_field=DecimalField(max_digits=12, decimal_places=2),
+                        ),
+                    ),
+                    output_field=DecimalField(max_digits=12, decimal_places=2),
+                )
+            ),
+        )
+        .order_by("delivered_date")
+    )
+
+    # Prepare invoice paid amounts per day (approved invoices only)
+    invoice_paid_qs = (
+        Invoice.objects.filter(
+            franchise_id=franchise_id,
+            is_approved=True,
+            approved_at__year=year,
+            approved_at__month=month,
+        )
+        .annotate(approved_date=TruncDate("approved_at"))
+        .values("approved_date")
+        .annotate(
+            paid=Coalesce(
+                Sum("paid_amount"),
+                Value(
+                    Decimal("0.00"),
+                    output_field=DecimalField(max_digits=12, decimal_places=2),
+                ),
+            )
+        )
+    )
+
+    invoice_paid_by_date = {
+        row["approved_date"]: row["paid"] for row in invoice_paid_qs
+    }
+
+    # Format response
+    results = []
+    for row in per_day:
+        d = row["delivered_date"]
+        delivered_count = row["delivered_count"] or 0
+        delivery_charge_amount = Decimal(str(DELIVERY_CHARGE)) * Decimal(
+            delivered_count
+        )
+        delivered_total_amount_val = row.get("delivered_total_amount") or Decimal(
+            "0.00"
+        )
+        invoice_paid_val = invoice_paid_by_date.get(d, Decimal("0.00"))
+        per_day_balance = (
+            delivered_total_amount_val - delivery_charge_amount - invoice_paid_val
+        )
+        results.append(
+            {
+                "date": d,
+                "delivered_count": delivered_count,
+                "delivered_total_amount": str(delivered_total_amount_val),
+                "delivered_cod_amount": str(delivery_charge_amount),
+                "invoice_paid_amount": str(invoice_paid_val),
+                "balance": str(per_day_balance),
+            }
+        )
+
+    return Response(
+        {"success": True, "data": results},
+        status=status.HTTP_200_OK,
     )
 
 
@@ -677,60 +916,6 @@ class UpdateOrderStatusView(APIView):
         )
 
 
-class FranchisePaymentDashboardAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, franchise_id):
-        """API endpoint showing payment details for a specific franchise"""
-
-        # Get franchise
-        franchise = get_object_or_404(Franchise, id=franchise_id)
-
-        # Orders
-        orders = Order.objects.filter(franchise=franchise, logistics="YDM")
-
-        total_order_amount = orders.aggregate(total=Sum("total_amount"))[
-            "total"
-        ] or Decimal("0")
-
-        total_orders = orders.count()
-        total_deduction = Decimal("100") * total_orders
-        gross_amount = total_order_amount - total_deduction
-
-        # Payments
-        total_paid = FranchisePaymentLog.objects.filter(franchise=franchise).aggregate(
-            total=Sum("amount_paid")
-        )["total"] or Decimal("0")
-
-        pending_amount = gross_amount - total_paid
-
-        return Response(
-            {
-                "total_orders": total_orders,
-                "total_order_amount": str(total_order_amount),
-                "total_deduction": str(total_deduction),
-                "gross_amount": str(gross_amount),
-                "total_paid": str(total_paid),
-                "pending_amount": str(pending_amount),
-            }
-        )
-
-
-class FranchisePaymentLogAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, franchise_id):
-        """API endpoint showing payment details for a specific franchise"""
-
-        # Get franchise
-        franchise = get_object_or_404(Franchise, id=franchise_id)
-
-        # Payments
-        payments = FranchisePaymentLog.objects.filter(franchise=franchise)
-
-        return Response(FranchisePaymentLogSerializer(payments, many=True).data)
-
-
 class OrderFilter(django_filters.FilterSet):
     franchise = django_filters.CharFilter(
         field_name="franchise__id", lookup_expr="exact"
@@ -888,3 +1073,117 @@ class ExportOrdersCSVView(APIView):
         )
 
         return response
+
+
+class CustomPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+class InvoiceFilter(django_filters.FilterSet):
+    franchise = django_filters.CharFilter(
+        field_name="franchise__id", lookup_expr="exact"
+    )
+    payment_type = django_filters.CharFilter(
+        field_name="payment_type", lookup_expr="exact"
+    )
+    status = django_filters.CharFilter(field_name="status", lookup_expr="exact")
+    is_approved = django_filters.BooleanFilter(
+        field_name="is_approved", lookup_expr="exact"
+    )
+
+    class Meta:
+        model = Invoice
+        fields = [
+            "franchise",
+            "payment_type",
+            "status",
+            "is_approved",
+        ]
+
+
+class InvoiceListCreateView(generics.ListCreateAPIView):
+    queryset = Invoice.objects.all()
+    serializer_class = InvoiceSerializer
+    pagination_class = CustomPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = InvoiceFilter
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user:
+            raise serializers.ValidationError("User is required")
+        if user.role == "Franchise":
+            return Invoice.objects.filter(franchise=user.franchise)
+        if user.role == "YDM_Logistics":
+            return Invoice.objects.all()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if not user:
+            raise serializers.ValidationError("User is required")
+
+        if user.role != "YDM_Logistics":
+            raise serializers.ValidationError("User is not authorized")
+
+        serializer.save(created_by=user)
+
+
+class InvoiceRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Invoice.objects.all()
+    serializer_class = InvoiceSerializer
+
+    def perform_update(self, serializer):
+        """
+        If is_approved is being set to True (and was previously False or missing),
+        set approved_at to now and approved_by to the current user (if authenticated).
+        """
+        instance = serializer.instance
+        user = self.request.user
+        print(user)
+        # Determine the new value, defaulting to existing if not provided
+        new_is_approved = serializer.validated_data.get(
+            "is_approved", instance.is_approved
+        )
+
+        # If approving now and there's no approved_at yet, stamp it
+        if new_is_approved and (
+            not instance.is_approved or instance.approved_at is None
+        ):
+            serializer.save(
+                approved_at=timezone.now(),
+                approved_by=user,
+                status="Paid",
+            )
+        else:
+            serializer.save()
+
+
+class InvoiceReportFilter(django_filters.FilterSet):
+    invoice = django_filters.CharFilter(field_name="invoice__id", lookup_expr="exact")
+
+    class Meta:
+        model = ReportInvoice
+        fields = [
+            "invoice",
+        ]
+
+
+class InvoiceReportListCreateView(generics.ListCreateAPIView):
+    queryset = ReportInvoice.objects.all()
+    serializer_class = ReportInvoiceSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = InvoiceReportFilter
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if not user:
+            raise serializers.ValidationError("User is required")
+
+        serializer.save(reported_by=user)
+
+
+class InvoiceReportRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = ReportInvoice.objects.all()
+    serializer_class = ReportInvoiceSerializer

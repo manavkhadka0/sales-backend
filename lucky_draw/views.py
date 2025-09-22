@@ -1,15 +1,20 @@
-from rest_framework import generics, status
 import random
-from sales.models import Order
-from rest_framework import generics
-from rest_framework.response import Response
-from rest_framework import status
-from .models import Customer, FixOffer, ElectronicsShopOffer, Sales, LuckyDrawSystem, GiftItem
-from .serializers import CustomerSerializer, CustomerGiftSerializer, GiftItemSerializer
+
 from django.utils import timezone
+from rest_framework import generics, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework import status
+
+from .models import (
+    Customer,
+    ElectronicsShopOffer,
+    FixOffer,
+    GiftItem,
+    LuckyDrawSystem,
+    Sales,
+)
+from .serializers import CustomerGiftSerializer, CustomerSerializer, GiftItemSerializer
+
 # Create your views here.
 
 
@@ -79,13 +84,12 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
         fixed_offer = FixOffer.objects.filter(
             lucky_draw_system=lucky_draw_system,
             phone_number=phone_number,
-            quantity__gt=0
+            quantity__gt=0,
         ).first()
 
         if fixed_offer:
             customer.gift.set(fixed_offer.gift.all())
-            gift_names = ", ".join(
-                [gift.name for gift in fixed_offer.gift.all()])
+            gift_names = ", ".join([gift.name for gift in fixed_offer.gift.all()])
             customer.prize_details = f"Congratulations! You've won {gift_names}"
             customer.save()
             fixed_offer.quantity -= 1
@@ -102,7 +106,8 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
 
         # Step 1: collect offers that match condition
         matching_offers = [
-            offer for offer in electronic_offers
+            offer
+            for offer in electronic_offers
             if self.check_offer_condition(offer, sales_count)
         ]
 
@@ -117,25 +122,23 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
         for offer in matching_offers:
             for gift in offer.gift.all():
                 already_assigned = Customer.objects.filter(
-                    date_of_purchase=today_date,
-                    gift=gift
+                    date_of_purchase=today_date, gift=gift
                 ).count()
 
                 # Only include gifts that haven't exceeded their daily limit
                 if already_assigned < offer.daily_quantity:
                     # Calculate weight with strong preference for less assigned gifts
-                    remaining_slots = offer.daily_quantity - already_assigned
 
                     # Weight based on remaining slots (more remaining = higher weight)
                     # This creates a strong preference hierarchy
                     if already_assigned == 0:
                         weight = 1000  # Very high priority for unassigned gifts
                     elif already_assigned == 1:
-                        weight = 100   # Medium priority for once-assigned gifts
+                        weight = 100  # Medium priority for once-assigned gifts
                     elif already_assigned == 2:
-                        weight = 10    # Low priority for twice-assigned gifts
+                        weight = 10  # Low priority for twice-assigned gifts
                     else:
-                        weight = 1     # Minimum priority for heavily assigned gifts
+                        weight = 1  # Minimum priority for heavily assigned gifts
 
                     gift_weights[gift] = weight
 
@@ -147,8 +150,7 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
         # Debug: Print current gift assignment status (remove this in production)
         for gift, weight in gift_weights.items():
             assigned_count = Customer.objects.filter(
-                date_of_purchase=today_date,
-                gift=gift
+                date_of_purchase=today_date, gift=gift
             ).count()
             print(f"{gift.name}: assigned {assigned_count}/3, weight {weight}")
 
@@ -172,10 +174,13 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
                 return False
 
         if offer.type_of_offer == "After every certain sale":
-            todays_gift_count = Customer.objects.filter(
-                date_of_purchase=today_date,
-                gift__in=offer.gift.all()
-            ).distinct().count()
+            todays_gift_count = (
+                Customer.objects.filter(
+                    date_of_purchase=today_date, gift__in=offer.gift.all()
+                )
+                .distinct()
+                .count()
+            )
 
             return (
                 sales_count % int(offer.offer_condition_value) == 0
@@ -186,6 +191,7 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
             return str(sales_count) in offer.sale_numbers
 
         return False
+
 
 @api_view(["GET"])
 def GetGiftList(request):

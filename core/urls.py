@@ -14,19 +14,23 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
-from django.urls import path, include
+
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
 
-
-urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/account/', include('account.urls')),
-    path('api/sales/', include('sales.urls')),
-    path('api/baliyo/', include('baliyo.urls')),
-    path('api/dash/', include('dash.urls')),
-    path('api/', include('logistics.urls')),
-    path('api/', include('lucky_draw.urls')),
-] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) \
+urlpatterns = (
+    [
+        path("admin/", admin.site.urls),
+        path("api/account/", include("account.urls")),
+        path("api/sales/", include("sales.urls")),
+        path("api/baliyo/", include("baliyo.urls")),
+        path("api/dash/", include("dash.urls")),
+        path("api/", include("logistics.urls")),
+        path("api/", include("lucky_draw.urls")),
+        path("api/", include("sales_fest.urls")),
+    ]
+    + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+)
