@@ -1274,13 +1274,13 @@ class InvoiceReportRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIVi
 
 
 @api_view(["GET"])
-def franchise_statement_full(request):
+def franchise_statement_full(request, franchise_id):
     """
     Full YDM statement for all orders from beginning
     """
     # Pull all orders for YDM_Logistics
     orders = (
-        Order.objects.filter(logistics="YDM")
+        Order.objects.filter(logistics="YDM", franchise_id=franchise_id)
         .exclude(
             order_status__in=[
                 "Pending",
@@ -1294,7 +1294,9 @@ def franchise_statement_full(request):
     )
 
     # Approved payments
-    approved_invoices = Invoice.objects.filter(is_approved=True)
+    approved_invoices = Invoice.objects.filter(
+        franchise_id=franchise_id, is_approved=True
+    )
 
     # Prepare daily dictionary
     daily_data = defaultdict(
@@ -1309,7 +1311,9 @@ def franchise_statement_full(request):
     delivered_orders = orders.filter(order_status="Delivered")
     delivery_logs = (
         OrderChangeLog.objects.filter(
-            order__in=delivered_orders, new_status="Delivered"
+            order__in=delivered_orders,
+            new_status="Delivered",
+            franchise_id=franchise_id,
         )
         .order_by("order_id", "changed_at")
         .select_related("order")
