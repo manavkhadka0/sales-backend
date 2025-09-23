@@ -1276,7 +1276,7 @@ class InvoiceReportRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIVi
 
 def franchise_statement_api(request, franchise_id):
     """
-    API to get franchise statement with delivered orders, payments, and order codes
+    API to get franchise statement with delivered orders and payments
     URL: /logistics/franchise/{franchise_id}/statement/
     """
 
@@ -1320,6 +1320,7 @@ def franchise_statement_api(request, franchise_id):
             start_date = min(all_earliest).date()
             end_date = max(d.date() for d in all_latest)
         else:
+            # No orders or payments exist, fallback to today
             today = date.today()
             start_date = today
             end_date = today
@@ -1419,37 +1420,25 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
     payments_by_date = get_payments_by_date(franchise_id, start_date, end_date)
 
     all_dates = set(delivered_by_date.keys()) | set(payments_by_date.keys())
-    all_dates_sorted = sorted(all_dates)
 
-    # Calculate total activity for all dates except the first date
-    total_activity_future = 0
-    for activity_date in all_dates_sorted[1:]:
+    total_activity_in_period = 0
+    for activity_date in all_dates:
         delivery_info = delivered_by_date.get(
             activity_date, {"cash_in": 0, "delivery_charge": 0}
         )
         payment_amount = payments_by_date.get(activity_date, 0)
-        total_activity_future += (
+        total_activity_in_period += (
             delivery_info["cash_in"] - delivery_info["delivery_charge"] - payment_amount
         )
 
-    # Starting balance for first day
-    starting_balance = delivered_by_date.get(all_dates_sorted[0], {}).get(
-        "cash_in", 0
-    ) - delivered_by_date.get(all_dates_sorted[0], {}).get("delivery_charge", 0)
-    running_balance = starting_balance
+    starting_balance = dashboard_data["pending_cod"] - total_activity_in_period
 
     statement = []
+    running_balance = starting_balance
 
-    for current_date in all_dates_sorted:
+    for current_date in sorted(all_dates):
         delivery_info = delivered_by_date.get(
-            current_date,
-            {
-                "delivery_count": 0,
-                "cash_in": 0,
-                "delivery_charge": 0,
-                "order_codes": [],
-                "debug_details": [],
-            },
+            current_date, {"delivery_count": 0, "cash_in": 0, "delivery_charge": 0}
         )
         payment_amount = payments_by_date.get(current_date, 0)
         running_balance += (
@@ -1464,8 +1453,6 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
                 "delivery_charge": delivery_info["delivery_charge"],
                 "payment": payment_amount,
                 "balance": round(running_balance, 2),
-                "order_codes": delivery_info.get("order_codes", []),
-                "debug_details": delivery_info.get("debug_details", []),
             }
         )
 
@@ -1473,7 +1460,7 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
 
 
 def get_delivered_orders_by_date(franchise_id, start_date, end_date):
-    """Get delivered orders grouped by delivery date including order codes and debug info"""
+    """Get delivered orders grouped by delivery date using OrderChangeLog"""
 
     delivery_logs = (
         OrderChangeLog.objects.filter(
@@ -1492,46 +1479,28 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
             order_delivery_dates[log.order_id] = {
                 "delivery_date": log.changed_at.date(),
                 "order": log.order,
-                "log_id": log.id,
             }
 
     daily_deliveries = defaultdict(list)
     for data in order_delivery_dates.values():
         delivery_date = data["delivery_date"]
         order = data["order"]
-        log_id = data["log_id"]
-        applied_amount = float(order.total_amount - (order.prepaid_amount or 0))
         daily_deliveries[delivery_date].append(
             {
-                "order_code": order.order_code,
                 "total_amount": float(order.total_amount),
                 "prepaid_amount": float(order.prepaid_amount or 0),
-                "log_id": log_id,
-                "applied_amount": applied_amount,
             }
         )
 
     result = {}
     for delivery_date, orders in daily_deliveries.items():
         delivery_count = len(orders)
-        cash_in = sum(o["applied_amount"] for o in orders)
+        cash_in = sum(o["total_amount"] - o["prepaid_amount"] for o in orders)
         delivery_charge = delivery_count * 100
-        order_codes = [o["order_code"] for o in orders]
-        debug_details = [
-            {
-                "order_code": o["order_code"],
-                "log_id": o["log_id"],
-                "applied_amount": o["applied_amount"],
-            }
-            for o in orders
-        ]
-
         result[delivery_date] = {
             "delivery_count": delivery_count,
             "cash_in": cash_in,
             "delivery_charge": delivery_charge,
-            "order_codes": order_codes,
-            "debug_details": debug_details,
         }
 
     return result
