@@ -1426,9 +1426,9 @@ def generate_statement_with_running_balance(
     )
 
     # Calculate initial balance (previous months carried forward)
-    initial_balance = calculate_initial_balance(
-        franchise_id, start_date, dashboard_data
-    )
+    init_data = calculate_initial_balance(franchise_id, start_date)
+    initial_balance = init_data["balance"]
+    carried_orders = init_data["orders"]
 
     statement_entries = []
     running_balance = initial_balance
@@ -1442,6 +1442,7 @@ def generate_statement_with_running_balance(
             "delivery_charge": "-",
             "payment": "-",
             "balance": round(initial_balance, 2),
+            "carried_orders": carried_orders,  # <-- orders carried forward
         }
     )
 
@@ -1463,7 +1464,8 @@ def generate_statement_with_running_balance(
     # Process each day in the current period
     for current_date in all_dates:
         delivery_info = delivered_by_date.get(
-            current_date, {"delivery_count": 0, "cash_in": 0, "delivery_charge": 0}
+            current_date,
+            {"delivery_count": 0, "cash_in": 0, "delivery_charge": 0, "orders": []},
         )
         payment_amount = payments_by_date.get(current_date, 0)
 
@@ -1481,6 +1483,7 @@ def generate_statement_with_running_balance(
                 "delivery_charge": round(delivery_info["delivery_charge"], 2),
                 "payment": round(payment_amount, 2),
                 "balance": round(running_balance, 2),
+                "orders": delivery_info.get("orders", []),  # <-- daily orders
             }
         )
 
@@ -1502,10 +1505,11 @@ def generate_statement_with_running_balance(
     return statement_entries
 
 
-def calculate_initial_balance(franchise_id, start_date, dashboard_data):
+def calculate_initial_balance(franchise_id, start_date):
     """
     Calculate the balance before the start_date by working backwards.
     Includes all delivered orders and payments before the selected period.
+    Returns both balance and carried orders.
     """
     # Get all delivered orders with delivery date < start_date
     early_delivered_logs = (
@@ -1519,10 +1523,10 @@ def calculate_initial_balance(franchise_id, start_date, dashboard_data):
         .order_by("order_id", "-changed_at")
     )
 
-    # Get unique orders delivered before start_date
     early_order_ids = set()
     early_cash_in = 0
     early_delivery_charge = 0
+    carried_orders = []
 
     for log in early_delivered_logs:
         if log.order_id not in early_order_ids:
@@ -1530,7 +1534,8 @@ def calculate_initial_balance(franchise_id, start_date, dashboard_data):
             order = log.order
             cash_amount = float(order.total_amount) - float(order.prepaid_amount or 0)
             early_cash_in += cash_amount
-            early_delivery_charge += 100  # DELIVERY_CHARGE
+            early_delivery_charge += 100
+            carried_orders.append(order.order_code)
 
     # Get payments before start_date
     early_payments = float(
@@ -1542,16 +1547,17 @@ def calculate_initial_balance(franchise_id, start_date, dashboard_data):
         or 0
     )
 
-    # Initial balance = early cash in - early delivery charge - early payments
     initial_balance = early_cash_in - early_delivery_charge - early_payments
 
-    return max(initial_balance, 0)  # Balance shouldn't be negative
+    return {
+        "balance": max(initial_balance, 0),
+        "orders": carried_orders,
+    }
 
 
 def get_delivered_orders_by_date(franchise_id, start_date, end_date):
     """Get delivered orders grouped by delivery date"""
 
-    # Get the latest delivery log for each order within date range
     delivery_logs = (
         OrderChangeLog.objects.filter(
             order__franchise_id=franchise_id,
@@ -1563,7 +1569,6 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
         .order_by("order_id", "-changed_at")
     )
 
-    # Use dictionary to get latest delivery per order
     latest_deliveries = {}
     for log in delivery_logs:
         if log.order_id not in latest_deliveries:
@@ -1572,7 +1577,6 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
                 "order": log.order,
             }
 
-    # Group by delivery date
     daily_deliveries = defaultdict(
         lambda: {"orders": [], "cash_in": 0, "delivery_charge": 0}
     )
@@ -1585,16 +1589,15 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
 
         daily_deliveries[delivery_date]["orders"].append(order.order_code)
         daily_deliveries[delivery_date]["cash_in"] += cash_amount
-        daily_deliveries[delivery_date]["delivery_charge"] += 100  # DELIVERY_CHARGE
+        daily_deliveries[delivery_date]["delivery_charge"] += 100
 
-    # Convert to final format
     result = {}
     for delivery_date, data in daily_deliveries.items():
         result[delivery_date] = {
             "delivery_count": len(data["orders"]),
             "cash_in": data["cash_in"],
             "delivery_charge": data["delivery_charge"],
-            "orders": data["orders"],  # For debugging
+            "orders": data["orders"],  # keep orders per day
         }
 
     return result
