@@ -1297,7 +1297,6 @@ def franchise_statement_api(request, franchise_id):
         # Use current month if dates are not provided
         today = date.today()
         start_date = date(today.year, today.month, 1)
-        # Get the last day of current month
         last_day = calendar.monthrange(today.year, today.month)[1]
         end_date = date(today.year, today.month, last_day)
 
@@ -1345,7 +1344,7 @@ def get_complete_dashboard_stats_data(franchise_id):
         def get_status_stats(statuses):
             if isinstance(statuses, str):
                 statuses = [statuses]
-            filtered = orders.filter(logistics="YDM", order_status__in=statuses)
+            filtered = orders.filter(order_status__in=statuses)
             result = filtered.aggregate(
                 count=Count("id"),
                 total=Sum("total_amount"),
@@ -1356,21 +1355,14 @@ def get_complete_dashboard_stats_data(franchise_id):
             return {"nos": result["count"] or 0, "amount": total - prepaid}
 
         # Calculate charges
-        valid_orders = (
-            Order.objects.filter(franchise_id=franchise_id, logistics="YDM")
-            .filter(order_status="Delivered")
-            .count()
-        )
-
-        cancelled_orders = Order.objects.filter(
-            franchise_id=franchise_id,
-            logistics="YDM",
+        valid_orders = orders.filter(order_status="Delivered").count()
+        cancelled_orders = orders.filter(
             order_status__in=[
                 "Cancelled",
                 "Return Pending",
                 "Returned By Customer",
                 "Returned By YDM",
-            ],
+            ]
         ).count()
 
         valid_charge = valid_orders * DELIVERY_CHARGE
@@ -1414,18 +1406,14 @@ def generate_statement_with_running_balance(
     Includes previous month balance carried forward.
     """
 
-    # Get delivered orders by date
     delivered_by_date = get_delivered_orders_by_date(franchise_id, start_date, end_date)
-
-    # Get payments by date
     payments_by_date = get_payments_by_date(franchise_id, start_date, end_date)
 
-    # Combine all dates from both delivered orders and payments
     all_dates = sorted(
         set(list(delivered_by_date.keys()) + list(payments_by_date.keys()))
     )
 
-    # Calculate initial balance (previous months carried forward)
+    # Calculate carried-forward balance
     init_data = calculate_initial_balance(franchise_id, start_date)
     initial_balance = init_data["balance"]
     carried_orders = init_data["orders"]
@@ -1433,7 +1421,7 @@ def generate_statement_with_running_balance(
     statement_entries = []
     running_balance = initial_balance
 
-    # Add an opening balance row for clarity
+    # Add opening balance row
     statement_entries.append(
         {
             "date": f"Opening Balance (before {start_date})",
@@ -1442,11 +1430,11 @@ def generate_statement_with_running_balance(
             "delivery_charge": "-",
             "payment": "-",
             "balance": round(initial_balance, 2),
-            "carried_orders": carried_orders,  # <-- orders carried forward
+            "carried_orders": carried_orders,
         }
     )
 
-    # If no activity in the period, still return carried balance + verification
+    # If no activity in this period
     if not all_dates:
         dashboard_pending_cod = dashboard_data["Total Pending COD"]["amount"]
         statement_entries.append(
@@ -1461,7 +1449,7 @@ def generate_statement_with_running_balance(
         )
         return statement_entries
 
-    # Process each day in the current period
+    # Daily loop
     for current_date in all_dates:
         delivery_info = delivered_by_date.get(
             current_date,
@@ -1469,7 +1457,6 @@ def generate_statement_with_running_balance(
         )
         payment_amount = payments_by_date.get(current_date, 0)
 
-        # Daily net movement
         daily_net = (
             delivery_info["cash_in"] - delivery_info["delivery_charge"] - payment_amount
         )
@@ -1483,14 +1470,13 @@ def generate_statement_with_running_balance(
                 "delivery_charge": round(delivery_info["delivery_charge"], 2),
                 "payment": round(payment_amount, 2),
                 "balance": round(running_balance, 2),
-                "orders": delivery_info.get("orders", []),  # <-- daily orders
+                "orders": delivery_info.get("orders", []),
             }
         )
 
-    # Final verification entry
+    # Verification row
     dashboard_pending_cod = dashboard_data["Total Pending COD"]["amount"]
     final_balance = running_balance
-
     statement_entries.append(
         {
             "date": "VERIFICATION",
@@ -1507,38 +1493,26 @@ def generate_statement_with_running_balance(
 
 def calculate_initial_balance(franchise_id, start_date):
     """
-    Calculate the balance before the start_date by working backwards.
-    Includes all delivered orders and payments before the selected period.
-    Returns both balance and carried orders.
+    Calculate carried-forward balance before start_date.
+    Mirrors dashboard logic: Delivered COD - delivery charges - payments.
     """
-    # Get all delivered orders with delivery date < start_date
-    early_delivered_logs = (
-        OrderChangeLog.objects.filter(
-            order__franchise_id=franchise_id,
-            order__logistics="YDM",
-            new_status="Delivered",
-            changed_at__date__lt=start_date,
-        )
-        .select_related("order")
-        .order_by("order_id", "-changed_at")
+    delivered_orders = Order.objects.filter(
+        franchise_id=franchise_id,
+        logistics="YDM",
+        order_status="Delivered",
+        updated_at__date__lt=start_date,  # use order.updated_at
     )
 
-    early_order_ids = set()
-    early_cash_in = 0
-    early_delivery_charge = 0
-    carried_orders = []
+    cash_in = (
+        delivered_orders.aggregate(total=Sum(F("total_amount") - F("prepaid_amount")))[
+            "total"
+        ]
+        or 0
+    )
 
-    for log in early_delivered_logs:
-        if log.order_id not in early_order_ids:
-            early_order_ids.add(log.order_id)
-            order = log.order
-            cash_amount = float(order.total_amount) - float(order.prepaid_amount or 0)
-            early_cash_in += cash_amount
-            early_delivery_charge += 100
-            carried_orders.append(order.order_code)
+    delivery_charge = delivered_orders.count() * DELIVERY_CHARGE
 
-    # Get payments before start_date
-    early_payments = float(
+    payments = (
         Invoice.objects.filter(
             franchise_id=franchise_id,
             is_approved=True,
@@ -1547,10 +1521,12 @@ def calculate_initial_balance(franchise_id, start_date):
         or 0
     )
 
-    initial_balance = early_cash_in - early_delivery_charge - early_payments
+    carried_orders = list(delivered_orders.values_list("order_code", flat=True))
+
+    balance = float(cash_in) - float(delivery_charge) - float(payments)
 
     return {
-        "balance": max(initial_balance, 0),
+        "balance": max(balance, 0),
         "orders": carried_orders,
     }
 
@@ -1584,12 +1560,11 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
     for order_id, data in latest_deliveries.items():
         delivery_date = data["delivery_date"]
         order = data["order"]
-
         cash_amount = float(order.total_amount) - float(order.prepaid_amount or 0)
 
         daily_deliveries[delivery_date]["orders"].append(order.order_code)
         daily_deliveries[delivery_date]["cash_in"] += cash_amount
-        daily_deliveries[delivery_date]["delivery_charge"] += 100
+        daily_deliveries[delivery_date]["delivery_charge"] += DELIVERY_CHARGE
 
     result = {}
     for delivery_date, data in daily_deliveries.items():
@@ -1597,7 +1572,7 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
             "delivery_count": len(data["orders"]),
             "cash_in": data["cash_in"],
             "delivery_charge": data["delivery_charge"],
-            "orders": data["orders"],  # keep orders per day
+            "orders": data["orders"],
         }
 
     return result
