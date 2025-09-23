@@ -1,9 +1,10 @@
 # views.py
 import csv
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
+from django.db import models
 from django.db.models import (
     Count,
     DecimalField,
@@ -16,7 +17,7 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce, TruncDate
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters import rest_framework as django_filters
@@ -1272,3 +1273,240 @@ class InvoiceReportListCreateView(generics.ListCreateAPIView):
 class InvoiceReportRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = ReportInvoice.objects.all()
     serializer_class = ReportInvoiceSerializer
+
+
+# views.py
+
+
+def franchise_statement_api(request, franchise_id):
+    """
+    API to get franchise statement with delivered orders and payments
+    URL: /logistics/franchise/{franchise_id}/statement/
+    """
+
+    # Get date range parameters
+    start_date = request.GET.get("start_date")
+    end_date = request.GET.get("end_date")
+
+    if not start_date or not end_date:
+        return JsonResponse(
+            {"error": "start_date and end_date parameters are required"}, status=400
+        )
+
+    try:
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+    except ValueError:
+        return JsonResponse(
+            {"error": "Invalid date format. Use YYYY-MM-DD"}, status=400
+        )
+
+    # Calculate previous balance (before start_date)
+    previous_balance = calculate_previous_balance(franchise_id, start_date)
+
+    # Get delivered orders data
+    delivered_data = get_delivered_orders_data(franchise_id, start_date, end_date)
+
+    # Get payment data
+    payment_data = get_payment_data(franchise_id, start_date, end_date)
+
+    # Combine and calculate daily statements
+    statement_data = generate_statement(
+        delivered_data, payment_data, previous_balance, start_date, end_date
+    )
+
+    return JsonResponse(
+        {
+            "franchise_id": franchise_id,
+            "start_date": start_date.strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
+            "previous_balance": float(previous_balance),
+            "statement": statement_data,
+        }
+    )
+
+
+def calculate_previous_balance(franchise_id, start_date):
+    """Calculate balance from all transactions before start_date"""
+
+    # Get all delivered orders before start_date with YDM logistics
+    previous_delivered = get_delivered_orders_before_date(franchise_id, start_date)
+    previous_cash_in = sum(
+        float(order["total_amount"] - order["prepaid_amount"])
+        for order in previous_delivered
+    )
+    previous_delivery_charge = len(previous_delivered) * 100
+
+    # Get all payments before start_date
+    previous_payments = (
+        Invoice.objects.filter(
+            franchise_id=franchise_id,
+            is_approved=True,
+            approved_at__date__lt=start_date,
+        ).aggregate(total_paid=Sum("paid_amount"))["total_paid"]
+        or 0
+    )
+
+    # Calculate: cash_in - payment - delivery_charge
+    return previous_cash_in - float(previous_payments) - previous_delivery_charge
+
+
+def get_delivered_orders_before_date(franchise_id, before_date):
+    """Get delivered orders before a specific date"""
+
+    # Get latest delivery change log for each order
+    delivered_orders_subquery = (
+        OrderChangeLog.objects.filter(
+            order__franchise_id=franchise_id,
+            order__logistics="YDM",
+            new_status="Delivered",
+            created_at__date__lt=before_date,
+        )
+        .values("order_id")
+        .annotate(latest_delivery_date=models.Max("created_at"))
+        .values("order_id", "latest_delivery_date")
+    )
+
+    orders_data = []
+    for item in delivered_orders_subquery:
+        order = Order.objects.get(id=item["order_id"])
+        orders_data.append(
+            {
+                "order_id": order.id,
+                "total_amount": order.total_amount,
+                "prepaid_amount": order.prepaid_amount or 0,
+                "delivery_date": item["latest_delivery_date"].date(),
+            }
+        )
+
+    return orders_data
+
+
+def get_delivered_orders_data(franchise_id, start_date, end_date):
+    """Get delivered orders data grouped by date"""
+
+    # Get latest delivery change log for each order within date range
+    delivered_orders = (
+        OrderChangeLog.objects.filter(
+            order__franchise_id=franchise_id,
+            order__logistics="YDM",
+            new_status="Delivered",
+            created_at__date__range=[start_date, end_date],
+        )
+        .select_related("order")
+        .order_by("order_id", "-created_at")
+    )
+
+    # Group by order_id and get the latest delivery date for each order
+    order_delivery_dates = {}
+    for log in delivered_orders:
+        if log.order_id not in order_delivery_dates:
+            order_delivery_dates[log.order_id] = {
+                "delivery_date": log.created_at.date(),
+                "order": log.order,
+            }
+
+    # Group by delivery date
+    daily_deliveries = defaultdict(list)
+    for order_id, data in order_delivery_dates.items():
+        delivery_date = data["delivery_date"]
+        order = data["order"]
+
+        daily_deliveries[delivery_date].append(
+            {
+                "order_id": order.id,
+                "total_amount": float(order.total_amount),
+                "prepaid_amount": float(order.prepaid_amount or 0),
+            }
+        )
+
+    # Calculate daily totals
+    result = {}
+    for delivery_date, orders in daily_deliveries.items():
+        delivery_count = len(orders)
+        cash_in = sum(
+            order["total_amount"] - order["prepaid_amount"] for order in orders
+        )
+        delivery_charge = delivery_count * 100
+
+        result[delivery_date] = {
+            "delivery_count": delivery_count,
+            "cash_in": cash_in,
+            "delivery_charge": delivery_charge,
+        }
+
+    return result
+
+
+def get_payment_data(franchise_id, start_date, end_date):
+    """Get payment data grouped by date"""
+
+    payments = (
+        Invoice.objects.filter(
+            franchise_id=franchise_id,
+            is_approved=True,
+            approved_at__date__range=[start_date, end_date],
+        )
+        .values("approved_at__date")
+        .annotate(total_payment=Sum("paid_amount"))
+    )
+
+    result = {}
+    for payment in payments:
+        payment_date = payment["approved_at__date"]
+        result[payment_date] = float(payment["total_payment"] or 0)
+
+    return result
+
+
+def generate_statement(
+    delivered_data, payment_data, previous_balance, start_date, end_date
+):
+    """Generate daily statement combining deliveries and payments"""
+
+    # Get all unique dates from both deliveries and payments
+    all_dates = set(delivered_data.keys()) | set(payment_data.keys())
+
+    # Generate date range to include days with no transactions
+    current_date = start_date
+    date_range = []
+    while current_date <= end_date:
+        date_range.append(current_date)
+        current_date = date(current_date.year, current_date.month, current_date.day + 1)
+
+    statement = []
+    running_balance = previous_balance
+
+    for current_date in sorted(date_range):
+        # Get delivery data for this date
+        delivery_info = delivered_data.get(
+            current_date, {"delivery_count": 0, "cash_in": 0, "delivery_charge": 0}
+        )
+
+        # Get payment data for this date
+        payment_amount = payment_data.get(current_date, 0)
+
+        # Calculate balance: previous_balance + cash_in - payment - delivery_charge
+        running_balance = (
+            running_balance
+            + delivery_info["cash_in"]
+            - payment_amount
+            - delivery_info["delivery_charge"]
+        )
+
+        # Only include dates that have transactions or are requested in range
+        if current_date in all_dates or (
+            delivery_info["delivery_count"] > 0 or payment_amount > 0
+        ):
+            statement.append(
+                {
+                    "date": current_date.strftime("%Y-%m-%d"),
+                    "delivery_count": delivery_info["delivery_count"],
+                    "cash_in": delivery_info["cash_in"],
+                    "delivery_charge": delivery_info["delivery_charge"],
+                    "payment": payment_amount,
+                    "balance": round(running_balance, 2),
+                }
+            )
+
+    return statement
