@@ -1433,7 +1433,9 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
         )
 
     # Starting balance for first day
-    starting_balance = dashboard_data["pending_cod"] - total_activity_future
+    starting_balance = delivered_by_date.get(all_dates_sorted[0], {}).get(
+        "cash_in", 0
+    ) - delivered_by_date.get(all_dates_sorted[0], {}).get("delivery_charge", 0)
     running_balance = starting_balance
 
     statement = []
