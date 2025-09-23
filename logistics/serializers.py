@@ -76,3 +76,11 @@ class ReportInvoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReportInvoice
         fields = ["id", "invoice", "reported_by", "comment", "created_at", "updated_at"]
+
+class FranchiseStatementSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    delivery_count = serializers.IntegerField()
+    cash_in = serializers.FloatField()
+    delivery_charge = serializers.FloatField()
+    payment = serializers.FloatField()
+    balance = serializers.FloatField()

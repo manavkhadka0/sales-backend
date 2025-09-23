@@ -28,7 +28,6 @@ from account.models import CustomUser, Distributor, Factory, Franchise
 from core.middleware import get_current_db_name, set_current_db_name
 from logistics.models import AssignOrder
 from logistics.utils import create_order_log
-from sales.models import Inventory, InventoryChangeLog, Product
 
 from .models import (
     Commission,
@@ -443,7 +442,6 @@ class OrderListCreateView(generics.ListCreateAPIView):
     def create(self, request, *args, **kwargs):
         try:
             # Handle both form-data and raw JSON formats
-            data = request.data.copy()
             order_products = []
 
             # Check if order_products is already a list (JSON payload)
@@ -1809,11 +1807,6 @@ class TopProductsView(generics.ListAPIView):
             # Format the response with percentages
             product_data = []
             for item in top_products:
-                percentage = (
-                    (item["total_amount"] / total_revenue * 100)
-                    if total_revenue > 0
-                    else 0
-                )
                 product_data.append(
                     {
                         "product_id": item["product__product__id"],

@@ -17,7 +17,7 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce, TruncDate
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters import rest_framework as django_filters
@@ -50,6 +50,7 @@ from .models import (
 )
 from .serializers import (
     AssignOrderSerializer,
+    FranchiseStatementSerializer,
     InvoiceSerializer,
     OrderChangeLogSerializer,
     OrderCommentDetailSerializer,
@@ -1274,81 +1275,99 @@ class InvoiceReportRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIVi
     serializer_class = ReportInvoiceSerializer
 
 
-def franchise_statement_api(request, franchise_id):
-    """
-    API to get franchise statement with delivered orders and payments
-    URL: /logistics/franchise/{franchise_id}/statement/
-    """
+class FranchiseStatementPagination(PageNumberPagination):
+    page_size = 30  # Default items per page
+    page_size_query_param = "page_size"
+    max_page_size = 100
 
-    start_date_param = request.GET.get("start_date")
-    end_date_param = request.GET.get("end_date")
 
-    if start_date_param and end_date_param:
-        try:
-            start_date = datetime.strptime(start_date_param, "%Y-%m-%d").date()
-            end_date = datetime.strptime(end_date_param, "%Y-%m-%d").date()
-        except ValueError:
-            return JsonResponse(
-                {"error": "Invalid date format. Use YYYY-MM-DD"}, status=400
-            )
-    else:
-        # Fetch earliest and latest activity dates from orders and payments
-        earliest_order = OrderChangeLog.objects.filter(
-            order__franchise_id=franchise_id,
-            order__logistics="YDM",
-            new_status="Delivered",
-        ).aggregate(Min("changed_at"))["changed_at__min"]
+class FranchiseStatementAPIView(generics.ListAPIView):
+    serializer_class = FranchiseStatementSerializer
+    pagination_class = FranchiseStatementPagination
 
-        latest_order = OrderChangeLog.objects.filter(
-            order__franchise_id=franchise_id,
-            order__logistics="YDM",
-            new_status="Delivered",
-        ).aggregate(Max("changed_at"))["changed_at__max"]
+    def get_queryset(self):
+        # Not used in the traditional sense since we're returning dynamic data
+        return []
 
-        earliest_payment = Invoice.objects.filter(
-            franchise_id=franchise_id, is_approved=True
-        ).aggregate(Min("approved_at"))["approved_at__min"]
+    def list(self, request, franchise_id=None):
+        # 1. Parse dates
+        start_date_param = request.GET.get("start_date")
+        end_date_param = request.GET.get("end_date")
 
-        latest_payment = Invoice.objects.filter(
-            franchise_id=franchise_id, is_approved=True
-        ).aggregate(Max("approved_at"))["approved_at__max"]
-
-        all_earliest = [d for d in [earliest_order, earliest_payment] if d]
-        all_latest = [d for d in [latest_order, latest_payment] if d]
-
-        if all_earliest and all_latest:
-            start_date = min(all_earliest).date()
-            end_date = max(d.date() for d in all_latest)
+        if start_date_param and end_date_param:
+            try:
+                start_date = datetime.strptime(start_date_param, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date_param, "%Y-%m-%d").date()
+            except ValueError:
+                return Response(
+                    {"error": "Invalid date format. Use YYYY-MM-DD"}, status=400
+                )
         else:
-            # No orders or payments exist, fallback to today
-            today = date.today()
-            start_date = today
-            end_date = today
+            # Fetch earliest and latest activity dates
+            earliest_order = OrderChangeLog.objects.filter(
+                order__franchise_id=franchise_id,
+                order__logistics="YDM",
+                new_status="Delivered",
+            ).aggregate(Min("changed_at"))["changed_at__min"]
 
-    # Calculate dashboard pending COD for reference
-    dashboard_data = calculate_dashboard_pending_cod(franchise_id)
+            latest_order = OrderChangeLog.objects.filter(
+                order__franchise_id=franchise_id,
+                order__logistics="YDM",
+                new_status="Delivered",
+            ).aggregate(Max("changed_at"))["changed_at__max"]
 
-    # Generate daily statement
-    statement_data = generate_simple_statement(
-        franchise_id, start_date, end_date, dashboard_data
-    )
+            earliest_payment = Invoice.objects.filter(
+                franchise_id=franchise_id, is_approved=True
+            ).aggregate(Min("approved_at"))["approved_at__min"]
 
-    return JsonResponse(
-        {
-            "franchise_id": franchise_id,
-            "start_date": start_date.strftime("%Y-%m-%d"),
-            "end_date": end_date.strftime("%Y-%m-%d"),
-            "dashboard_pending_cod": float(dashboard_data["pending_cod"]),
-            "dashboard_breakdown": {
-                "delivered_amount": float(dashboard_data["delivered_amount"]),
-                "total_charge": float(dashboard_data["total_charge"]),
-                "approved_paid": float(dashboard_data["approved_paid"]),
-                "delivered_count": dashboard_data["delivered_count"],
-                "cancelled_count": dashboard_data["cancelled_count"],
-            },
-            "statement": statement_data,
-        }
-    )
+            latest_payment = Invoice.objects.filter(
+                franchise_id=franchise_id, is_approved=True
+            ).aggregate(Max("approved_at"))["approved_at__max"]
+
+            all_earliest = [d for d in [earliest_order, earliest_payment] if d]
+            all_latest = [d for d in [latest_order, latest_payment] if d]
+
+            if all_earliest and all_latest:
+                start_date = min(all_earliest).date()
+                end_date = max(d.date() for d in all_latest)
+            else:
+                today = date.today()
+                start_date = today
+                end_date = today
+
+        # 2. Dashboard data
+        dashboard_data = calculate_dashboard_pending_cod(franchise_id)
+
+        # 3. Generate statement
+        statement_data = generate_simple_statement(
+            franchise_id, start_date, end_date, dashboard_data
+        )
+
+        # 4. Paginate statement
+        paginator = self.pagination_class()
+        paginated_statement = paginator.paginate_queryset(statement_data, request)
+
+        # 5. Serialize and respond
+        serializer = self.serializer_class(
+            paginated_statement, many=True, context={"franchise_id": franchise_id}
+        )
+
+        return paginator.get_paginated_response(
+            {
+                "franchise_id": franchise_id,
+                "start_date": start_date.strftime("%Y-%m-%d"),
+                "end_date": end_date.strftime("%Y-%m-%d"),
+                "dashboard_pending_cod": float(dashboard_data["pending_cod"]),
+                "dashboard_breakdown": {
+                    "delivered_amount": float(dashboard_data["delivered_amount"]),
+                    "total_charge": float(dashboard_data["total_charge"]),
+                    "approved_paid": float(dashboard_data["approved_paid"]),
+                    "delivered_count": dashboard_data["delivered_count"],
+                    "cancelled_count": dashboard_data["cancelled_count"],
+                },
+                "statement": serializer.data,
+            }
+        )
 
 
 def calculate_dashboard_pending_cod(franchise_id):
