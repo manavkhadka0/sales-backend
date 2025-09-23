@@ -706,10 +706,11 @@ def daily_delivered_orders(request, franchise_id):
     for order in delivered_orders_qs:
         delivered_orders_by_date[order["delivered_date"]].append(order["order_code"])
 
-    # Format response
+    # Format response with proper cumulative balance calculation
     results = []
     running_balance = Decimal("0.00")
-    for row in per_day:
+    # Process dates in chronological order (oldest to newest) for cumulative calculation
+    for row in per_day.order_by("delivered_date"):
         d = row["delivered_date"]
         delivered_count = row["delivered_count"] or 0
         delivery_charge_amount = Decimal(str(DELIVERY_CHARGE)) * Decimal(
@@ -735,6 +736,9 @@ def daily_delivered_orders(request, franchise_id):
                 "delivered_orders": delivered_orders_by_date.get(d, []),
             }
         )
+
+    # Reverse results to show newest dates first
+    results.reverse()
 
     # Also include a dashboard-equivalent pending COD (not month-limited) to reconcile numbers
     exclude_status = [
