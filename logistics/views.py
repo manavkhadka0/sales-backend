@@ -1414,25 +1414,26 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
     # Get all dates that have activity
     all_dates = set(delivered_by_date.keys()) | set(payments_by_date.keys())
 
-    # Calculate what balance should be at start of period
-    total_activity_in_period = 0
-    for activity_date in all_dates:
-        delivery_info = delivered_by_date.get(
-            activity_date, {"cash_in": 0, "delivery_charge": 0}
-        )
-        payment_amount = payments_by_date.get(activity_date, 0)
-        # Each day's impact: +cash_in -delivery_charge -payment
-        daily_impact = (
-            delivery_info["cash_in"] - delivery_info["delivery_charge"] - payment_amount
-        )
-        total_activity_in_period += daily_impact
+    if not all_dates:
+        return [
+            {
+                "date": "No transactions in period",
+                "delivery_count": 0,
+                "cash_in": 0,
+                "delivery_charge": 0,
+                "payment": 0,
+                "balance": dashboard_data["pending_cod"],
+            }
+        ]
 
-    # Starting balance = final balance - period activity
-    starting_balance = dashboard_data["pending_cod"] - total_activity_in_period
+    # Calculate what happened BEFORE the start_date
+    balance_before_period = calculate_balance_before_period(
+        franchise_id, start_date, dashboard_data
+    )
 
     # Generate daily statement in chronological order first
     daily_entries = []
-    running_balance = starting_balance
+    running_balance = balance_before_period
 
     for current_date in sorted(
         all_dates
@@ -1465,17 +1466,110 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
     # Reverse the order for display (newest first)
     daily_entries.reverse()
 
+    # Add balance before period for debugging
+    daily_entries.append(
+        {
+            "date": "BALANCE_BEFORE_PERIOD",
+            "delivery_count": f"Starting balance: {balance_before_period}",
+            "cash_in": f"Dashboard total: {dashboard_data['pending_cod']}",
+            "delivery_charge": "Period activity calculated",
+            "payment": "Debug info",
+            "balance": balance_before_period,
+        }
+    )
+
+    # Add summary row showing final should match dashboard
+    daily_entries.append(
+        {
+            "date": "FINAL_VERIFICATION",
+            "delivery_count": f"Should be: {dashboard_data['delivered_count']}",
+            "cash_in": f"Should be: {dashboard_data['delivered_amount']}",
+            "delivery_charge": f"Should be: {dashboard_data['total_charge']}",
+            "payment": f"Should be: {dashboard_data['approved_paid']}",
+            "balance": f"Should match dashboard: {dashboard_data['pending_cod']}",
+        }
+    )
+
     return daily_entries
 
 
-def get_delivered_orders_by_date(franchise_id, start_date, end_date):
-    """Get delivered orders grouped by delivery date using OrderChangeLog"""
+def calculate_balance_before_period(franchise_id, start_date, dashboard_data):
+    """
+    Calculate what the balance should be BEFORE the start_date
+    by working backwards from dashboard total - ONLY YDM orders
+    """
 
-    # Get delivery change logs within date range
+    # Get delivered orders that have delivery date >= start_date - ONLY YDM
+    future_delivered_logs = (
+        OrderChangeLog.objects.filter(
+            order__franchise_id=franchise_id,
+            order__logistics="YDM",  # Ensure YDM only
+            new_status="Delivered",
+            changed_at__date__gte=start_date,
+        )
+        .select_related("order")
+        .order_by("order_id", "-changed_at")
+    )
+
+    # Get unique YDM orders delivered from start_date onwards (avoid duplicates)
+    future_order_ids = set()
+    future_cash_in = 0
+    future_delivery_charge = 0
+    future_orders_debug = []
+
+    for log in future_delivered_logs:
+        # Double-check order is YDM and not already counted
+        if log.order.logistics == "YDM" and log.order_id not in future_order_ids:
+            future_order_ids.add(log.order_id)
+            order = log.order
+            cash_amount = float(order.total_amount) - float(order.prepaid_amount or 0)
+            future_cash_in += cash_amount
+            future_delivery_charge += 100
+            future_orders_debug.append(
+                {
+                    "order_code": order.order_code,
+                    "date": log.changed_at.date(),
+                    "cash": cash_amount,
+                    "logistics": order.logistics,
+                }
+            )
+
+    # Get payments from start_date onwards (invoices are franchise-specific)
+    future_payments = float(
+        Invoice.objects.filter(
+            franchise_id=franchise_id,
+            is_approved=True,
+            approved_at__date__gte=start_date,
+        ).aggregate(total=Sum("paid_amount"))["total"]
+        or 0
+    )
+
+    # Calculate: balance_before = dashboard_total - future_activity
+    future_net_activity = future_cash_in - future_delivery_charge - future_payments
+    balance_before = dashboard_data["pending_cod"] - future_net_activity
+
+    # Debug info
+    print(f"DEBUG - Future orders from {start_date}:")
+    for order_debug in future_orders_debug:
+        print(f"  {order_debug}")
+    print(f"Future cash in: {future_cash_in}")
+    print(f"Future delivery charge: {future_delivery_charge}")
+    print(f"Future payments: {future_payments}")
+    print(f"Future net activity: {future_net_activity}")
+    print(f"Dashboard pending COD: {dashboard_data['pending_cod']}")
+    print(f"Calculated balance before period: {balance_before}")
+
+    return balance_before
+
+
+def get_delivered_orders_by_date(franchise_id, start_date, end_date):
+    """Get delivered orders grouped by delivery date using OrderChangeLog - ONLY YDM orders"""
+
+    # Get delivery change logs within date range - ENSURE order has logistics='YDM'
     delivery_logs = (
         OrderChangeLog.objects.filter(
             order__franchise_id=franchise_id,
-            order__logistics="YDM",
+            order__logistics="YDM",  # This is the key filter!
             new_status="Delivered",
             changed_at__date__range=[start_date, end_date],
         )
@@ -1486,7 +1580,8 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
     # Get latest delivery date for each order (avoid duplicates)
     order_delivery_dates = {}
     for log in delivery_logs:
-        if log.order_id not in order_delivery_dates:
+        # Double-check the order is YDM (safety check)
+        if log.order.logistics == "YDM" and log.order_id not in order_delivery_dates:
             order_delivery_dates[log.order_id] = {
                 "delivery_date": log.changed_at.date(),
                 "order": log.order,
@@ -1498,12 +1593,15 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
         delivery_date = data["delivery_date"]
         order = data["order"]
 
-        daily_deliveries[delivery_date].append(
-            {
-                "total_amount": float(order.total_amount),
-                "prepaid_amount": float(order.prepaid_amount or 0),
-            }
-        )
+        # Final safety check - ensure order is YDM
+        if order.logistics == "YDM":
+            daily_deliveries[delivery_date].append(
+                {
+                    "total_amount": float(order.total_amount),
+                    "prepaid_amount": float(order.prepaid_amount or 0),
+                    "order_code": order.order_code,  # For debugging
+                }
+            )
 
     # Calculate daily totals
     result = {}
@@ -1518,6 +1616,7 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
             "delivery_count": delivery_count,
             "cash_in": cash_in,
             "delivery_charge": delivery_charge,
+            "orders": [order["order_code"] for order in orders],  # For debugging
         }
 
     return result
