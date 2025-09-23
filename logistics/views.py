@@ -698,17 +698,15 @@ def daily_delivered_orders(request, franchise_id):
         row["approved_date"]: row["paid"] for row in invoice_paid_qs
     }
 
-    # Get delivered order codes per day
+    # Get all delivered order codes
     delivered_orders_qs = (
         Order.objects.filter(
             franchise_id=franchise_id, order_status="Delivered", logistics="YDM"
         )
-        .values("delivered_date", "order_code")
-        .order_by("delivered_date")
+        .values_list("order_code", flat=True)
+        .order_by("order_code")
     )
-    delivered_orders_by_date = defaultdict(list)
-    for order in delivered_orders_qs:
-        delivered_orders_by_date[order["delivered_date"]].append(order["order_code"])
+    delivered_order_codes = list(delivered_orders_qs)
 
     # Format response
     results = []
@@ -736,7 +734,6 @@ def daily_delivered_orders(request, franchise_id):
                 "invoice_paid_amount": str(invoice_paid_val),
                 "balance": str(per_day_balance),
                 "cumulative_balance": str(running_balance),
-                "delivered_orders": delivered_orders_by_date.get(d, []),
             }
         )
 
@@ -810,6 +807,7 @@ def daily_delivered_orders(request, franchise_id):
         {
             "success": True,
             "data": results,
+            "delivered_order_codes": delivered_order_codes,
             "pending_cod_equivalent": str(pending_cod_equivalent),
         },
         status=status.HTTP_200_OK,
