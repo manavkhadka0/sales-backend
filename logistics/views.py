@@ -1276,9 +1276,6 @@ class InvoiceReportRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIVi
     serializer_class = ReportInvoiceSerializer
 
 
-# views.py
-
-
 def franchise_statement_api(request, franchise_id):
     """
     API to get franchise statement with delivered orders and payments
@@ -1364,10 +1361,10 @@ def get_delivered_orders_before_date(franchise_id, before_date):
             order__franchise_id=franchise_id,
             order__logistics="YDM",
             new_status="Delivered",
-            created_at__date__lt=before_date,
+            changed_at__date__lt=before_date,
         )
         .values("order_id")
-        .annotate(latest_delivery_date=models.Max("created_at"))
+        .annotate(latest_delivery_date=models.Max("changed_at"))
         .values("order_id", "latest_delivery_date")
     )
 
@@ -1395,10 +1392,10 @@ def get_delivered_orders_data(franchise_id, start_date, end_date):
             order__franchise_id=franchise_id,
             order__logistics="YDM",
             new_status="Delivered",
-            created_at__date__range=[start_date, end_date],
+            changed_at__date__range=[start_date, end_date],
         )
         .select_related("order")
-        .order_by("order_id", "-created_at")
+        .order_by("order_id", "-changed_at")
     )
 
     # Group by order_id and get the latest delivery date for each order
@@ -1406,7 +1403,7 @@ def get_delivered_orders_data(franchise_id, start_date, end_date):
     for log in delivered_orders:
         if log.order_id not in order_delivery_dates:
             order_delivery_dates[log.order_id] = {
-                "delivery_date": log.created_at.date(),
+                "delivery_date": log.changed_at.date(),
                 "order": log.order,
             }
 
