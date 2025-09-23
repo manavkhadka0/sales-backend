@@ -1467,7 +1467,7 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
 
 
 def get_delivered_orders_by_date(franchise_id, start_date, end_date):
-    """Get delivered orders grouped by delivery date including order codes"""
+    """Get delivered orders grouped by delivery date including order codes and debug info"""
 
     delivery_logs = (
         OrderChangeLog.objects.filter(
@@ -1486,31 +1486,47 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
             order_delivery_dates[log.order_id] = {
                 "delivery_date": log.changed_at.date(),
                 "order": log.order,
+                "log_id": log.id,  # Track log ID
             }
 
     daily_deliveries = defaultdict(list)
     for data in order_delivery_dates.values():
         delivery_date = data["delivery_date"]
         order = data["order"]
+        log_id = data["log_id"]
         daily_deliveries[delivery_date].append(
             {
                 "order_code": order.order_code,
                 "total_amount": float(order.total_amount),
                 "prepaid_amount": float(order.prepaid_amount or 0),
+                "log_id": log_id,
+                "applied_amount": float(
+                    order.total_amount - (order.prepaid_amount or 0)
+                ),
             }
         )
 
     result = {}
     for delivery_date, orders in daily_deliveries.items():
         delivery_count = len(orders)
-        cash_in = sum(o["total_amount"] - o["prepaid_amount"] for o in orders)
+        cash_in = sum(o["applied_amount"] for o in orders)
         delivery_charge = delivery_count * 100
         order_codes = [o["order_code"] for o in orders]
+        debug_details = [
+            {
+                "order_code": o["order_code"],
+                "log_id": o["log_id"],
+                "applied_amount": o["applied_amount"],
+            }
+            for o in orders
+        ]
+
         result[delivery_date] = {
             "delivery_count": delivery_count,
             "cash_in": cash_in,
             "delivery_charge": delivery_charge,
             "order_codes": order_codes,
+            "debug_details": debug_details,  # Added debug info
         }
 
     return result
