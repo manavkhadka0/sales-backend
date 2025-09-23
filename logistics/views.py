@@ -1430,11 +1430,13 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
     # Starting balance = final balance - period activity
     starting_balance = dashboard_data["pending_cod"] - total_activity_in_period
 
-    # Generate daily statement
-    statement = []
+    # Generate daily statement in chronological order first
+    daily_entries = []
     running_balance = starting_balance
 
-    for current_date in sorted(all_dates):
+    for current_date in sorted(
+        all_dates
+    ):  # Process chronologically for correct balance calculation
         delivery_info = delivered_by_date.get(
             current_date, {"delivery_count": 0, "cash_in": 0, "delivery_charge": 0}
         )
@@ -1449,7 +1451,7 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
             - delivery_info["delivery_charge"]
         )
 
-        statement.append(
+        daily_entries.append(
             {
                 "date": current_date.strftime("%Y-%m-%d"),
                 "delivery_count": delivery_info["delivery_count"],
@@ -1460,8 +1462,11 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
             }
         )
 
+    # Reverse the order for display (newest first)
+    daily_entries.reverse()
+
     # Add summary row showing final should match dashboard
-    statement.append(
+    daily_entries.append(
         {
             "date": "FINAL_VERIFICATION",
             "delivery_count": f"Should be: {dashboard_data['delivered_count']}",
@@ -1472,7 +1477,7 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
         }
     )
 
-    return statement
+    return daily_entries
 
 
 def get_delivered_orders_by_date(franchise_id, start_date, end_date):
