@@ -1465,18 +1465,6 @@ def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data
     # Reverse the order for display (newest first)
     daily_entries.reverse()
 
-    # Add summary row showing final should match dashboard
-    daily_entries.append(
-        {
-            "date": "FINAL_VERIFICATION",
-            "delivery_count": f"Should be: {dashboard_data['delivered_count']}",
-            "cash_in": f"Should be: {dashboard_data['delivered_amount']}",
-            "delivery_charge": f"Should be: {dashboard_data['total_charge']}",
-            "payment": f"Should be: {dashboard_data['approved_paid']}",
-            "balance": f"Should match dashboard: {dashboard_data['pending_cod']}",
-        }
-    )
-
     return daily_entries
 
 
