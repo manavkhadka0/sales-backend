@@ -12,6 +12,7 @@ from .views import (
     OrderCommentRetrieveUpdateDestroyView,
     UpdateOrderStatusView,
     daily_orders_by_franchise,
+    franchise_statement_api,
     get_complete_dashboard_stats,
     get_franchise_order_stats,
     get_total_pending_cod,
@@ -79,5 +80,10 @@ urlpatterns = [
         "logistics/invoice-report/<int:pk>/",
         InvoiceReportRetrieveUpdateDestroyView.as_view(),
         name="invoice-report-detail",
+    ),
+    path(
+        "logistics/franchise/<int:franchise_id>/dfdstatement/",
+        franchise_statement_api,
+        name="franchise_statement_api",
     ),
 ]
