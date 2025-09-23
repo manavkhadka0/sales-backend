@@ -1274,85 +1274,89 @@ class InvoiceReportRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIVi
 
 
 @api_view(["GET"])
-def franchise_statement_api(request, franchise_id):
+def franchise_statement_full(request):
     """
-    Get full franchise statement from beginning with exact mismatch detection.
+    Full YDM statement for all orders from beginning
     """
-    dashboard_data = get_dashboard_data(franchise_id)
-
-    statement_data, mismatch_info = generate_full_statement_with_mismatch(
-        franchise_id, dashboard_data
+    # Pull all orders for YDM_Logistics
+    orders = (
+        Order.objects.filter(logistics="YDM")
+        .exclude(
+            order_status__in=[
+                "Pending",
+                "Processing",
+                "Sent to Dash",
+                "Indrive",
+                "Return By Dash",
+            ]
+        )
+        .order_by("-id")
     )
-
-    return JsonResponse(
-        {
-            "franchise_id": franchise_id,
-            "dashboard_pending_cod": float(dashboard_data["Total Pending COD"]),
-            "statement": statement_data,
-            "mismatch_info": mismatch_info,  # detailed info about mismatched orders
-        }
-    )
-
-
-def get_dashboard_data(franchise_id):
-    """
-    Return full dashboard stats without date filter
-    """
-    orders = Order.objects.filter(franchise_id=franchise_id, logistics="YDM")
-
-    # Delivered and cancelled
-    delivered_orders = orders.filter(order_status="Delivered")
-    cancelled_orders = orders.filter(
-        order_status__in=[
-            "Cancelled",
-            "Return Pending",
-            "Returned By Customer",
-            "Returned By YDM",
-        ]
-    )
-
-    # Charges
-    total_charge = (
-        delivered_orders.count() * DELIVERY_CHARGE
-        + cancelled_orders.count() * CANCELLED_CHARGE
-    )
-
-    # Delivered COD
-    delivered_amount = delivered_orders.aggregate(
-        total=Sum(F("total_amount") - F("prepaid_amount"))
-    )["total"] or Decimal(0)
 
     # Approved payments
-    approved_paid = Invoice.objects.filter(
-        franchise_id=franchise_id, is_approved=True
-    ).aggregate(total=Sum("paid_amount"))["total"] or Decimal(0)
+    approved_invoices = Invoice.objects.filter(is_approved=True)
 
-    pending_cod = max(delivered_amount - total_charge - approved_paid, 0)
-
-    return {
-        "delivered_orders": delivered_orders,
-        "cancelled_orders": cancelled_orders,
-        "Total Delivered Amount": float(delivered_amount),
-        "Total Charges": float(total_charge),
-        "Approved Paid": float(approved_paid),
-        "Total Pending COD": float(pending_cod),
-    }
-
-
-def generate_full_statement_with_mismatch(franchise_id, dashboard_data):
-    """
-    Generate full statement and detect orders causing mismatch.
-    """
-    delivered_orders = dashboard_data["delivered_orders"]
-    cancelled_orders = dashboard_data["cancelled_orders"]
-    approved_invoices = Invoice.objects.filter(
-        franchise_id=franchise_id, is_approved=True
+    # Prepare daily dictionary
+    daily_data = defaultdict(
+        lambda: {"orders": [], "cash_in": Decimal(0), "delivery_charge": Decimal(0)}
     )
 
-    statement_entries = []
+    # Track running balance
     running_balance = Decimal(0)
+    order_contributions = []
 
-    # Opening Balance
+    # For each delivered order, find delivery date from OrderChangeLog
+    delivered_orders = orders.filter(order_status="Delivered")
+    delivery_logs = (
+        OrderChangeLog.objects.filter(
+            order__in=delivered_orders, new_status="Delivered"
+        )
+        .order_by("order_id", "changed_at")
+        .select_related("order")
+    )
+
+    # Pick the first delivery date per order
+    first_delivery = {}
+    for log in delivery_logs:
+        if log.order_id not in first_delivery:
+            first_delivery[log.order_id] = log.changed_at.date()
+
+    # Process all orders for daily aggregation
+    for order in orders:
+        # Skip orders without delivery date for delivered status
+        if order.order_status == "Delivered":
+            delivery_date = first_delivery.get(order.id)
+            if not delivery_date:
+                continue
+            daily_key = delivery_date
+        else:
+            # For cancelled/returned orders, use updated_at date
+            daily_key = order.updated_at.date()
+
+        cash_in = Decimal(order.total_amount) - Decimal(order.prepaid_amount or 0)
+        charge = (
+            DELIVERY_CHARGE if order.order_status == "Delivered" else CANCELLED_CHARGE
+        )
+
+        daily_data[daily_key]["orders"].append(order.order_code)
+        daily_data[daily_key]["cash_in"] += cash_in
+        daily_data[daily_key]["delivery_charge"] += charge
+
+        order_contributions.append(
+            {
+                "order_code": order.order_code,
+                "net_contribution": float(cash_in - charge),
+            }
+        )
+
+    # Aggregate payments per day
+    payments_by_date = defaultdict(Decimal)
+    for inv in approved_invoices:
+        if inv.approved_at:
+            payments_by_date[inv.approved_at.date()] += Decimal(inv.paid_amount or 0)
+
+    # Build statement
+    statement_entries = []
     statement_entries.append(
         {
             "date": "Opening Balance (from beginning)",
@@ -1365,95 +1369,38 @@ def generate_full_statement_with_mismatch(franchise_id, dashboard_data):
         }
     )
 
-    # Combine all orders
-    all_order_logs = []
-
-    for order in delivered_orders:
-        cash_in = Decimal(order.total_amount) - Decimal(order.prepaid_amount or 0)
-        all_order_logs.append(
-            {
-                "order_code": order.order_code,
-                "date": order.updated_at.date(),
-                "cash_in": cash_in,
-                "charge": DELIVERY_CHARGE,
-                "type": "Delivered",
-            }
-        )
-
-    for order in cancelled_orders:
-        cash_in = Decimal(order.total_amount) - Decimal(order.prepaid_amount or 0)
-        all_order_logs.append(
-            {
-                "order_code": order.order_code,
-                "date": order.updated_at.date(),
-                "cash_in": cash_in,
-                "charge": CANCELLED_CHARGE,
-                "type": "Cancelled",
-            }
-        )
-
-    # Sort by date
-    all_order_logs.sort(key=lambda x: x["date"])
-
-    daily_totals = defaultdict(
-        lambda: {"orders": [], "cash_in": Decimal(0), "charge": Decimal(0)}
-    )
-
-    for log in all_order_logs:
-        daily_totals[log["date"]]["orders"].append(log["order_code"])
-        daily_totals[log["date"]]["cash_in"] += log["cash_in"]
-        daily_totals[log["date"]]["charge"] += log["charge"]
-
-    # Track balance per order to detect mismatch
-    order_balances = []
-
-    for day, data in sorted(daily_totals.items()):
-        # Payments approved on this day
-        payment_amount = approved_invoices.filter(approved_at__date=day).aggregate(
-            total=Sum("paid_amount")
-        )["total"] or Decimal(0)
-
-        daily_net = data["cash_in"] - data["charge"] - Decimal(payment_amount)
+    for day in sorted(daily_data.keys()):
+        data = daily_data[day]
+        payment_amount = payments_by_date.get(day, Decimal(0))
+        daily_net = data["cash_in"] - data["delivery_charge"] - payment_amount
         running_balance += daily_net
-
-        # Store individual order net for mismatch detection
-        for order_code in data["orders"]:
-            order_log = next(
-                item for item in all_order_logs if item["order_code"] == order_code
-            )
-            order_net = order_log["cash_in"] - order_log["charge"]
-            order_balances.append(
-                {"order_code": order_code, "net_contribution": float(order_net)}
-            )
 
         statement_entries.append(
             {
                 "date": day.strftime("%Y-%m-%d"),
                 "delivery_count": len(data["orders"]),
                 "cash_in": float(data["cash_in"]),
-                "delivery_charge": float(data["charge"]),
+                "delivery_charge": float(data["delivery_charge"]),
                 "payment": float(payment_amount),
                 "balance": float(running_balance),
                 "orders": data["orders"],
             }
         )
 
-    # Compare running_balance vs dashboard pending COD
-    dashboard_pending_cod = Decimal(dashboard_data["Total Pending COD"])
-    difference = running_balance - dashboard_pending_cod
+    # Compare running balance with dashboard pending COD
+    total_delivered_amount = sum(
+        Decimal(oc["net_contribution"]) + DELIVERY_CHARGE for oc in order_contributions
+    )
+    total_charges = sum(
+        Decimal(oc["net_contribution"]) - Decimal(oc["net_contribution"])
+        for oc in order_contributions
+    )
+    total_approved_paid = sum(
+        Decimal(inv.paid_amount or 0) for inv in approved_invoices
+    )
 
-    detailed_mismatched_orders = []
-    if abs(difference) > 0.01:
-        # Identify orders causing the mismatch
-        # Strategy: find orders whose net_contribution sum approximates the difference
-        cumulative = Decimal(0)
-        for ob in order_balances:
-            cumulative += Decimal(ob["net_contribution"])
-            if cumulative >= difference:
-                detailed_mismatched_orders.append(ob["order_code"])
-                break
+    dashboard_pending_cod = total_delivered_amount - total_approved_paid - total_charges
 
-    # Verification row
     statement_entries.append(
         {
             "date": "VERIFICATION",
@@ -1465,9 +1412,11 @@ def generate_full_statement_with_mismatch(franchise_id, dashboard_data):
         }
     )
 
-    mismatch_info = {
-        "difference": float(difference),
-        "problematic_orders": detailed_mismatched_orders,
-    }
-
-    return statement_entries, mismatch_info
+    # Return detailed info for debugging
+    return JsonResponse(
+        {
+            "dashboard_pending_cod": float(dashboard_pending_cod),
+            "statement": statement_entries,
+            "order_contributions": order_contributions,  # useful to check which order caused mismatch
+        }
+    )
