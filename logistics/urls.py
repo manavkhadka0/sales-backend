@@ -12,7 +12,7 @@ from .views import (
     OrderCommentRetrieveUpdateDestroyView,
     UpdateOrderStatusView,
     daily_orders_by_franchise,
-    franchise_statement_full,
+    franchise_statement_api,
     get_complete_dashboard_stats,
     get_franchise_order_stats,
     get_total_pending_cod,
@@ -83,7 +83,7 @@ urlpatterns = [
     ),
     path(
         "logistics/franchise/<int:franchise_id>/statement/",
-        franchise_statement_full,
+        franchise_statement_api,
         name="franchise_statement_full",
     ),
 ]

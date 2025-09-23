@@ -1,7 +1,8 @@
 # views.py
+import calendar
 import csv
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from django.db.models import (
@@ -1273,154 +1274,265 @@ class InvoiceReportRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIVi
     serializer_class = ReportInvoiceSerializer
 
 
-@api_view(["GET"])
-def franchise_statement_full(request, franchise_id):
+def franchise_statement_api(request, franchise_id):
     """
-    Full YDM statement for all orders from beginning
+    API to get franchise statement with delivered orders and payments
+    URL: /logistics/franchise/{franchise_id}/statement/
     """
-    # Pull all orders for YDM_Logistics
-    orders = (
-        Order.objects.filter(logistics="YDM", franchise_id=franchise_id)
-        .exclude(
-            order_status__in=[
-                "Pending",
-                "Processing",
-                "Sent to Dash",
-                "Indrive",
-                "Return By Dash",
-            ]
-        )
-        .order_by("-id")
+
+    start_date_param = request.GET.get("start_date")
+    end_date_param = request.GET.get("end_date")
+
+    # If both start_date and end_date are provided, use them
+    if start_date_param and end_date_param:
+        try:
+            start_date = datetime.strptime(start_date_param, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date_param, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse(
+                {"error": "Invalid date format. Use YYYY-MM-DD"}, status=400
+            )
+    else:
+        # Use current month if dates are not provided
+        today = date.today()
+        start_date = date(today.year, today.month, 1)
+        # Get the last day of current month
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        end_date = date(today.year, today.month, last_day)
+
+    # Calculate dashboard pending COD for reference
+    dashboard_data = calculate_dashboard_pending_cod(franchise_id)
+
+    # Get statement data using SIMPLE approach - just track daily changes
+    statement_data = generate_simple_statement(
+        franchise_id, start_date, end_date, dashboard_data
     )
 
-    # Approved payments
-    approved_invoices = Invoice.objects.filter(
-        franchise_id=franchise_id, is_approved=True
-    )
-
-    # Prepare daily dictionary
-    daily_data = defaultdict(
-        lambda: {"orders": [], "cash_in": Decimal(0), "delivery_charge": Decimal(0)}
-    )
-
-    # Track running balance
-    running_balance = Decimal(0)
-    order_contributions = []
-
-    # For each delivered order, find delivery date from OrderChangeLog
-    delivered_orders = orders.filter(order_status="Delivered")
-    delivery_logs = (
-        OrderChangeLog.objects.filter(
-            order__in=delivered_orders,
-            new_status="Delivered",
-            order__franchise_id=franchise_id,
-        )
-        .order_by("order_id", "changed_at")
-        .select_related("order")
-    )
-
-    # Pick the first delivery date per order
-    first_delivery = {}
-    for log in delivery_logs:
-        if log.order_id not in first_delivery:
-            first_delivery[log.order_id] = log.changed_at.date()
-
-    # Process all orders for daily aggregation
-    for order in orders:
-        # Skip orders without delivery date for delivered status
-        if order.order_status == "Delivered":
-            delivery_date = first_delivery.get(order.id)
-            if not delivery_date:
-                continue
-            daily_key = delivery_date
-        else:
-            # For cancelled/returned orders, use updated_at date
-            daily_key = order.updated_at.date()
-
-        cash_in = Decimal(order.total_amount) - Decimal(order.prepaid_amount or 0)
-        charge = (
-            DELIVERY_CHARGE if order.order_status == "Delivered" else CANCELLED_CHARGE
-        )
-
-        daily_data[daily_key]["orders"].append(order.order_code)
-        daily_data[daily_key]["cash_in"] += cash_in
-        daily_data[daily_key]["delivery_charge"] += charge
-
-        order_contributions.append(
-            {
-                "order_code": order.order_code,
-                "net_contribution": float(cash_in - charge),
-            }
-        )
-
-    # Aggregate payments per day
-    payments_by_date = defaultdict(Decimal)
-    for inv in approved_invoices:
-        if inv.approved_at:
-            payments_by_date[inv.approved_at.date()] += Decimal(inv.paid_amount or 0)
-
-    # Build statement
-    statement_entries = []
-    statement_entries.append(
-        {
-            "date": "Opening Balance (from beginning)",
-            "delivery_count": "-",
-            "cash_in": "-",
-            "delivery_charge": "-",
-            "payment": "-",
-            "balance": float(running_balance),
-            "orders": [],
-        }
-    )
-
-    for day in sorted(daily_data.keys()):
-        data = daily_data[day]
-        payment_amount = payments_by_date.get(day, Decimal(0))
-        daily_net = data["cash_in"] - data["delivery_charge"] - payment_amount
-        running_balance += daily_net
-
-        statement_entries.append(
-            {
-                "date": day.strftime("%Y-%m-%d"),
-                "delivery_count": len(data["orders"]),
-                "cash_in": float(data["cash_in"]),
-                "delivery_charge": float(data["delivery_charge"]),
-                "payment": float(payment_amount),
-                "balance": float(running_balance),
-                "orders": data["orders"],
-            }
-        )
-
-    # Compare running balance with dashboard pending COD
-    total_delivered_amount = sum(
-        Decimal(oc["net_contribution"]) + DELIVERY_CHARGE for oc in order_contributions
-    )
-    total_charges = sum(
-        Decimal(oc["net_contribution"]) - Decimal(oc["net_contribution"])
-        for oc in order_contributions
-    )
-    total_approved_paid = sum(
-        Decimal(inv.paid_amount or 0) for inv in approved_invoices
-    )
-
-    dashboard_pending_cod = total_delivered_amount - total_approved_paid - total_charges
-
-    statement_entries.append(
-        {
-            "date": "VERIFICATION",
-            "delivery_count": f"Final Balance: {float(running_balance)}",
-            "cash_in": f"Dashboard Pending COD: {float(dashboard_pending_cod)}",
-            "delivery_charge": f"Match: {abs(running_balance - dashboard_pending_cod) < 0.01}",
-            "payment": f"Difference: {float(running_balance - dashboard_pending_cod)}",
-            "balance": float(running_balance),
-        }
-    )
-
-    # Return detailed info for debugging
     return JsonResponse(
         {
-            "dashboard_pending_cod": float(dashboard_pending_cod),
-            "statement": statement_entries,
-            "order_contributions": order_contributions,  # useful to check which order caused mismatch
+            "franchise_id": franchise_id,
+            "start_date": start_date.strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
+            "dashboard_pending_cod": float(dashboard_data["pending_cod"]),
+            "dashboard_breakdown": {
+                "delivered_amount": float(dashboard_data["delivered_amount"]),
+                "total_charge": float(dashboard_data["total_charge"]),
+                "approved_paid": float(dashboard_data["approved_paid"]),
+                "delivered_count": dashboard_data["delivered_count"],
+                "cancelled_count": dashboard_data["cancelled_count"],
+            },
+            "statement": statement_data,
         }
     )
+
+
+def calculate_dashboard_pending_cod(franchise_id):
+    """Calculate Total Pending COD using EXACT dashboard logic"""
+
+    # EXACT same logic as your dashboard
+    exclude_status = [
+        "Pending",
+        "Processing",
+        "Sent to Dash",
+        "Indrive",
+        "Return By Dash",
+    ]
+
+    orders = Order.objects.filter(franchise_id=franchise_id, logistics="YDM").exclude(
+        order_status__in=exclude_status
+    )
+
+    # Get delivered stats using EXACT same helper function logic as dashboard
+    delivered_orders = orders.filter(order_status="Delivered")
+    result = delivered_orders.aggregate(
+        count=Count("id"),
+        total=Sum("total_amount"),
+        prepaid=Sum("prepaid_amount"),
+    )
+    total = float(result["total"] or 0)
+    prepaid = float(result["prepaid"] or 0)
+    delivered_amount = (
+        total - prepaid
+    )  # This is get_status_stats("Delivered")["amount"]
+    delivered_count = (
+        result["count"] or 0
+    )  # This is get_status_stats("Delivered")["nos"]
+
+    # Calculate cancelled orders (EXACT same logic as dashboard)
+    cancelled_orders = Order.objects.filter(
+        franchise_id=franchise_id,
+        logistics="YDM",
+        order_status__in=[
+            "Cancelled",
+            "Return Pending",
+            "Returned By Customer",
+            "Returned By YDM",
+        ],
+    ).count()
+
+    # Calculate total charge (EXACT same logic as dashboard)
+    DELIVERY_CHARGE = 100
+    CANCELLED_CHARGE = 0
+    valid_charge = delivered_count * DELIVERY_CHARGE
+    cancelled_charge = cancelled_orders * CANCELLED_CHARGE
+    total_charge = valid_charge + cancelled_charge
+
+    # Get approved payments (EXACT same logic as dashboard)
+    approved_paid = float(
+        Invoice.objects.filter(franchise_id=franchise_id, is_approved=True)
+        .aggregate(total=Sum("paid_amount"))
+        .get("total")
+        or 0
+    )
+
+    # Calculate pending COD (EXACT same logic as dashboard)
+    pending_cod = max(0, delivered_amount - total_charge - approved_paid)
+
+    return {
+        "pending_cod": pending_cod,
+        "delivered_amount": delivered_amount,
+        "total_charge": total_charge,
+        "approved_paid": approved_paid,
+        "delivered_count": delivered_count,
+        "cancelled_count": cancelled_orders,
+    }
+
+
+def generate_simple_statement(franchise_id, start_date, end_date, dashboard_data):
+    """
+    Generate statement by showing what happens each day
+    Final balance should equal dashboard pending COD
+    """
+
+    # Get delivered orders by date (using OrderChangeLog for delivery date)
+    delivered_by_date = get_delivered_orders_by_date(franchise_id, start_date, end_date)
+
+    # Get payments by date
+    payments_by_date = get_payments_by_date(franchise_id, start_date, end_date)
+
+    # Get all dates that have activity
+    all_dates = set(delivered_by_date.keys()) | set(payments_by_date.keys())
+
+    # Calculate what balance should be at start of period
+    total_activity_in_period = 0
+    for activity_date in all_dates:
+        delivery_info = delivered_by_date.get(
+            activity_date, {"cash_in": 0, "delivery_charge": 0}
+        )
+        payment_amount = payments_by_date.get(activity_date, 0)
+        # Each day's impact: +cash_in -delivery_charge -payment
+        daily_impact = (
+            delivery_info["cash_in"] - delivery_info["delivery_charge"] - payment_amount
+        )
+        total_activity_in_period += daily_impact
+
+    # Starting balance = final balance - period activity
+    starting_balance = dashboard_data["pending_cod"] - total_activity_in_period
+
+    # Generate daily statement
+    statement = []
+    running_balance = starting_balance
+
+    for current_date in sorted(all_dates):
+        delivery_info = delivered_by_date.get(
+            current_date, {"delivery_count": 0, "cash_in": 0, "delivery_charge": 0}
+        )
+
+        payment_amount = payments_by_date.get(current_date, 0)
+
+        # Update running balance
+        running_balance = (
+            running_balance
+            + delivery_info["cash_in"]
+            - payment_amount
+            - delivery_info["delivery_charge"]
+        )
+
+        statement.append(
+            {
+                "date": current_date.strftime("%Y-%m-%d"),
+                "delivery_count": delivery_info["delivery_count"],
+                "cash_in": delivery_info["cash_in"],
+                "delivery_charge": delivery_info["delivery_charge"],
+                "payment": payment_amount,
+                "balance": round(running_balance, 2),
+            }
+        )
+
+    return statement
+
+
+def get_delivered_orders_by_date(franchise_id, start_date, end_date):
+    """Get delivered orders grouped by delivery date using OrderChangeLog"""
+
+    # Get delivery change logs within date range
+    delivery_logs = (
+        OrderChangeLog.objects.filter(
+            order__franchise_id=franchise_id,
+            order__logistics="YDM",
+            new_status="Delivered",
+            changed_at__date__range=[start_date, end_date],
+        )
+        .select_related("order")
+        .order_by("order_id", "-changed_at")
+    )
+
+    # Get latest delivery date for each order (avoid duplicates)
+    order_delivery_dates = {}
+    for log in delivery_logs:
+        if log.order_id not in order_delivery_dates:
+            order_delivery_dates[log.order_id] = {
+                "delivery_date": log.changed_at.date(),
+                "order": log.order,
+            }
+
+    # Group by delivery date
+    daily_deliveries = defaultdict(list)
+    for order_id, data in order_delivery_dates.items():
+        delivery_date = data["delivery_date"]
+        order = data["order"]
+
+        daily_deliveries[delivery_date].append(
+            {
+                "total_amount": float(order.total_amount),
+                "prepaid_amount": float(order.prepaid_amount or 0),
+            }
+        )
+
+    # Calculate daily totals
+    result = {}
+    for delivery_date, orders in daily_deliveries.items():
+        delivery_count = len(orders)
+        cash_in = sum(
+            order["total_amount"] - order["prepaid_amount"] for order in orders
+        )
+        delivery_charge = delivery_count * 100
+
+        result[delivery_date] = {
+            "delivery_count": delivery_count,
+            "cash_in": cash_in,
+            "delivery_charge": delivery_charge,
+        }
+
+    return result
+
+
+def get_payments_by_date(franchise_id, start_date, end_date):
+    """Get approved invoice payments grouped by approval date"""
+
+    payments = (
+        Invoice.objects.filter(
+            franchise_id=franchise_id,
+            is_approved=True,
+            approved_at__date__range=[start_date, end_date],
+        )
+        .values("approved_at__date")
+        .annotate(total_payment=Sum("paid_amount"))
+    )
+
+    result = {}
+    for payment in payments:
+        payment_date = payment["approved_at__date"]
+        result[payment_date] = float(payment["total_payment"] or 0)
+
+    return result
