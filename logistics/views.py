@@ -1282,6 +1282,7 @@ def franchise_statement_api(request, franchise_id):
     URL: /logistics/franchise/{franchise_id}/statement/
     """
 
+    # Get date range parameters
     start_date_param = request.GET.get("start_date")
     end_date_param = request.GET.get("end_date")
 
