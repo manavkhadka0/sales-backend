@@ -1,4 +1,5 @@
 # views.py
+import calendar
 import csv
 from collections import defaultdict
 from datetime import date, datetime
@@ -1284,22 +1285,25 @@ def franchise_statement_api(request, franchise_id):
     URL: /logistics/franchise/{franchise_id}/statement/
     """
 
-    # Get date range parameters
-    start_date = request.GET.get("start_date")
-    end_date = request.GET.get("end_date")
+    start_date_param = request.GET.get("start_date")
+    end_date_param = request.GET.get("end_date")
 
-    if not start_date or not end_date:
-        return JsonResponse(
-            {"error": "start_date and end_date parameters are required"}, status=400
-        )
-
-    try:
-        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
-    except ValueError:
-        return JsonResponse(
-            {"error": "Invalid date format. Use YYYY-MM-DD"}, status=400
-        )
+    # If both start_date and end_date are provided, use them
+    if start_date_param and end_date_param:
+        try:
+            start_date = datetime.strptime(start_date_param, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date_param, "%Y-%m-%d").date()
+        except ValueError:
+            return JsonResponse(
+                {"error": "Invalid date format. Use YYYY-MM-DD"}, status=400
+            )
+    else:
+        # Use current month if dates are not provided
+        today = date.today()
+        start_date = date(today.year, today.month, 1)
+        # Get the last day of current month
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        end_date = date(today.year, today.month, last_day)
 
     # Calculate previous balance (before start_date)
     previous_balance = calculate_previous_balance(franchise_id, start_date)
