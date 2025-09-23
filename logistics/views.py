@@ -1302,11 +1302,11 @@ def franchise_statement_api(request, franchise_id):
         end_date = date(today.year, today.month, last_day)
 
     # Calculate dashboard pending COD for reference
-    dashboard_pending_cod = calculate_dashboard_pending_cod(franchise_id)
+    dashboard_data = calculate_dashboard_pending_cod(franchise_id)
 
     # Get statement data using SIMPLE approach - just track daily changes
     statement_data = generate_simple_statement(
-        franchise_id, start_date, end_date, dashboard_pending_cod
+        franchise_id, start_date, end_date, dashboard_data
     )
 
     return JsonResponse(
@@ -1314,7 +1314,14 @@ def franchise_statement_api(request, franchise_id):
             "franchise_id": franchise_id,
             "start_date": start_date.strftime("%Y-%m-%d"),
             "end_date": end_date.strftime("%Y-%m-%d"),
-            "dashboard_pending_cod": float(dashboard_pending_cod),
+            "dashboard_pending_cod": float(dashboard_data["pending_cod"]),
+            "dashboard_breakdown": {
+                "delivered_amount": float(dashboard_data["delivered_amount"]),
+                "total_charge": float(dashboard_data["total_charge"]),
+                "approved_paid": float(dashboard_data["approved_paid"]),
+                "delivered_count": dashboard_data["delivered_count"],
+                "cancelled_count": dashboard_data["cancelled_count"],
+            },
             "statement": statement_data,
         }
     )
