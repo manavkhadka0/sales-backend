@@ -444,7 +444,7 @@ def get_total_pending_cod(request, franchise_id):
         delivered_stats = get_status_stats("Delivered")
         # Deduct approved invoice paid amounts from pending COD
         approved_paid = (
-            Invoice.objects.filter(franchise_id=franchise_id, is_approved=True)
+            Invoice.objects.filter(franchise__id=franchise_id, is_approved=True)
             .aggregate(total=Sum("paid_amount"))
             .get("total")
             or 0
@@ -670,13 +670,13 @@ def daily_delivered_orders(request, franchise_id):
                 )
             ),
         )
-        .order_by("delivered_date")
+        .order_by("-delivered_date")
     )
 
     # Prepare invoice paid amounts per day (approved invoices only)
     invoice_paid_qs = (
         Invoice.objects.filter(
-            franchise_id=franchise_id,
+            franchise__id=franchise_id,
             is_approved=True,
             approved_at__year=year,
             approved_at__month=month,
@@ -703,9 +703,9 @@ def daily_delivered_orders(request, franchise_id):
         Order.objects.filter(
             franchise_id=franchise_id, order_status="Delivered", logistics="YDM"
         )
-        .annotate(delivered_date=TruncDate('updated_at'))
-        .values('delivered_date', 'order_code')
-        .order_by('delivered_date')
+        .annotate(delivered_date=TruncDate("updated_at"))
+        .values("delivered_date", "order_code")
+        .order_by("-delivered_date")
     )
     delivered_orders_by_date = defaultdict(list)
     for order in delivered_orders_qs:
@@ -785,7 +785,7 @@ def daily_delivered_orders(request, franchise_id):
         Decimal(str(DELIVERY_CHARGE)) * Decimal(valid_orders_overall)
     ) + (Decimal(str(CANCELLED_CHARGE)) * Decimal(cancelled_overall))
     approved_paid_overall = (
-        Invoice.objects.filter(franchise_id=franchise_id, is_approved=True)
+        Invoice.objects.filter(franchise__id=franchise_id, is_approved=True)
         .aggregate(
             total=Coalesce(
                 Sum("paid_amount"),
@@ -809,7 +809,6 @@ def daily_delivered_orders(request, franchise_id):
 
     return Response(
         {
-            "success": True,
             "data": results,
             "pending_cod_equivalent": str(pending_cod_equivalent),
         },
