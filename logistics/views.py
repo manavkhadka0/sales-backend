@@ -735,14 +735,25 @@ def daily_delivered_orders(request, franchise_id):
         "Indrive",
         "Return By Dash",
     ]
-    base_orders = (
-        Order.objects.filter(franchise_id=franchise_id, logistics="YDM")
-        .exclude(order_status__in=exclude_status)
-    )
+    base_orders = Order.objects.filter(
+        franchise_id=franchise_id, logistics="YDM"
+    ).exclude(order_status__in=exclude_status)
     delivered_agg = base_orders.filter(order_status="Delivered").aggregate(
         count=Count("id"),
-        total=Coalesce(Sum("total_amount"), Value(Decimal("0.00"), output_field=DecimalField(max_digits=12, decimal_places=2))),
-        prepaid=Coalesce(Sum("prepaid_amount"), Value(Decimal("0.00"), output_field=DecimalField(max_digits=12, decimal_places=2))),
+        total=Coalesce(
+            Sum("total_amount"),
+            Value(
+                Decimal("0.00"),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            ),
+        ),
+        prepaid=Coalesce(
+            Sum("prepaid_amount"),
+            Value(
+                Decimal("0.00"),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            ),
+        ),
     )
     delivered_amount_overall = delivered_agg["total"] - delivered_agg["prepaid"]
     valid_orders_overall = delivered_agg["count"] or 0
@@ -756,20 +767,38 @@ def daily_delivered_orders(request, franchise_id):
             "Returned By YDM",
         ],
     ).count()
-    total_charge_overall = (Decimal(str(DELIVERY_CHARGE)) * Decimal(valid_orders_overall)) + (
-        Decimal(str(CANCELLED_CHARGE)) * Decimal(cancelled_overall)
-    )
+    total_charge_overall = (
+        Decimal(str(DELIVERY_CHARGE)) * Decimal(valid_orders_overall)
+    ) + (Decimal(str(CANCELLED_CHARGE)) * Decimal(cancelled_overall))
     approved_paid_overall = (
         Invoice.objects.filter(franchise_id=franchise_id, is_approved=True)
-        .aggregate(total=Coalesce(Sum("paid_amount"), Value(Decimal("0.00"), output_field=DecimalField(max_digits=12, decimal_places=2))))
+        .aggregate(
+            total=Coalesce(
+                Sum("paid_amount"),
+                Value(
+                    Decimal("0.00"),
+                    output_field=DecimalField(max_digits=12, decimal_places=2),
+                ),
+            )
+        )
         .get("total")
     )
-    pending_cod_equivalent = delivered_amount_overall - total_charge_overall - approved_paid_overall
+    pending_cod_equivalent = (
+        delivered_amount_overall - total_charge_overall - approved_paid_overall
+    )
     if pending_cod_equivalent < 0:
         pending_cod_equivalent = Decimal("0.00")
 
+    # Update the last day's cumulative_balance to match pending_cod_equivalent
+    if results:
+        results[-1]["cumulative_balance"] = str(pending_cod_equivalent)
+
     return Response(
-        {"success": True, "data": results, "pending_cod_equivalent": str(pending_cod_equivalent)},
+        {
+            "success": True,
+            "data": results,
+            "pending_cod_equivalent": str(pending_cod_equivalent),
+        },
         status=status.HTTP_200_OK,
     )
 
