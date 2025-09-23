@@ -21,7 +21,12 @@ class OrderChangeLogAdmin(ModelAdmin):
         "comment",
         "changed_at",
     )
-    list_filter = ("old_status", "new_status", "changed_at")
+    list_filter = (
+        "old_status",
+        "new_status",
+        "changed_at",
+        ("changed_at", admin.DateFieldListFilter),
+    )
     search_fields = (
         "order__order_code",
         "user__first_name",
