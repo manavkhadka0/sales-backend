@@ -1313,7 +1313,7 @@ def franchise_statement_full(request, franchise_id):
         OrderChangeLog.objects.filter(
             order__in=delivered_orders,
             new_status="Delivered",
-            franchise_id=franchise_id,
+            order__franchise_id=franchise_id,
         )
         .order_by("order_id", "changed_at")
         .select_related("order")
