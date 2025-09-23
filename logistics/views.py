@@ -1505,6 +1505,7 @@ def calculate_balance_before_period(franchise_id, start_date, dashboard_data):
             order__franchise_id=franchise_id,
             order__logistics="YDM",  # Ensure YDM only
             new_status="Delivered",
+            order__order_status="Delivered",
             changed_at__date__gte=start_date,
         )
         .select_related("order")
