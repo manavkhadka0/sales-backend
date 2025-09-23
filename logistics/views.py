@@ -1304,7 +1304,7 @@ def franchise_statement_api(request, franchise_id):
     # Get dashboard pending COD for verification
     dashboard_data = get_complete_dashboard_stats_data(franchise_id)
 
-    # Get statement data
+    # Get statement data (with previous month carried balance)
     statement_data = generate_statement_with_running_balance(
         franchise_id, start_date, end_date, dashboard_data
     )
@@ -1411,7 +1411,9 @@ def generate_statement_with_running_balance(
 ):
     """
     Generate statement with proper running balance calculation
+    Includes previous month balance carried forward.
     """
+
     # Get delivered orders by date
     delivered_by_date = get_delivered_orders_by_date(franchise_id, start_date, end_date)
 
@@ -1423,29 +1425,49 @@ def generate_statement_with_running_balance(
         set(list(delivered_by_date.keys()) + list(payments_by_date.keys()))
     )
 
-    if not all_dates:
-        # If no activity in the period, return empty statement
-        return []
-
-    # Calculate initial balance (balance before start_date)
+    # Calculate initial balance (previous months carried forward)
     initial_balance = calculate_initial_balance(
         franchise_id, start_date, dashboard_data
     )
 
-    # Generate statement entries
     statement_entries = []
     running_balance = initial_balance
 
+    # Add an opening balance row for clarity
+    statement_entries.append(
+        {
+            "date": f"Opening Balance (before {start_date})",
+            "delivery_count": "-",
+            "cash_in": "-",
+            "delivery_charge": "-",
+            "payment": "-",
+            "balance": round(initial_balance, 2),
+        }
+    )
+
+    # If no activity in the period, still return carried balance + verification
+    if not all_dates:
+        dashboard_pending_cod = dashboard_data["Total Pending COD"]["amount"]
+        statement_entries.append(
+            {
+                "date": "VERIFICATION",
+                "delivery_count": f"Final Balance: {round(initial_balance, 2)}",
+                "cash_in": f"Dashboard Pending COD: {dashboard_pending_cod}",
+                "delivery_charge": f"Match: {abs(initial_balance - dashboard_pending_cod) < 0.01}",
+                "payment": f"Difference: {round(initial_balance - dashboard_pending_cod, 2)}",
+                "balance": round(initial_balance, 2),
+            }
+        )
+        return statement_entries
+
+    # Process each day in the current period
     for current_date in all_dates:
-        # Get delivery info for this date
         delivery_info = delivered_by_date.get(
             current_date, {"delivery_count": 0, "cash_in": 0, "delivery_charge": 0}
         )
-
-        # Get payment for this date
         payment_amount = payments_by_date.get(current_date, 0)
 
-        # Calculate daily balance change
+        # Daily net movement
         daily_net = (
             delivery_info["cash_in"] - delivery_info["delivery_charge"] - payment_amount
         )
@@ -1462,11 +1484,10 @@ def generate_statement_with_running_balance(
             }
         )
 
-    # Verify final balance matches dashboard
+    # Final verification entry
     dashboard_pending_cod = dashboard_data["Total Pending COD"]["amount"]
     final_balance = running_balance
 
-    # Add verification entry
     statement_entries.append(
         {
             "date": "VERIFICATION",
@@ -1483,7 +1504,8 @@ def generate_statement_with_running_balance(
 
 def calculate_initial_balance(franchise_id, start_date, dashboard_data):
     """
-    Calculate the balance before the start_date by working backwards
+    Calculate the balance before the start_date by working backwards.
+    Includes all delivered orders and payments before the selected period.
     """
     # Get all delivered orders with delivery date < start_date
     early_delivered_logs = (
@@ -1503,12 +1525,12 @@ def calculate_initial_balance(franchise_id, start_date, dashboard_data):
     early_delivery_charge = 0
 
     for log in early_delivered_logs:
-        if log.order.logistics == "YDM" and log.order_id not in early_order_ids:
+        if log.order_id not in early_order_ids:
             early_order_ids.add(log.order_id)
             order = log.order
             cash_amount = float(order.total_amount) - float(order.prepaid_amount or 0)
             early_cash_in += cash_amount
-            early_delivery_charge += 100
+            early_delivery_charge += 100  # DELIVERY_CHARGE
 
     # Get payments before start_date
     early_payments = float(
