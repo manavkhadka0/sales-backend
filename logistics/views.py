@@ -2,7 +2,7 @@
 import calendar
 import csv
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.db import models
@@ -1473,7 +1473,7 @@ def generate_statement(
     date_range = []
     while current_date <= end_date:
         date_range.append(current_date)
-        current_date = date(current_date.year, current_date.month, current_date.day + 1)
+        current_date = current_date + timedelta(days=1)
 
     statement = []
     running_balance = previous_balance
