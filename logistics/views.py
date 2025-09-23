@@ -634,7 +634,7 @@ def daily_delivered_orders(request, franchise_id):
             changed_at__year=year,
             changed_at__month=month,
         )
-        .order_by("changed_at")
+        .order_by("-changed_at")
         .values("changed_at")[:1]
     )
 
@@ -698,15 +698,10 @@ def daily_delivered_orders(request, franchise_id):
         row["approved_date"]: row["paid"] for row in invoice_paid_qs
     }
 
-    # Get delivered order codes per day
-    delivered_orders_qs = (
-        Order.objects.filter(
-            franchise_id=franchise_id, order_status="Delivered", logistics="YDM"
-        )
-        .annotate(delivered_date=TruncDate("updated_at"))
-        .values("delivered_date", "order_code")
-        .order_by("-delivered_date")
-    )
+    # Get delivered order codes per day (using same logic as main query)
+    delivered_orders_qs = delivered_orders.values(
+        "delivered_date", "order_code"
+    ).order_by("-delivered_date")
     delivered_orders_by_date = defaultdict(list)
     for order in delivered_orders_qs:
         delivered_orders_by_date[order["delivered_date"]].append(order["order_code"])
