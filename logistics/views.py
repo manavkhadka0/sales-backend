@@ -1,7 +1,7 @@
 # views.py
 import csv
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
 
 from django.db.models import (
@@ -1513,22 +1513,17 @@ def generate_order_tracking_statement_optimized(
             franchise_id=franchise_id,
             logistics="YDM",
             order_status="Delivered",
+            updated_at__date__range=[start_date, end_date],
         )
         .exclude(id__in=delivered_orders.keys())
-        .values("id", "total_amount", "prepaid_amount", "updated_at", "created_at")
+        .values("id", "updated_at", "total_amount", "prepaid_amount")
     )
 
     for o in delivered_without_logs:
-        # Use updated_at as delivery date
-        delivery_date = (
-            o["updated_at"].date() if o["updated_at"] else o["created_at"].date()
-        )
-        if start_date <= delivery_date <= end_date:
-            delivered_orders[o["id"]] = {
-                "delivery_date": delivery_date,
-                "cash_in": float(o["total_amount"] or 0)
-                - float(o["prepaid_amount"] or 0),
-            }
+        delivered_orders[o["id"]] = {
+            "delivery_date": o["updated_at"].date(),
+            "cash_in": float(o["total_amount"] or 0) - float(o["prepaid_amount"] or 0),
+        }
 
     daily_delivered = defaultdict(list)
     for o in delivered_orders.values():
@@ -1550,10 +1545,11 @@ def generate_order_tracking_statement_optimized(
     }
 
     # ---------------- Build Statement ---------------- #
-    all_dates = [
-        start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)
-    ]
-
+    all_dates = (
+        set(daily_sent_orders.keys())
+        | set(daily_delivered.keys())
+        | set(daily_payments.keys())
+    )
     statement = []
 
     # Calculate starting balance
