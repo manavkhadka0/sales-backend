@@ -1578,7 +1578,8 @@ def get_orders_sent_to_ydm_by_date(franchise_id, start_date, end_date):
         order = data["order"]
         daily_sent_orders[sent_date].append(
             {
-                "total_amount": float(order.total_amount),
+                "total_amount": float(order.total_amount)
+                - float(order.prepaid_amount or 0),
             }
         )
 
