@@ -1,7 +1,7 @@
 # views.py
 import csv
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.db.models import (
@@ -1545,11 +1545,10 @@ def generate_order_tracking_statement_optimized(
     }
 
     # ---------------- Build Statement ---------------- #
-    all_dates = (
-        set(daily_sent_orders.keys())
-        | set(daily_delivered.keys())
-        | set(daily_payments.keys())
-    )
+    all_dates = [
+        start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)
+    ]
+
     statement = []
 
     # Calculate starting balance
