@@ -1115,16 +1115,9 @@ class ExportOrdersCSVView(APIView):
                 address_parts.append(order.city)
             full_address = ", ".join(address_parts)
 
-            latest_change_log = order.change_logs.order_by("-changed_at").first()
-            changed_at_str = (
-                latest_change_log.changed_at.strftime("%Y-%m-%d")
-                if latest_change_log
-                else ""
-            )
-
             writer.writerow(
                 [
-                    changed_at_str,
+                    order.created_at.strftime("%Y-%m-%d"),
                     order.full_name,
                     order.phone_number,
                     order.alternate_phone_number or "",

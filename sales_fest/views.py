@@ -182,11 +182,14 @@ class SalesGroupStatsView(generics.ListAPIView):
                 else None,
                 "total_sales": 0,
                 "sales_count": 0,
+                "total_members": 0,
                 "members": [],
+                "sales_members": [],
             }
 
             # Get all members of this sales group
             members = sales_group.members.filter(role="SalesPerson")
+            group_data["total_members"] = members.count()
 
             for member in members:
                 # Get orders for this member with date and status filters
@@ -229,6 +232,8 @@ class SalesGroupStatsView(generics.ListAPIView):
                 # Only add members who have sales data
                 if member_sales_count > 0:
                     group_data["members"].append(member_data)
+                # Add to no sales members list
+                group_data["sales_members"].append(member.get_full_name())
 
             # Convert group total sales to float
             group_data["total_sales"] = float(group_data["total_sales"])
@@ -236,9 +241,8 @@ class SalesGroupStatsView(generics.ListAPIView):
             # Sort members by total sales (descending)
             group_data["members"].sort(key=lambda x: x["total_sales"], reverse=True)
 
-            # Only add groups that have sales data
-            if group_data["sales_count"] > 0:
-                results.append(group_data)
+            # Always add groups (even if no sales)
+            results.append(group_data)
 
         # Sort groups by total sales (descending)
         results.sort(key=lambda x: x["total_sales"], reverse=True)
