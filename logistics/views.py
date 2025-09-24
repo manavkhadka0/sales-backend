@@ -1054,7 +1054,7 @@ class ExportOrdersCSVView(APIView):
     filterset_class = OrderFilter
 
     def get(self, request):
-        qs = Order.objects.filter(logistics="YDM")
+        qs = Order.objects.filter(logistics="YDM").order_by("created_at")
 
         # Apply filters
         filtered_qs = OrderFilter(request.GET, queryset=qs).qs
