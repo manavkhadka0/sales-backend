@@ -1464,7 +1464,8 @@ def generate_order_tracking_statement(
     # Get payments by date
     payments_by_date = get_payments_by_date(franchise_id, start_date, end_date)
 
-    # Combine all dates (only sent to YDM, delivered, and payments affect the statement)
+    # Combine all dates - include ANY date where there's activity
+    # This ensures we show days with deliveries even if no orders were sent to YDM that day
     all_dates = (
         set(orders_sent_to_ydm_by_date.keys())
         | set(delivered_by_date.keys())
@@ -1509,14 +1510,14 @@ def generate_order_tracking_statement(
         statement.append(
             {
                 "date": current_date.strftime("%Y-%m-%d"),
-                # Total orders sent to YDM on this date (count and amount)
+                # Orders sent to YDM on this date (will be 0 if no orders sent)
                 "total_order": orders_sent_info[
                     "order_count"
                 ],  # Number of orders sent to YDM
                 "total_amount": orders_sent_info[
                     "total_amount"
                 ],  # Total amount of orders sent to YDM
-                # Delivery info
+                # Delivery info (will show deliveries even if no orders were sent to YDM today)
                 "delivery_count": delivery_info[
                     "delivery_count"
                 ],  # Number of orders delivered
@@ -1526,7 +1527,7 @@ def generate_order_tracking_statement(
                 "delivery_charge": delivery_info["delivery_charge"],
                 # Payment info
                 "payment": payment_amount,
-                # Balance (only changes with deliveries and payments)
+                # Balance (changes with deliveries and payments)
                 "balance": round(running_balance, 2),
             }
         )
