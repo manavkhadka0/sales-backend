@@ -1,9 +1,11 @@
 from django.urls import path
 
 from .views import (
-    FestConfigRetrieveUpdateView,
+    FestConfigListCreateView,
+    FestConfigRetrieveUpdateDestroyView,
     SalesGroupDetailView,
     SalesGroupListCreateView,
+    SalesGroupStatsView,
 )
 
 urlpatterns = [
@@ -19,7 +21,17 @@ urlpatterns = [
     ),
     path(
         "fest-config/",
-        FestConfigRetrieveUpdateView.as_view(),
-        name="fest-config",
+        FestConfigListCreateView.as_view(),
+        name="festconfig-list-create",
+    ),
+    path(
+        "fest-config/<int:franchise_id>/",
+        FestConfigRetrieveUpdateDestroyView.as_view(),
+        name="festconfig-detail",
+    ),
+    path(
+        "sales-group-stats/",
+        SalesGroupStatsView.as_view(),
+        name="salesgroup-stats",
     ),
 ]

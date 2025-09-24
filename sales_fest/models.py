@@ -1,5 +1,4 @@
 from django.db import models
-from solo.models import SingletonModel
 
 from account.models import CustomUser, Franchise
 from lucky_draw.models import LuckyDrawSystem
@@ -7,7 +6,7 @@ from lucky_draw.models import LuckyDrawSystem
 # Create your models here.
 
 
-class FestConfig(SingletonModel):
+class FestConfig(models.Model):
     franchise = models.ForeignKey(
         Franchise, on_delete=models.CASCADE, null=True, blank=True
     )
@@ -20,6 +19,13 @@ class FestConfig(SingletonModel):
     )
     has_sales_fest = models.BooleanField(default=False)
     sales_group = models.ManyToManyField("sales_fest.SalesGroup", blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["franchise"], name="unique_franchise_fest_config"
+            )
+        ]
 
     def __str__(self):
         return self.franchise.name if self.franchise else "Global"
