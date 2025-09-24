@@ -1513,17 +1513,29 @@ def generate_order_tracking_statement_optimized(
             franchise_id=franchise_id,
             logistics="YDM",
             order_status="Delivered",
-            updated_at__date__range=[start_date, end_date],
         )
         .exclude(id__in=delivered_orders.keys())
-        .values("id", "updated_at", "total_amount", "prepaid_amount")
+        .values(
+            "id",
+            "total_amount",
+            "prepaid_amount",
+            "delivered_at",
+            "updated_at",
+            "created_at",
+        )
     )
 
     for o in delivered_without_logs:
-        delivered_orders[o["id"]] = {
-            "delivery_date": o["updated_at"].date(),
-            "cash_in": float(o["total_amount"] or 0) - float(o["prepaid_amount"] or 0),
-        }
+        # Use delivered_at if exists, otherwise fallback to updated_at
+        delivery_date = (
+            o.get("delivered_at") or o.get("updated_at") or o.get("created_at")
+        ).date()
+        if start_date <= delivery_date <= end_date:
+            delivered_orders[o["id"]] = {
+                "delivery_date": delivery_date,
+                "cash_in": float(o["total_amount"] or 0)
+                - float(o["prepaid_amount"] or 0),
+            }
 
     daily_delivered = defaultdict(list)
     for o in delivered_orders.values():
