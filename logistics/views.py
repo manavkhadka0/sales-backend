@@ -1279,11 +1279,10 @@ class FranchiseStatementAPIView(generics.ListAPIView):
     pagination_class = FranchiseStatementPagination
 
     def get_queryset(self):
-        # Not used in the traditional sense since we're returning dynamic data
         return []
 
     def list(self, request, franchise_id=None):
-        # 1. Parse dates
+        # 1. Parse date filters
         start_date_param = request.GET.get("start_date")
         end_date_param = request.GET.get("end_date")
 
@@ -1296,17 +1295,17 @@ class FranchiseStatementAPIView(generics.ListAPIView):
                     {"error": "Invalid date format. Use YYYY-MM-DD"}, status=400
                 )
         else:
-            # Fetch earliest and latest activity dates
+            # fallback: get earliest and latest activity across orders and invoices
             earliest_order = OrderChangeLog.objects.filter(
                 order__franchise_id=franchise_id,
                 order__logistics="YDM",
-                new_status="Sent to YDM",  # Changed from "Delivered" to "Sent to YDM"
+                new_status="Sent to YDM",
             ).aggregate(Min("changed_at"))["changed_at__min"]
 
             latest_order = OrderChangeLog.objects.filter(
                 order__franchise_id=franchise_id,
                 order__logistics="YDM",
-                new_status="Sent to YDM",  # Changed from "Delivered" to "Sent to YDM"
+                new_status="Sent to YDM",
             ).aggregate(Max("changed_at"))["changed_at__max"]
 
             earliest_delivery = OrderChangeLog.objects.filter(
@@ -1344,24 +1343,20 @@ class FranchiseStatementAPIView(generics.ListAPIView):
                 start_date = today
                 end_date = today
 
-        # 2. Dashboard data
+        # 2. Dashboard summary
         dashboard_data = calculate_dashboard_pending_cod(franchise_id)
 
-        # 3. Generate statement with order tracking
+        # 3. Build statement
         statement_data = generate_order_tracking_statement(
             franchise_id, start_date, end_date, dashboard_data
         )
 
-        # 4. Paginate statement
-        paginator = self.pagination_class()
-        paginated_statement = paginator.paginate_queryset(statement_data, request)
-
-        # 5. Serialize and respond
+        # 4. Serialize
         serializer = self.serializer_class(
-            paginated_statement, many=True, context={"franchise_id": franchise_id}
+            statement_data, many=True, context={"franchise_id": franchise_id}
         )
 
-        return paginator.get_paginated_response(
+        return Response(
             {
                 "franchise_id": franchise_id,
                 "start_date": start_date.strftime("%Y-%m-%d"),
@@ -1369,7 +1364,7 @@ class FranchiseStatementAPIView(generics.ListAPIView):
                 "dashboard_pending_cod": float(dashboard_data["pending_cod"]),
                 "dashboard_breakdown": {
                     "delivered_amount": float(dashboard_data["delivered_amount"]),
-                    "total_order": dashboard_data["total_order"],  # Keep as integer
+                    "total_order": dashboard_data["total_order"],
                     "total_amount": float(dashboard_data["total_amount"]),
                     "total_charge": float(dashboard_data["total_charge"]),
                     "approved_paid": float(dashboard_data["approved_paid"]),
@@ -1381,9 +1376,10 @@ class FranchiseStatementAPIView(generics.ListAPIView):
         )
 
 
-def calculate_dashboard_pending_cod(franchise_id):
-    """Calculate Total Pending COD using dashboard logic - ALL amounts as total_amount - prepaid_amount"""
+# ---------------- Dashboard Calculation ---------------- #
 
+
+def calculate_dashboard_pending_cod(franchise_id):
     exclude_status = [
         "Pending",
         "Processing",
@@ -1392,29 +1388,22 @@ def calculate_dashboard_pending_cod(franchise_id):
         "Return By Dash",
     ]
 
-    # Get all orders sent to YDM (excluding certain statuses)
     orders = Order.objects.filter(franchise_id=franchise_id, logistics="YDM").exclude(
         order_status__in=exclude_status
     )
-
     total_order = orders.count()
 
-    # Calculate total amount as (total_amount - prepaid_amount) for all orders
-    total_amount = 0
-    for order in orders:
-        order_amount = float(order.total_amount or 0) - float(order.prepaid_amount or 0)
-        total_amount += order_amount
+    total_amount = sum(
+        float(o.total_amount or 0) - float(o.prepaid_amount or 0) for o in orders
+    )
 
-    # Get delivered orders and calculate delivered amount as (total_amount - prepaid_amount)
     delivered_orders = orders.filter(order_status="Delivered")
     delivered_count = delivered_orders.count()
+    delivered_amount = sum(
+        float(o.total_amount or 0) - float(o.prepaid_amount or 0)
+        for o in delivered_orders
+    )
 
-    delivered_amount = 0
-    for order in delivered_orders:
-        order_amount = float(order.total_amount or 0) - float(order.prepaid_amount or 0)
-        delivered_amount += order_amount
-
-    # Get cancelled orders count
     cancelled_orders = orders.filter(
         order_status__in=[
             "Cancelled",
@@ -1425,12 +1414,8 @@ def calculate_dashboard_pending_cod(franchise_id):
     ).count()
 
     DELIVERY_CHARGE = 100
-    CANCELLED_CHARGE = 0
-    total_charge = (
-        delivered_count * DELIVERY_CHARGE + cancelled_orders * CANCELLED_CHARGE
-    )
+    total_charge = delivered_count * DELIVERY_CHARGE
 
-    # Get approved payments
     approved_paid = float(
         Invoice.objects.filter(franchise_id=franchise_id, is_approved=True)
         .aggregate(total=Sum("paid_amount"))
@@ -1438,7 +1423,6 @@ def calculate_dashboard_pending_cod(franchise_id):
         or 0
     )
 
-    # Calculate pending COD: delivered_amount - total_charge - approved_paid
     pending_cod = max(0, delivered_amount - total_charge - approved_paid)
 
     return {
@@ -1453,63 +1437,46 @@ def calculate_dashboard_pending_cod(franchise_id):
     }
 
 
+# ---------------- Statement Generator ---------------- #
+
+
 def generate_order_tracking_statement(
     franchise_id, start_date, end_date, dashboard_data
 ):
-    """Generate daily statement with orders sent to YDM and delivery tracking"""
-
-    # Get orders sent to YDM by date
     orders_sent_to_ydm_by_date = get_orders_sent_to_ydm_by_date(
         franchise_id, start_date, end_date
     )
-
-    # Get delivered orders by date
     delivered_by_date = get_delivered_orders_by_date(franchise_id, start_date, end_date)
-
-    # Get payments by date
     payments_by_date = get_payments_by_date(franchise_id, start_date, end_date)
 
-    # Combine all dates where there's activity
     all_dates = (
         set(orders_sent_to_ydm_by_date.keys())
         | set(delivered_by_date.keys())
         | set(payments_by_date.keys())
     )
 
-    # Calculate starting balance
-    # Starting balance = current pending COD - net activity in the period
     total_activity_in_period = 0
-    for activity_date in all_dates:
-        delivery_info = delivered_by_date.get(
-            activity_date, {"cash_in": 0, "delivery_charge": 0}
-        )
-        payment_amount = payments_by_date.get(activity_date, 0)
-        # Net change: delivered_amount - delivery_charge - payment
-        daily_balance_change = (
+    for d in all_dates:
+        delivery_info = delivered_by_date.get(d, {"cash_in": 0, "delivery_charge": 0})
+        payment_amount = payments_by_date.get(d, 0)
+        total_activity_in_period += (
             delivery_info["cash_in"] - delivery_info["delivery_charge"] - payment_amount
         )
-        total_activity_in_period += daily_balance_change
 
     starting_balance = dashboard_data["pending_cod"] - total_activity_in_period
 
     statement = []
     running_balance = starting_balance
 
-    for current_date in sorted(all_dates):
-        # Orders sent to YDM on this date
+    for d in sorted(all_dates):
         orders_sent_info = orders_sent_to_ydm_by_date.get(
-            current_date, {"order_count": 0, "total_amount": 0}
+            d, {"order_count": 0, "total_amount": 0}
         )
-
-        # Orders delivered on this date
         delivery_info = delivered_by_date.get(
-            current_date, {"delivery_count": 0, "cash_in": 0, "delivery_charge": 0}
+            d, {"delivery_count": 0, "cash_in": 0, "delivery_charge": 0}
         )
+        payment_amount = payments_by_date.get(d, 0)
 
-        # Payments on this date
-        payment_amount = payments_by_date.get(current_date, 0)
-
-        # Calculate balance: delivered_amount - delivery_charge - payment + previous_balance
         balance_change = (
             delivery_info["cash_in"] - delivery_info["delivery_charge"] - payment_amount
         )
@@ -1517,17 +1484,13 @@ def generate_order_tracking_statement(
 
         statement.append(
             {
-                "date": current_date.strftime("%Y-%m-%d"),
-                # Orders sent to YDM on this date
+                "date": d.strftime("%Y-%m-%d"),
                 "total_order": orders_sent_info["order_count"],
                 "total_amount": orders_sent_info["total_amount"],
-                # Delivery info
                 "delivery_count": delivery_info["delivery_count"],
-                "cash_in": delivery_info["cash_in"],
+                "cash_in": delivery_info["cash_in"],  # ✅ consistent
                 "delivery_charge": delivery_info["delivery_charge"],
-                # Payment info (paid_amount if any)
                 "payment": payment_amount,
-                # Balance calculation: delivered_amount - delivery_charge - payment + previous_balance
                 "balance": round(running_balance, 2),
             }
         )
@@ -1535,10 +1498,10 @@ def generate_order_tracking_statement(
     return statement
 
 
-def get_orders_sent_to_ydm_by_date(franchise_id, start_date, end_date):
-    """Get orders that changed to 'Sent to YDM' status grouped by change date - ALL amounts as total_amount - prepaid_amount"""
+# ---------------- Helper Functions ---------------- #
 
-    # Get the first time each order was marked as "Sent to YDM"
+
+def get_orders_sent_to_ydm_by_date(franchise_id, start_date, end_date):
     sent_to_ydm_logs = (
         OrderChangeLog.objects.filter(
             order__franchise_id=franchise_id,
@@ -1550,7 +1513,6 @@ def get_orders_sent_to_ydm_by_date(franchise_id, start_date, end_date):
         .order_by("order_id", "changed_at")
     )
 
-    # Get the first "Sent to YDM" change for each order
     order_sent_dates = {}
     for log in sent_to_ydm_logs:
         if log.order_id not in order_sent_dates:
@@ -1559,35 +1521,30 @@ def get_orders_sent_to_ydm_by_date(franchise_id, start_date, end_date):
                 "order": log.order,
             }
 
-    # Group by date
+    # fallback: orders with logistics=YDM but no logs
+    orders_without_logs = Order.objects.filter(
+        franchise_id=franchise_id,
+        logistics="YDM",
+        created_at__date__range=[start_date, end_date],
+    ).exclude(id__in=order_sent_dates.keys())
+    for o in orders_without_logs:
+        order_sent_dates[o.id] = {"sent_date": o.created_at.date(), "order": o}
+
     daily_sent_orders = defaultdict(list)
     for data in order_sent_dates.values():
-        sent_date = data["sent_date"]
-        order = data["order"]
-        daily_sent_orders[sent_date].append(order)
+        daily_sent_orders[data["sent_date"]].append(data["order"])
 
     result = {}
-    for sent_date, orders in daily_sent_orders.items():
-        total_amount = 0
-        for order in orders:
-            # Calculate as total_amount - prepaid_amount consistently
-            order_amount = float(order.total_amount or 0) - float(
-                order.prepaid_amount or 0
-            )
-            total_amount += order_amount
-
-        result[sent_date] = {
-            "order_count": len(orders),
-            "total_amount": total_amount,
-        }
+    for d, orders in daily_sent_orders.items():
+        total_amount = sum(
+            float(o.total_amount or 0) - float(o.prepaid_amount or 0) for o in orders
+        )
+        result[d] = {"order_count": len(orders), "total_amount": total_amount}
 
     return result
 
 
 def get_delivered_orders_by_date(franchise_id, start_date, end_date):
-    """Get delivered orders grouped by delivery date using OrderChangeLog - ALL amounts as total_amount - prepaid_amount"""
-
-    # Get the latest "Delivered" status change for each order within date range
     delivery_logs = (
         OrderChangeLog.objects.filter(
             order__franchise_id=franchise_id,
@@ -1596,12 +1553,9 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
             changed_at__date__range=[start_date, end_date],
         )
         .select_related("order")
-        .order_by(
-            "order_id", "-changed_at"
-        )  # Get latest delivery status for each order
+        .order_by("order_id", "-changed_at")
     )
 
-    # Get unique orders that were delivered (in case of multiple delivery logs)
     order_delivery_dates = {}
     for log in delivery_logs:
         if log.order_id not in order_delivery_dates:
@@ -1610,28 +1564,28 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
                 "order": log.order,
             }
 
-    # Group by delivery date
+    # fallback: delivered orders with no logs
+    delivered_without_logs = Order.objects.filter(
+        franchise_id=franchise_id,
+        logistics="YDM",
+        order_status="Delivered",
+        updated_at__date__range=[start_date, end_date],
+    ).exclude(id__in=order_delivery_dates.keys())
+    for o in delivered_without_logs:
+        order_delivery_dates[o.id] = {"delivery_date": o.updated_at.date(), "order": o}
+
     daily_deliveries = defaultdict(list)
     for data in order_delivery_dates.values():
-        delivery_date = data["delivery_date"]
-        order = data["order"]
-        daily_deliveries[delivery_date].append(order)
+        daily_deliveries[data["delivery_date"]].append(data["order"])
 
     result = {}
-    for delivery_date, orders in daily_deliveries.items():
+    for d, orders in daily_deliveries.items():
         delivery_count = len(orders)
-        cash_in = 0
-
-        for order in orders:
-            # Calculate as total_amount - prepaid_amount consistently
-            order_amount = float(order.total_amount or 0) - float(
-                order.prepaid_amount or 0
-            )
-            cash_in += order_amount
-
-        delivery_charge = delivery_count * 100  # Rs. 100 per delivered order
-
-        result[delivery_date] = {
+        cash_in = sum(
+            float(o.total_amount or 0) - float(o.prepaid_amount or 0) for o in orders
+        )
+        delivery_charge = delivery_count * 100
+        result[d] = {
             "delivery_count": delivery_count,
             "cash_in": cash_in,
             "delivery_charge": delivery_charge,
@@ -1641,8 +1595,6 @@ def get_delivered_orders_by_date(franchise_id, start_date, end_date):
 
 
 def get_payments_by_date(franchise_id, start_date, end_date):
-    """Get approved invoice payments grouped by approval date"""
-
     payments = (
         Invoice.objects.filter(
             franchise_id=franchise_id,
@@ -1654,7 +1606,7 @@ def get_payments_by_date(franchise_id, start_date, end_date):
     )
 
     result = {}
-    for payment in payments:
-        result[payment["approved_at__date"]] = float(payment["total_payment"] or 0)
+    for p in payments:
+        result[p["approved_at__date"]] = float(p["total_payment"] or 0)
 
     return result
