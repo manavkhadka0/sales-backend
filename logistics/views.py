@@ -1376,6 +1376,8 @@ class FranchiseStatementAPIView(generics.ListAPIView):
                 "dashboard_pending_cod": float(dashboard_data["pending_cod"]),
                 "dashboard_breakdown": {
                     "delivered_amount": float(dashboard_data["delivered_amount"]),
+                    "total_order": float(dashboard_data["total_order"]),
+                    "total_amount": float(dashboard_data["total_amount"]),
                     "total_charge": float(dashboard_data["total_charge"]),
                     "approved_paid": float(dashboard_data["approved_paid"]),
                     "delivered_count": dashboard_data["delivered_count"],
@@ -1400,6 +1402,14 @@ def calculate_dashboard_pending_cod(franchise_id):
     orders = Order.objects.filter(franchise_id=franchise_id, logistics="YDM").exclude(
         order_status__in=exclude_status
     )
+
+    total_order = orders.count()
+    total_order_amount = orders.aggregate(
+        total=Sum("total_amount"), prepaid=Sum("prepaid_amount")
+    )
+    total = float(total_order_amount["total"] or 0)
+    prepaid = float(total_order_amount["prepaid"] or 0)
+    total_amount = total - prepaid
 
     delivered_orders = orders.filter(order_status="Delivered")
     result = delivered_orders.aggregate(
@@ -1440,6 +1450,8 @@ def calculate_dashboard_pending_cod(franchise_id):
 
     return {
         "pending_cod": pending_cod,
+        "total_order": total_order,
+        "total_amount": total_amount,
         "delivered_amount": delivered_amount,
         "total_charge": total_charge,
         "approved_paid": approved_paid,
