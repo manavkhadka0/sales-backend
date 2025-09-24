@@ -1515,21 +1515,14 @@ def generate_order_tracking_statement_optimized(
             order_status="Delivered",
         )
         .exclude(id__in=delivered_orders.keys())
-        .values(
-            "id",
-            "total_amount",
-            "prepaid_amount",
-            "delivered_at",
-            "updated_at",
-            "created_at",
-        )
+        .values("id", "total_amount", "prepaid_amount", "updated_at", "created_at")
     )
 
     for o in delivered_without_logs:
-        # Use delivered_at if exists, otherwise fallback to updated_at
+        # Use updated_at as delivery date
         delivery_date = (
-            o.get("delivered_at") or o.get("updated_at") or o.get("created_at")
-        ).date()
+            o["updated_at"].date() if o["updated_at"] else o["created_at"].date()
+        )
         if start_date <= delivery_date <= end_date:
             delivered_orders[o["id"]] = {
                 "delivery_date": delivery_date,
