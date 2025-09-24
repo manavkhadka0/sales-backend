@@ -1295,7 +1295,7 @@ class FranchiseStatementAPIView(generics.ListAPIView):
                     {"error": "Invalid date format. Use YYYY-MM-DD"}, status=400
                 )
         else:
-            # fallback: get earliest and latest activity across orders and invoices
+            # fallback: detect earliest and latest activity
             earliest_order = OrderChangeLog.objects.filter(
                 order__franchise_id=franchise_id,
                 order__logistics="YDM",
@@ -1346,17 +1346,21 @@ class FranchiseStatementAPIView(generics.ListAPIView):
         # 2. Dashboard summary
         dashboard_data = calculate_dashboard_pending_cod(franchise_id)
 
-        # 3. Build statement
+        # 3. Build statement (full data list)
         statement_data = generate_order_tracking_statement(
             franchise_id, start_date, end_date, dashboard_data
         )
 
-        # 4. Serialize
-        serializer = self.serializer_class(
-            statement_data, many=True, context={"franchise_id": franchise_id}
+        # 4. Apply pagination
+        paginator = self.pagination_class()
+        paginated_statement = paginator.paginate_queryset(
+            statement_data, request, view=self
         )
 
-        return Response(
+        serializer = self.serializer_class(paginated_statement, many=True)
+
+        # 5. Return paginated response (DRF style)
+        return paginator.get_paginated_response(
             {
                 "franchise_id": franchise_id,
                 "start_date": start_date.strftime("%Y-%m-%d"),
