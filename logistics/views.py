@@ -1405,6 +1405,7 @@ def calculate_dashboard_pending_cod(franchise_id):
     total_amount = total - prepaid
 
     delivered_orders = orders.filter(order_status="Delivered")
+    delivered_count = delivered_orders.count()
     result = delivered_orders.aggregate(
         count=Count("id"),
         total=Sum("total_amount"),
@@ -1413,7 +1414,6 @@ def calculate_dashboard_pending_cod(franchise_id):
     total = float(result["total"] or 0)
     prepaid = float(result["prepaid"] or 0)
     delivered_amount = total - prepaid
-    delivered_count = result["count"] or 0
 
     cancelled_orders = Order.objects.filter(
         franchise_id=franchise_id,
