@@ -95,7 +95,7 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
             ):
                 instance.sales_group.all().delete()
 
-            # If has_lucky_draw set to False
+            # Handle has_lucky_draw toggle
             if (
                 serializer.validated_data.get("has_lucky_draw") is False
                 and instance.has_lucky_draw
@@ -104,12 +104,11 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
                     lucky_draw_system_to_delete = instance.lucky_draw_system
                     # Delete the lucky draw system (cascade deletes)
                     lucky_draw_system_to_delete.delete()
-                    # Update the FK in DB safely
+                    # Directly update FestConfig FK to null (avoid stale instance issue)
                     type(instance).objects.filter(pk=instance.pk).update(
                         lucky_draw_system=None
                     )
-                    # Refresh instance so serializer.save() works fine
-                    instance.refresh_from_db()
+                    # Don't call refresh_from_db() → avoids DoesNotExist error
 
         # Save FestConfig updates
         serializer.save(franchise_id=franchise_id)
