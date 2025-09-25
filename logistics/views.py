@@ -1612,7 +1612,6 @@ class SentToYDMCSVExportView(APIView):
     Export CSV data for orders that were sent to YDM on a specific date.
     This view looks at OrderChangeLog entries to find when orders were actually sent to YDM.
     """
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         # Get the date parameter
