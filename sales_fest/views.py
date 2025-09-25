@@ -74,6 +74,12 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
     serializer_class = FestConfigSerializer
     lookup_field = "franchise_id"
 
+    def get_object(self):
+        franchise_id = self.kwargs.get("franchise_id")
+        # Try to get or create FestConfig for this franchise_id
+        obj, created = FestConfig.objects.get_or_create(franchise_id=franchise_id)
+        return obj
+
     def perform_update(self, serializer):
         # Get the current instance before updating
         instance = self.get_object()
