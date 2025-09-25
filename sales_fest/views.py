@@ -1,6 +1,5 @@
 from datetime import datetime
 
-from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import generics, status
@@ -87,34 +86,21 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
         franchise_id = instance.franchise_id
 
         # Check if has_sales_fest is being set to False
-        with transaction.atomic():
-            # If has_sales_fest set to False
-            if (
-                serializer.validated_data.get("has_sales_fest") is False
-                and instance.has_sales_fest
-            ):
-                instance.sales_group.all().delete()
-
-            # Handle has_lucky_draw toggle
-            if (
-                serializer.validated_data.get("has_lucky_draw") is False
-                and instance.has_lucky_draw
-            ):
-                if instance.lucky_draw_system:
-                    # 1. Nullify FK first (and commit)
-                    type(instance).objects.filter(pk=instance.pk).update(
-                        lucky_draw_system=None
-                    )
-                    # Reload instance so serializer doesn’t reuse old FK
-                    instance.refresh_from_db()
-
-                    # 2. Delete LuckyDrawSystem safely
-                    instance_to_delete = instance.lucky_draw_system
-                    if instance_to_delete:
-                        instance_to_delete.delete()
-
-        # Save FestConfig updates
-        serializer.validated_data.pop("lucky_draw_system", None)
+        if (
+            serializer.validated_data.get("has_sales_fest") is False
+            and instance.has_sales_fest
+        ):
+            # Delete all associated sales groups
+            instance.sales_group.all().delete()
+        if (
+            serializer.validated_data.get("has_lucky_draw") is False
+            and instance.has_lucky_draw
+        ):
+            # Only if there is a lucky draw system
+            if instance.lucky_draw_system:
+                # Clear the relation
+                instance.lucky_draw_system = None
+                instance.save(update_fields=["lucky_draw_system"])
 
         serializer.save(franchise_id=franchise_id)
 
