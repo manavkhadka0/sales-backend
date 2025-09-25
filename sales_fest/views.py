@@ -97,7 +97,7 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
             and instance.has_lucky_draw
         ):
             # Only if there is a lucky draw system
-            if instance.lucky_draw_system:
+            if instance.lucky_draw_system is not None:
                 # Clear the relation
                 instance.lucky_draw_system = None
                 instance.save(update_fields=["lucky_draw_system"])
