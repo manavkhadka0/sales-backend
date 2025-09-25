@@ -101,14 +101,17 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
                 and instance.has_lucky_draw
             ):
                 if instance.lucky_draw_system:
-                    lucky_draw_system_to_delete = instance.lucky_draw_system
-                    # Delete the lucky draw system (cascade deletes)
-                    lucky_draw_system_to_delete.delete()
-                    # Directly update FestConfig FK to null (avoid stale instance issue)
+                    # 1. Nullify FK first (and commit)
                     type(instance).objects.filter(pk=instance.pk).update(
                         lucky_draw_system=None
                     )
-                    # Don't call refresh_from_db() → avoids DoesNotExist error
+                    # Reload instance so serializer doesn’t reuse old FK
+                    instance.refresh_from_db()
+
+                    # 2. Delete LuckyDrawSystem safely
+                    instance_to_delete = instance.lucky_draw_system
+                    if instance_to_delete:
+                        instance_to_delete.delete()
 
         # Save FestConfig updates
         serializer.save(franchise_id=franchise_id)
