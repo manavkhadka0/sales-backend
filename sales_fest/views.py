@@ -114,6 +114,8 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
                         instance_to_delete.delete()
 
         # Save FestConfig updates
+        serializer.validated_data.pop("lucky_draw_system", None)
+
         serializer.save(franchise_id=franchise_id)
 
 
