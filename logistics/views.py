@@ -1571,14 +1571,35 @@ def generate_order_tracking_statement_optimized(
     )
     statement = []
 
-    # Calculate starting balance
-    total_activity = sum(
-        sum(daily_delivered.get(d, []))
-        - len(daily_delivered.get(d, [])) * 100
-        - daily_payments.get(d, 0)
-        for d in all_dates
+    # Calculate starting balance - FIXED LOGIC
+    # Get all activity BEFORE the start_date to calculate proper starting balance
+    pre_start_delivered = OrderChangeLog.objects.filter(
+        order__franchise_id=franchise_id,
+        order__logistics="YDM",
+        new_status="Delivered",
+        changed_at__date__lt=start_date,
+    ).values("order_id", "order__total_amount", "order__prepaid_amount").distinct()
+
+    pre_start_delivered_amount = sum(
+        float(log["order__total_amount"] or 0) -
+        float(log["order__prepaid_amount"] or 0)
+        for log in pre_start_delivered
     )
-    running_balance = dashboard_data["pending_cod"] - total_activity
+
+    pre_start_delivered_count = pre_start_delivered.count()
+    pre_start_delivery_charge = pre_start_delivered_count * 100
+
+    pre_start_payments = float(
+        Invoice.objects.filter(
+            franchise_id=franchise_id,
+            is_approved=True,
+            approved_at__date__lt=start_date,
+        ).aggregate(total=Sum("paid_amount")).get("total") or 0
+    )
+
+    # Starting balance = previous delivered amount - previous delivery charges - previous payments
+    running_balance = pre_start_delivered_amount - \
+        pre_start_delivery_charge - pre_start_payments
 
     for d in sorted(all_dates):
         total_order = len(daily_sent_orders.get(d, []))
