@@ -1,7 +1,7 @@
 # views.py
 import csv
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.db.models import (
@@ -100,8 +100,10 @@ def track_order(request):
     order_code = request.query_params.get("order_code")
     order = get_object_or_404(Order, order_code=order_code)
     serializer = OrderSerializer(order)
-    order_change_log = OrderChangeLogSerializer(order.change_logs.all(), many=True)
-    order_comment = OrderCommentDetailSerializer(order.comments.all(), many=True)
+    order_change_log = OrderChangeLogSerializer(
+        order.change_logs.all(), many=True)
+    order_comment = OrderCommentDetailSerializer(
+        order.comments.all(), many=True)
 
     return Response(
         {
@@ -208,7 +210,8 @@ def get_complete_dashboard_stats(request, franchise_id):
         def get_status_stats(statuses):
             if isinstance(statuses, str):
                 statuses = [statuses]
-            filtered = orders.filter(logistics="YDM", order_status__in=statuses)
+            filtered = orders.filter(
+                logistics="YDM", order_status__in=statuses)
             result = filtered.aggregate(
                 count=Count("id"),
                 total=Sum("total_amount"),
@@ -298,7 +301,8 @@ def get_complete_dashboard_stats(request, franchise_id):
         todays_orders_count = get_todays_orders_by_status("Sent to YDM")
         todays_deliveries_count = get_todays_orders_by_status("Delivered")
         todays_rescheduled_count = get_todays_orders_by_status("Rescheduled")
-        todays_cancellations_count = get_todays_orders_by_status("Returned By YDM")
+        todays_cancellations_count = get_todays_orders_by_status(
+            "Returned By YDM")
 
         # Complete dashboard data
         data = {
@@ -410,7 +414,8 @@ def get_total_pending_cod(request, franchise_id):
         def get_status_stats(statuses):
             if isinstance(statuses, str):
                 statuses = [statuses]
-            filtered = orders.filter(logistics="YDM", order_status__in=statuses)
+            filtered = orders.filter(
+                logistics="YDM", order_status__in=statuses)
             result = filtered.aggregate(
                 count=Count("id"),
                 total=Sum("total_amount"),
@@ -445,7 +450,8 @@ def get_total_pending_cod(request, franchise_id):
         delivered_stats = get_status_stats("Delivered")
         # Deduct approved invoice paid amounts from pending COD
         approved_paid = (
-            Invoice.objects.filter(franchise__id=franchise_id, is_approved=True)
+            Invoice.objects.filter(
+                franchise__id=franchise_id, is_approved=True)
             .aggregate(total=Sum("paid_amount"))
             .get("total")
             or 0
@@ -453,7 +459,8 @@ def get_total_pending_cod(request, franchise_id):
         data = {
             "amount": max(
                 0,
-                float(delivered_stats["amount"]) - total_charge - float(approved_paid),
+                float(delivered_stats["amount"]) -
+                total_charge - float(approved_paid),
             ),
         }
 
@@ -657,14 +664,16 @@ def daily_delivered_orders(request, franchise_id):
                         F("total_amount"),
                         Value(
                             Decimal("0.00"),
-                            output_field=DecimalField(max_digits=12, decimal_places=2),
+                            output_field=DecimalField(
+                                max_digits=12, decimal_places=2),
                         ),
                     )
                     - Coalesce(
                         F("prepaid_amount"),
                         Value(
                             Decimal("0.00"),
-                            output_field=DecimalField(max_digits=12, decimal_places=2),
+                            output_field=DecimalField(
+                                max_digits=12, decimal_places=2),
                         ),
                     ),
                     output_field=DecimalField(max_digits=12, decimal_places=2),
@@ -705,7 +714,8 @@ def daily_delivered_orders(request, franchise_id):
     ).order_by("-delivered_date")
     delivered_orders_by_date = defaultdict(list)
     for order in delivered_orders_qs:
-        delivered_orders_by_date[order["delivered_date"]].append(order["order_code"])
+        delivered_orders_by_date[order["delivered_date"]].append(
+            order["order_code"])
 
     # Format response with proper cumulative balance calculation
     results = []
@@ -769,7 +779,8 @@ def daily_delivered_orders(request, franchise_id):
             ),
         ),
     )
-    delivered_amount_overall = delivered_agg["total"] - delivered_agg["prepaid"]
+    delivered_amount_overall = delivered_agg["total"] - \
+        delivered_agg["prepaid"]
     valid_orders_overall = delivered_agg["count"] or 0
     cancelled_overall = Order.objects.filter(
         franchise_id=franchise_id,
@@ -1093,7 +1104,8 @@ class ExportOrdersCSVView(APIView):
                 [f"{p.quantity}-{p.product.product.name}" for p in products]
             )
 
-            product_price = float(order.total_amount - (order.prepaid_amount or 0))
+            product_price = float(order.total_amount -
+                                  (order.prepaid_amount or 0))
             delivery_charge = 100
             net_amount = product_price - delivery_charge
 
@@ -1167,7 +1179,8 @@ class InvoiceFilter(django_filters.FilterSet):
     payment_type = django_filters.CharFilter(
         field_name="payment_type", lookup_expr="exact"
     )
-    status = django_filters.CharFilter(field_name="status", lookup_expr="exact")
+    status = django_filters.CharFilter(
+        field_name="status", lookup_expr="exact")
     is_approved = django_filters.BooleanFilter(
         field_name="is_approved", lookup_expr="exact"
     )
@@ -1240,7 +1253,8 @@ class InvoiceRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class InvoiceReportFilter(django_filters.FilterSet):
-    invoice = django_filters.CharFilter(field_name="invoice__id", lookup_expr="exact")
+    invoice = django_filters.CharFilter(
+        field_name="invoice__id", lookup_expr="exact")
 
     class Meta:
         model = ReportInvoice
@@ -1288,7 +1302,8 @@ class FranchiseStatementAPIView(generics.ListAPIView):
 
         if start_date_param and end_date_param:
             try:
-                start_date = datetime.strptime(start_date_param, "%Y-%m-%d").date()
+                start_date = datetime.strptime(
+                    start_date_param, "%Y-%m-%d").date()
                 end_date = datetime.strptime(end_date_param, "%Y-%m-%d").date()
             except ValueError:
                 return Response(
@@ -1350,8 +1365,10 @@ class FranchiseStatementAPIView(generics.ListAPIView):
         dashboard_data = calculate_dashboard_pending_cod(franchise_id)
 
         # 3. Build statement (optimized)
+        # Ensure we include the full date range by extending end_date by 1 day
+        extended_end_date = end_date + timedelta(days=1)
         statement_data = generate_order_tracking_statement_optimized(
-            franchise_id, start_date, end_date, dashboard_data
+            franchise_id, start_date, extended_end_date, dashboard_data
         )
 
         # 4. Apply pagination
@@ -1451,12 +1468,12 @@ def generate_order_tracking_statement_optimized(
     franchise_id, start_date, end_date, dashboard_data
 ):
     # ---------------- Batch fetch orders ---------------- #
-    # Sent to YDM
+    # Sent to YDM - Get logs within the date range
     sent_logs = OrderChangeLog.objects.filter(
         order__franchise_id=franchise_id,
         order__logistics="YDM",
         new_status="Sent to YDM",
-        changed_at__date__lte=end_date,
+        changed_at__date__range=[start_date, end_date],
     ).values("order_id", "changed_at", "order__total_amount", "order__prepaid_amount")
 
     sent_orders = {}
@@ -1469,10 +1486,12 @@ def generate_order_tracking_statement_optimized(
                 - float(log["order__prepaid_amount"] or 0),
             }
 
-    # Orders without logs
+    # Orders without logs - Include orders created within the date range that don't have logs
     orders_without_logs = (
         Order.objects.filter(
-            franchise_id=franchise_id, logistics="YDM", created_at__date__lte=end_date
+            franchise_id=franchise_id,
+            logistics="YDM",
+            created_at__date__range=[start_date, end_date]
         )
         .exclude(id__in=sent_orders.keys())
         .values("id", "created_at", "total_amount", "prepaid_amount")
