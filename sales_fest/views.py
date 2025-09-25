@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import generics, status
@@ -86,24 +87,31 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
         franchise_id = instance.franchise_id
 
         # Check if has_sales_fest is being set to False
-        if (
-            serializer.validated_data.get("has_sales_fest") is False
-            and instance.has_sales_fest
-        ):
-            # Delete all associated sales groups
-            instance.sales_group.all().delete()
-        if (
-            serializer.validated_data.get("has_lucky_draw") is False
-            and instance.has_lucky_draw
-        ):
-            # Only if there is a lucky draw system
-            if instance.lucky_draw_system:
-                lucky_draw_system_to_delete = instance.lucky_draw_system
-                # Clear the relation
-                lucky_draw_system_to_delete.delete()
-                instance.lucky_draw_system = None
-                instance.save(update_fields=["lucky_draw_system"])
+        with transaction.atomic():
+            # If has_sales_fest set to False
+            if (
+                serializer.validated_data.get("has_sales_fest") is False
+                and instance.has_sales_fest
+            ):
+                instance.sales_group.all().delete()
 
+            # If has_lucky_draw set to False
+            if (
+                serializer.validated_data.get("has_lucky_draw") is False
+                and instance.has_lucky_draw
+            ):
+                if instance.lucky_draw_system:
+                    lucky_draw_system_to_delete = instance.lucky_draw_system
+                    # Delete the lucky draw system (cascade deletes)
+                    lucky_draw_system_to_delete.delete()
+                    # Update the FK in DB safely
+                    type(instance).objects.filter(pk=instance.pk).update(
+                        lucky_draw_system=None
+                    )
+                    # Refresh instance so serializer.save() works fine
+                    instance.refresh_from_db()
+
+        # Save FestConfig updates
         serializer.save(franchise_id=franchise_id)
 
 
