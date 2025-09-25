@@ -100,10 +100,8 @@ def track_order(request):
     order_code = request.query_params.get("order_code")
     order = get_object_or_404(Order, order_code=order_code)
     serializer = OrderSerializer(order)
-    order_change_log = OrderChangeLogSerializer(
-        order.change_logs.all(), many=True)
-    order_comment = OrderCommentDetailSerializer(
-        order.comments.all(), many=True)
+    order_change_log = OrderChangeLogSerializer(order.change_logs.all(), many=True)
+    order_comment = OrderCommentDetailSerializer(order.comments.all(), many=True)
 
     return Response(
         {
@@ -210,8 +208,7 @@ def get_complete_dashboard_stats(request, franchise_id):
         def get_status_stats(statuses):
             if isinstance(statuses, str):
                 statuses = [statuses]
-            filtered = orders.filter(
-                logistics="YDM", order_status__in=statuses)
+            filtered = orders.filter(logistics="YDM", order_status__in=statuses)
             result = filtered.aggregate(
                 count=Count("id"),
                 total=Sum("total_amount"),
@@ -301,8 +298,7 @@ def get_complete_dashboard_stats(request, franchise_id):
         todays_orders_count = get_todays_orders_by_status("Sent to YDM")
         todays_deliveries_count = get_todays_orders_by_status("Delivered")
         todays_rescheduled_count = get_todays_orders_by_status("Rescheduled")
-        todays_cancellations_count = get_todays_orders_by_status(
-            "Returned By YDM")
+        todays_cancellations_count = get_todays_orders_by_status("Returned By YDM")
 
         # Complete dashboard data
         data = {
@@ -414,8 +410,7 @@ def get_total_pending_cod(request, franchise_id):
         def get_status_stats(statuses):
             if isinstance(statuses, str):
                 statuses = [statuses]
-            filtered = orders.filter(
-                logistics="YDM", order_status__in=statuses)
+            filtered = orders.filter(logistics="YDM", order_status__in=statuses)
             result = filtered.aggregate(
                 count=Count("id"),
                 total=Sum("total_amount"),
@@ -450,8 +445,7 @@ def get_total_pending_cod(request, franchise_id):
         delivered_stats = get_status_stats("Delivered")
         # Deduct approved invoice paid amounts from pending COD
         approved_paid = (
-            Invoice.objects.filter(
-                franchise__id=franchise_id, is_approved=True)
+            Invoice.objects.filter(franchise__id=franchise_id, is_approved=True)
             .aggregate(total=Sum("paid_amount"))
             .get("total")
             or 0
@@ -459,8 +453,7 @@ def get_total_pending_cod(request, franchise_id):
         data = {
             "amount": max(
                 0,
-                float(delivered_stats["amount"]) -
-                total_charge - float(approved_paid),
+                float(delivered_stats["amount"]) - total_charge - float(approved_paid),
             ),
         }
 
@@ -664,16 +657,14 @@ def daily_delivered_orders(request, franchise_id):
                         F("total_amount"),
                         Value(
                             Decimal("0.00"),
-                            output_field=DecimalField(
-                                max_digits=12, decimal_places=2),
+                            output_field=DecimalField(max_digits=12, decimal_places=2),
                         ),
                     )
                     - Coalesce(
                         F("prepaid_amount"),
                         Value(
                             Decimal("0.00"),
-                            output_field=DecimalField(
-                                max_digits=12, decimal_places=2),
+                            output_field=DecimalField(max_digits=12, decimal_places=2),
                         ),
                     ),
                     output_field=DecimalField(max_digits=12, decimal_places=2),
@@ -714,8 +705,7 @@ def daily_delivered_orders(request, franchise_id):
     ).order_by("-delivered_date")
     delivered_orders_by_date = defaultdict(list)
     for order in delivered_orders_qs:
-        delivered_orders_by_date[order["delivered_date"]].append(
-            order["order_code"])
+        delivered_orders_by_date[order["delivered_date"]].append(order["order_code"])
 
     # Format response with proper cumulative balance calculation
     results = []
@@ -779,8 +769,7 @@ def daily_delivered_orders(request, franchise_id):
             ),
         ),
     )
-    delivered_amount_overall = delivered_agg["total"] - \
-        delivered_agg["prepaid"]
+    delivered_amount_overall = delivered_agg["total"] - delivered_agg["prepaid"]
     valid_orders_overall = delivered_agg["count"] or 0
     cancelled_overall = Order.objects.filter(
         franchise_id=franchise_id,
@@ -1104,8 +1093,7 @@ class ExportOrdersCSVView(APIView):
                 [f"{p.quantity}-{p.product.product.name}" for p in products]
             )
 
-            product_price = float(order.total_amount -
-                                  (order.prepaid_amount or 0))
+            product_price = float(order.total_amount - (order.prepaid_amount or 0))
             delivery_charge = 100
             net_amount = product_price - delivery_charge
 
@@ -1179,8 +1167,7 @@ class InvoiceFilter(django_filters.FilterSet):
     payment_type = django_filters.CharFilter(
         field_name="payment_type", lookup_expr="exact"
     )
-    status = django_filters.CharFilter(
-        field_name="status", lookup_expr="exact")
+    status = django_filters.CharFilter(field_name="status", lookup_expr="exact")
     is_approved = django_filters.BooleanFilter(
         field_name="is_approved", lookup_expr="exact"
     )
@@ -1253,8 +1240,7 @@ class InvoiceRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class InvoiceReportFilter(django_filters.FilterSet):
-    invoice = django_filters.CharFilter(
-        field_name="invoice__id", lookup_expr="exact")
+    invoice = django_filters.CharFilter(field_name="invoice__id", lookup_expr="exact")
 
     class Meta:
         model = ReportInvoice
@@ -1302,8 +1288,7 @@ class FranchiseStatementAPIView(generics.ListAPIView):
 
         if start_date_param and end_date_param:
             try:
-                start_date = datetime.strptime(
-                    start_date_param, "%Y-%m-%d").date()
+                start_date = datetime.strptime(start_date_param, "%Y-%m-%d").date()
                 end_date = datetime.strptime(end_date_param, "%Y-%m-%d").date()
             except ValueError:
                 return Response(
@@ -1491,7 +1476,7 @@ def generate_order_tracking_statement_optimized(
         Order.objects.filter(
             franchise_id=franchise_id,
             logistics="YDM",
-            created_at__date__range=[start_date, end_date]
+            created_at__date__range=[start_date, end_date],
         )
         .exclude(id__in=sent_orders.keys())
         .values("id", "created_at", "total_amount", "prepaid_amount")
@@ -1593,12 +1578,16 @@ def generate_order_tracking_statement_optimized(
             franchise_id=franchise_id,
             is_approved=True,
             approved_at__date__lt=start_date,
-        ).aggregate(total=Sum("paid_amount")).get("total") or 0
+        )
+        .aggregate(total=Sum("paid_amount"))
+        .get("total")
+        or 0
     )
 
     # Starting balance = previous delivered amount - previous delivery charges - previous payments
-    running_balance = pre_start_delivered_amount - \
-        pre_start_delivery_charge - pre_start_payments
+    running_balance = (
+        pre_start_delivered_amount - pre_start_delivery_charge - pre_start_payments
+    )
 
     # For daily calculations, also use Order table instead of logs to avoid duplicates
     for d in sorted(all_dates):
@@ -1651,17 +1640,19 @@ class SentToYDMCSVExportView(APIView):
 
     def get(self, request):
         # Get parameters
-        sent_date = request.GET.get('sent_date')
-        start_date = request.GET.get('start_date')
-        end_date = request.GET.get('end_date')
-        status = request.GET.get('status')
-        franchise_id = request.GET.get('franchise_id')
+        sent_date = request.GET.get("sent_date")
+        start_date = request.GET.get("start_date")
+        end_date = request.GET.get("end_date")
+        status = request.GET.get("status")
+        franchise_id = request.GET.get("franchise_id")
 
         # Validate date parameters
         if not sent_date and not start_date and not end_date:
             return Response(
-                {"error": "At least one date parameter is required: sent_date, start_date, or end_date"},
-                status=400
+                {
+                    "error": "At least one date parameter is required: sent_date, start_date, or end_date"
+                },
+                status=400,
             )
 
         # Parse dates
@@ -1672,107 +1663,97 @@ class SentToYDMCSVExportView(APIView):
             # Single date filter
             try:
                 date_obj = datetime.strptime(sent_date, "%Y-%m-%d").date()
-                date_filter = {'changed_at__date': date_obj}
+                date_filter = {"changed_at__date": date_obj}
                 date_range_str = sent_date
             except ValueError:
                 return Response(
-                    {"error": "Invalid sent_date format. Use YYYY-MM-DD"},
-                    status=400
+                    {"error": "Invalid sent_date format. Use YYYY-MM-DD"}, status=400
                 )
         elif start_date and end_date:
             # Date range filter
             try:
-                start_date_obj = datetime.strptime(
-                    start_date, "%Y-%m-%d").date()
+                start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
                 end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
-                date_filter = {'changed_at__date__range': [
-                    start_date_obj, end_date_obj]}
+                date_filter = {
+                    "changed_at__date__range": [start_date_obj, end_date_obj]
+                }
                 date_range_str = f"{start_date}_to_{end_date}"
             except ValueError:
                 return Response(
-                    {"error": "Invalid date format. Use YYYY-MM-DD"},
-                    status=400
+                    {"error": "Invalid date format. Use YYYY-MM-DD"}, status=400
                 )
         elif start_date:
             # Only start date - filter from start_date onwards
             try:
-                start_date_obj = datetime.strptime(
-                    start_date, "%Y-%m-%d").date()
-                date_filter = {'changed_at__date__gte': start_date_obj}
+                start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
+                date_filter = {"changed_at__date__gte": start_date_obj}
                 date_range_str = f"from_{start_date}"
             except ValueError:
                 return Response(
-                    {"error": "Invalid start_date format. Use YYYY-MM-DD"},
-                    status=400
+                    {"error": "Invalid start_date format. Use YYYY-MM-DD"}, status=400
                 )
         elif end_date:
             # Only end date - filter up to end_date
             try:
                 end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
-                date_filter = {'changed_at__date__lte': end_date_obj}
+                date_filter = {"changed_at__date__lte": end_date_obj}
                 date_range_str = f"until_{end_date}"
             except ValueError:
                 return Response(
-                    {"error": "Invalid end_date format. Use YYYY-MM-DD"},
-                    status=400
+                    {"error": "Invalid end_date format. Use YYYY-MM-DD"}, status=400
                 )
 
         # Get franchise_id from user or query parameter
         if not franchise_id:
             # Try to get from user's franchise
-            if hasattr(request.user, 'franchise') and request.user.franchise:
+            if hasattr(request.user, "franchise") and request.user.franchise:
                 franchise_id = request.user.franchise.id
             else:
                 return Response(
-                    {"error": "franchise_id parameter is required"},
-                    status=400
+                    {"error": "franchise_id parameter is required"}, status=400
                 )
 
         try:
             franchise_id = int(franchise_id)
         except ValueError:
-            return Response(
-                {"error": "Invalid franchise_id"},
-                status=400
-            )
+            return Response({"error": "Invalid franchise_id"}, status=400)
 
         # Determine the status to filter by
         if status:
             # Filter by specific status (e.g., "Delivered", "Sent to YDM")
-            status_filter = {'new_status': status}
-            status_str = status.lower().replace(' ', '_')
+            status_filter = {"new_status": status}
+            status_str = status.lower().replace(" ", "_")
         else:
             # Default to "Sent to YDM" if no status specified
-            status_filter = {'new_status': 'Sent to YDM'}
-            status_str = 'sent_to_ydm'
+            status_filter = {"new_status": "Sent to YDM"}
+            status_str = "sent_to_ydm"
 
         # Find orders based on status and date filters
         # First, get order IDs from logs
         log_filters = {
-            'order__franchise_id': franchise_id,
-            'order__logistics': 'YDM',
+            "order__franchise_id": franchise_id,
+            "order__logistics": "YDM",
             **status_filter,
-            **date_filter
+            **date_filter,
         }
 
-        sent_logs = OrderChangeLog.objects.filter(
-            **log_filters
-        ).values_list('order_id', flat=True)
+        sent_logs = OrderChangeLog.objects.filter(**log_filters).values_list(
+            "order_id", flat=True
+        )
 
         # Get the actual orders
-        orders = Order.objects.filter(
-            id__in=sent_logs
-        ).select_related(
-            'franchise', 'sales_person', 'dash_location'
-        ).prefetch_related(
-            'order_products__product__product'
-        ).order_by('created_at')
+        orders = (
+            Order.objects.filter(id__in=sent_logs)
+            .select_related("franchise", "sales_person", "dash_location")
+            .prefetch_related("order_products__product__product")
+            .order_by("created_at")
+        )
 
         if not orders.exists():
             status_msg = f" with status '{status}'" if status else ""
             return Response(
                 {"error": f"No orders found{status_msg} on {date_range_str}"},
-                status=404
+                status=404,
             )
 
         # Create CSV response
@@ -1783,30 +1764,32 @@ class SentToYDMCSVExportView(APIView):
 
         # Write CSV header
         status_column_name = f"{status.title()} At" if status else "Sent to YDM At"
-        writer.writerow([
-            "Date",
-            "Order Code",
-            "Customer Name",
-            "Contact Number",
-            "Alternative Number",
-            "Address",
-            "City",
-            "Landmark",
-            "Product Details",
-            "Total Amount",
-            "Prepaid Amount",
-            "Collection Amount",
-            "Delivery Charge",
-            "Net Amount",
-            "Payment Method",
-            "Order Status",
-            "Logistics",
-            "Sales Person",
-            "Franchise",
-            "Created At",
-            status_column_name,
-            "Remarks"
-        ])
+        writer.writerow(
+            [
+                "Date",
+                "Order Code",
+                "Customer Name",
+                "Contact Number",
+                "Alternative Number",
+                "Address",
+                "City",
+                "Landmark",
+                "Product Details",
+                "Total Amount",
+                "Prepaid Amount",
+                "Collection Amount",
+                "Delivery Charge",
+                "Net Amount",
+                "Payment Method",
+                "Order Status",
+                "Logistics",
+                "Sales Person",
+                "Franchise",
+                "Created At",
+                status_column_name,
+                "Remarks",
+            ]
+        )
 
         total_orders = 0
         total_amount = 0
@@ -1817,22 +1800,26 @@ class SentToYDMCSVExportView(APIView):
         for order in orders:
             # Get the exact time when the status change occurred
             target_status = status if status else "Sent to YDM"
-            status_log = order.change_logs.filter(
-                new_status=target_status
-            ).order_by('changed_at').first()
+            status_log = (
+                order.change_logs.filter(new_status=target_status)
+                .order_by("changed_at")
+                .first()
+            )
 
-            status_changed_at = status_log.changed_at if status_log else order.created_at
+            status_changed_at = (
+                status_log.changed_at if status_log else order.created_at
+            )
 
             # Format products string
             products = order.order_products.all()
-            products_str = ", ".join([
-                f"{p.quantity}-{p.product.product.name}"
-                for p in products
-            ])
+            products_str = ", ".join(
+                [f"{p.quantity}-{p.product.product.name}" for p in products]
+            )
 
             # Calculate amounts
-            collection_amount = float(
-                order.total_amount or 0) - float(order.prepaid_amount or 0)
+            collection_amount = float(order.total_amount or 0) - float(
+                order.prepaid_amount or 0
+            )
             delivery_charge = 100  # Standard delivery charge
             net_amount = collection_amount - delivery_charge
 
@@ -1859,31 +1846,36 @@ class SentToYDMCSVExportView(APIView):
                 display_date = status_changed_at.strftime("%Y-%m-%d")
 
             # Write row
-            writer.writerow([
-                display_date,  # Date
-                order.order_code,  # Order Code
-                order.full_name,  # Customer Name
-                order.phone_number,  # Contact Number
-                order.alternate_phone_number or "",  # Alternative Number
-                order.delivery_address or "",  # Address
-                order.city or "",  # City
-                order.landmark or "",  # Landmark
-                products_str,  # Product Details
-                float(order.total_amount or 0),  # Total Amount
-                float(order.prepaid_amount or 0),  # Prepaid Amount
-                collection_amount,  # Collection Amount
-                delivery_charge,  # Delivery Charge
-                net_amount,  # Net Amount
-                order.payment_method,  # Payment Method
-                order.order_status,  # Order Status
-                order.logistics,  # Logistics
-                order.sales_person.get_full_name() if order.sales_person else "",  # Sales Person
-                order.franchise.name if order.franchise else "",  # Franchise
-                order.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Created At
-                status_changed_at.strftime(
-                    "%Y-%m-%d %H:%M:%S"),  # Status Changed At
-                order.remarks or ""  # Remarks
-            ])
+            writer.writerow(
+                [
+                    display_date,  # Date
+                    order.order_code,  # Order Code
+                    order.full_name,  # Customer Name
+                    order.phone_number,  # Contact Number
+                    order.alternate_phone_number or "",  # Alternative Number
+                    order.delivery_address or "",  # Address
+                    order.city or "",  # City
+                    order.landmark or "",  # Landmark
+                    products_str,  # Product Details
+                    float(order.total_amount or 0),  # Total Amount
+                    float(order.prepaid_amount or 0),  # Prepaid Amount
+                    collection_amount,  # Collection Amount
+                    delivery_charge,  # Delivery Charge
+                    net_amount,  # Net Amount
+                    order.payment_method,  # Payment Method
+                    order.order_status,  # Order Status
+                    order.logistics,  # Logistics
+                    order.sales_person.get_full_name()
+                    if order.sales_person
+                    else "",  # Sales Person
+                    order.franchise.name if order.franchise else "",  # Franchise
+                    order.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Created At
+                    status_changed_at.strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),  # Status Changed At
+                    order.remarks or "",  # Remarks
+                ]
+            )
 
             # Update totals
             total_orders += 1

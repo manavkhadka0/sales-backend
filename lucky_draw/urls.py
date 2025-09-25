@@ -5,11 +5,14 @@ from .views import (
     FixOfferRetrieveUpdateDestroyView,
     GetGiftList,
     GetGifts,
+    GiftItemListCreateView,
+    GiftItemRetrieveUpdateDestroyView,
     LuckyDrawSystemListCreateView,
     LuckyDrawSystemRetrieveUpdateDestroyView,
     OfferListCreateView,
     OfferRetrieveUpdateDestroyView,
     SlotMachineListCreateView,
+    download_customers_detail,
 )
 
 urlpatterns = [
@@ -38,6 +41,16 @@ urlpatterns = [
         SlotMachineListCreateView.as_view(),
         name="slot-machine-list-create",
     ),
+    path(
+        "gift-items/",
+        GiftItemListCreateView.as_view(),
+        name="gift-item-list-create",
+    ),
+    path(
+        "gift-items/<int:pk>/",
+        GiftItemRetrieveUpdateDestroyView.as_view(),
+        name="gift-item-detail",
+    ),
     path("gifts/", GetGifts, name="get-gifts"),
     path("get-gift-list/", GetGiftList, name="get-gift-list"),
     path(
@@ -49,5 +62,10 @@ urlpatterns = [
         "offers/<int:pk>/",
         OfferRetrieveUpdateDestroyView.as_view(),
         name="offer-detail",
+    ),
+    path(
+        "export-detail/",
+        download_customers_detail,
+        name="export-detail",
     ),
 ]

@@ -184,11 +184,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "https://unique-molecules-drug-contributors.trycloudflare.com",
+    "https://ends-pcs-professor-spatial.trycloudflare.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
-    "https://unique-molecules-drug-contributors.trycloudflare.com",
+    "https://ends-pcs-professor-spatial.trycloudflare.com",
 ]
 
 # Default primary key field type

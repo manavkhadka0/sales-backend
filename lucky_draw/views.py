@@ -1,5 +1,8 @@
+import csv
+import datetime
 import random
 
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.decorators import api_view
@@ -23,6 +26,7 @@ from .serializers import (
     GiftItemSerializer,
     LuckyDrawSystemSerializer,
     OfferSerializer,
+    OfferSerializer2,
 )
 
 # Create your views here.
@@ -203,8 +207,14 @@ class OfferListCreateView(generics.ListCreateAPIView):
     serializer_class = OfferSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_serializer_class(self):
+        if self.request.method == "GET":
+            return OfferSerializer2
+        return OfferSerializer
+
     def get_queryset(self):
-        return Offer.objects.filter(franchise=self.request.user.franchise)
+        lucky_draw_system_id = self.request.GET["lucky_draw_system_id"]
+        return Offer.objects.filter(lucky_draw_system_id=lucky_draw_system_id)
 
     def create(self, request, *args, **kwargs):
         lucky_draw_system_id = request.data.get("lucky_draw_system")
@@ -241,11 +251,14 @@ class OfferListCreateView(generics.ListCreateAPIView):
 
 
 class OfferRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Offer.objects.all()
     serializer_class = OfferSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Offer.objects.filter(franchise=self.request.user.franchise)
+        return Offer.objects.filter(
+            lucky_draw_system__franchise=self.request.user.franchise
+        )
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -290,6 +303,73 @@ class OfferRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         )
 
 
+class GiftItemListCreateView(generics.ListCreateAPIView):
+    serializer_class = GiftItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        lucky_draw_system_id = self.request.GET["lucky_draw_system_id"]
+        return GiftItem.objects.filter(lucky_draw_system__id=lucky_draw_system_id)
+
+    def create(self, request):
+        lucky_draw_system_id = self.request.GET["lucky_draw_system_id"]
+        name = request.data.get("name")
+        image = request.data.get("image")
+
+        gift_item = GiftItem.objects.create(
+            lucky_draw_system_id=lucky_draw_system_id, name=name, image=image
+        )
+
+        gift_item.save()
+        gift_item_uploaded = GiftItem.objects.get(id=gift_item.id)
+        serializer = GiftItemSerializer(gift_item_uploaded)
+        data = serializer.data
+        data["image"] = request.build_absolute_uri(data["image"])
+        return Response(data)
+
+
+class GiftItemRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = GiftItem.objects.all()
+    serializer_class = GiftItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+
+        # Get the data from the request
+        name = request.data.get("name")
+        image = request.data.get("image")
+        lucky_draw_system = request.data.get("lucky_draw_system")
+
+        # Update the instance fields if provided in the request
+        if name is not None:
+            instance.name = name
+        if image is not None:
+            instance.image = image
+        if lucky_draw_system is not None:
+            instance.lucky_draw_system_id = lucky_draw_system
+
+        # Save the updated instance
+        instance.save()
+
+        # Serialize and return the updated instance
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def perform_destroy(self, instance):
+        instance.delete()
+
+
 @api_view(["GET"])
 def GetGifts(request):
     luck_draw_system_id = request.GET.get("lucky_draw_system")
@@ -305,8 +385,19 @@ def GetGifts(request):
 
 
 class SlotMachineListCreateView(generics.ListCreateAPIView):
-    queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
+
+    def get_serializer_class(self):
+        if self.request.method == "GET":
+            return CustomerGiftSerializer
+        return CustomerSerializer
+
+    def get_queryset(self):
+        lucky_draw_system_id = self.request.GET.get("lucky_draw_system_id")
+        customer = Customer.objects.filter(
+            lucky_draw_system__id=lucky_draw_system_id,
+        )
+        return customer
 
     def create(self, request, *args, **kwargs):
         lucky_draw_system = request.data.get("lucky_draw_system")
@@ -474,3 +565,56 @@ def GetGiftList(request):
     for gift in data:
         gift["image"] = request.build_absolute_uri(gift["image"])
     return Response(data)
+
+
+@api_view(["POST"])
+def download_customers_detail(request):
+    if request.method == "POST":
+        data = request.data
+        start_date = data.get("start_date", datetime.date.today())
+        end_date = data.get("end_date", datetime.date.today())
+        luckydraw = data.get("lucky_draw_system_id", None)
+
+        # Create a base queryset for customers with gifts
+        queryset = Customer.objects.all()
+
+        if luckydraw is not None:
+            system = LuckyDrawSystem.objects.get(id=luckydraw)
+            queryset = queryset.filter(lucky_draw_system=system)
+
+        if start_date and end_date:
+            queryset = queryset.filter(date_of_purchase__range=(start_date, end_date))
+
+        if start_date and not end_date:
+            queryset = queryset.filter(date_of_purchase=start_date)
+
+        if end_date and not start_date:
+            queryset = queryset.filter(date_of_purchase=end_date)
+
+        # Create a CSV response
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="customers_detail.csv"'
+
+        # Create a CSV writer and write the header row
+        writer = csv.writer(response)
+        writer.writerow(
+            [
+                "Full Name",
+                "Gift",
+                "Date of Spin",
+            ]
+        )
+
+        # Write the data rows
+        for customer in queryset:
+            writer.writerow(
+                [
+                    customer.full_name,
+                    ", ".join([gift.name for gift in customer.gift.all()])
+                    if customer.gift.exists()
+                    else "",
+                    customer.date_of_purchase,
+                ]
+            )
+
+        return response

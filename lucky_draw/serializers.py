@@ -63,10 +63,18 @@ class OfferSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class OfferSerializer2(serializers.ModelSerializer):
+    gift = GiftItemSerializer(many=True)
+
+    class Meta:
+        model = Offer
+        fields = "__all__"
+
+
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
-        fields = ["__all__"]
+        fields = "__all__"
 
 
 class CustomerGiftSerializer(serializers.ModelSerializer):
