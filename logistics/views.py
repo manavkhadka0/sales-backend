@@ -1609,31 +1609,82 @@ def generate_order_tracking_statement_optimized(
 
 class SentToYDMCSVExportView(APIView):
     """
-    Export CSV data for orders that were sent to YDM on a specific date.
-    This view looks at OrderChangeLog entries to find when orders were actually sent to YDM.
+    Export CSV data for orders based on status and date filters.
+    Supports:
+    - Status filtering (e.g., status=delivered)
+    - Single date filtering (sent_date=YYYY-MM-DD)
+    - Date range filtering (start_date=YYYY-MM-DD&end_date=YYYY-MM-DD)
     """
 
     def get(self, request):
-        # Get the date parameter
+        # Get parameters
         sent_date = request.GET.get('sent_date')
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        status = request.GET.get('status')
+        franchise_id = request.GET.get('franchise_id')
 
-        if not sent_date:
+        # Validate date parameters
+        if not sent_date and not start_date and not end_date:
             return Response(
-                {"error": "sent_date parameter is required (format: YYYY-MM-DD)"},
+                {"error": "At least one date parameter is required: sent_date, start_date, or end_date"},
                 status=400
             )
 
-        try:
-            # Parse the date
-            sent_date_obj = datetime.strptime(sent_date, "%Y-%m-%d").date()
-        except ValueError:
-            return Response(
-                {"error": "Invalid date format. Use YYYY-MM-DD"},
-                status=400
-            )
+        # Parse dates
+        date_filter = None
+        date_range_str = ""
+
+        if sent_date:
+            # Single date filter
+            try:
+                date_obj = datetime.strptime(sent_date, "%Y-%m-%d").date()
+                date_filter = {'changed_at__date': date_obj}
+                date_range_str = sent_date
+            except ValueError:
+                return Response(
+                    {"error": "Invalid sent_date format. Use YYYY-MM-DD"},
+                    status=400
+                )
+        elif start_date and end_date:
+            # Date range filter
+            try:
+                start_date_obj = datetime.strptime(
+                    start_date, "%Y-%m-%d").date()
+                end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+                date_filter = {'changed_at__date__range': [
+                    start_date_obj, end_date_obj]}
+                date_range_str = f"{start_date}_to_{end_date}"
+            except ValueError:
+                return Response(
+                    {"error": "Invalid date format. Use YYYY-MM-DD"},
+                    status=400
+                )
+        elif start_date:
+            # Only start date - filter from start_date onwards
+            try:
+                start_date_obj = datetime.strptime(
+                    start_date, "%Y-%m-%d").date()
+                date_filter = {'changed_at__date__gte': start_date_obj}
+                date_range_str = f"from_{start_date}"
+            except ValueError:
+                return Response(
+                    {"error": "Invalid start_date format. Use YYYY-MM-DD"},
+                    status=400
+                )
+        elif end_date:
+            # Only end date - filter up to end_date
+            try:
+                end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+                date_filter = {'changed_at__date__lte': end_date_obj}
+                date_range_str = f"until_{end_date}"
+            except ValueError:
+                return Response(
+                    {"error": "Invalid end_date format. Use YYYY-MM-DD"},
+                    status=400
+                )
 
         # Get franchise_id from user or query parameter
-        franchise_id = request.GET.get('franchise_id')
         if not franchise_id:
             # Try to get from user's franchise
             if hasattr(request.user, 'franchise') and request.user.franchise:
@@ -1652,13 +1703,27 @@ class SentToYDMCSVExportView(APIView):
                 status=400
             )
 
-        # Find orders that were sent to YDM on the specified date
+        # Determine the status to filter by
+        if status:
+            # Filter by specific status (e.g., "Delivered", "Sent to YDM")
+            status_filter = {'new_status': status}
+            status_str = status.lower().replace(' ', '_')
+        else:
+            # Default to "Sent to YDM" if no status specified
+            status_filter = {'new_status': 'Sent to YDM'}
+            status_str = 'sent_to_ydm'
+
+        # Find orders based on status and date filters
         # First, get order IDs from logs
+        log_filters = {
+            'order__franchise_id': franchise_id,
+            'order__logistics': 'YDM',
+            **status_filter,
+            **date_filter
+        }
+
         sent_logs = OrderChangeLog.objects.filter(
-            order__franchise_id=franchise_id,
-            order__logistics="YDM",
-            new_status="Sent to YDM",
-            changed_at__date=sent_date_obj
+            **log_filters
         ).values_list('order_id', flat=True)
 
         # Get the actual orders
@@ -1671,17 +1736,20 @@ class SentToYDMCSVExportView(APIView):
         ).order_by('created_at')
 
         if not orders.exists():
+            status_msg = f" with status '{status}'" if status else ""
             return Response(
-                {"error": f"No orders found sent to YDM on {sent_date}"},
+                {"error": f"No orders found{status_msg} on {date_range_str}"},
                 status=404
             )
 
         # Create CSV response
         response = HttpResponse(content_type="text/csv")
-        response["Content-Disposition"] = f'attachment; filename="sent_to_ydm_{sent_date}.csv"'
+        filename = f"{status_str}_{date_range_str}.csv"
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
         writer = csv.writer(response)
 
         # Write CSV header
+        status_column_name = f"{status.title()} At" if status else "Sent to YDM At"
         writer.writerow([
             "Date",
             "Order Code",
@@ -1703,7 +1771,7 @@ class SentToYDMCSVExportView(APIView):
             "Sales Person",
             "Franchise",
             "Created At",
-            "Sent to YDM At",
+            status_column_name,
             "Remarks"
         ])
 
@@ -1714,12 +1782,13 @@ class SentToYDMCSVExportView(APIView):
         total_net = 0
 
         for order in orders:
-            # Get the exact time when it was sent to YDM
-            sent_log = order.change_logs.filter(
-                new_status="Sent to YDM"
+            # Get the exact time when the status change occurred
+            target_status = status if status else "Sent to YDM"
+            status_log = order.change_logs.filter(
+                new_status=target_status
             ).order_by('changed_at').first()
 
-            sent_to_ydm_at = sent_log.changed_at if sent_log else order.created_at
+            status_changed_at = status_log.changed_at if status_log else order.created_at
 
             # Format products string
             products = order.order_products.all()
@@ -1744,9 +1813,21 @@ class SentToYDMCSVExportView(APIView):
                 address_parts.append(order.landmark)
             full_address = ", ".join(address_parts)
 
+            # Determine the date to show in the first column
+            if sent_date:
+                display_date = sent_date
+            elif start_date and end_date:
+                display_date = f"{start_date} to {end_date}"
+            elif start_date:
+                display_date = f"from {start_date}"
+            elif end_date:
+                display_date = f"until {end_date}"
+            else:
+                display_date = status_changed_at.strftime("%Y-%m-%d")
+
             # Write row
             writer.writerow([
-                sent_date,  # Date
+                display_date,  # Date
                 order.order_code,  # Order Code
                 order.full_name,  # Customer Name
                 order.phone_number,  # Contact Number
@@ -1766,7 +1847,8 @@ class SentToYDMCSVExportView(APIView):
                 order.sales_person.get_full_name() if order.sales_person else "",  # Sales Person
                 order.franchise.name if order.franchise else "",  # Franchise
                 order.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Created At
-                sent_to_ydm_at.strftime("%Y-%m-%d %H:%M:%S"),  # Sent to YDM At
+                status_changed_at.strftime(
+                    "%Y-%m-%d %H:%M:%S"),  # Status Changed At
                 order.remarks or ""  # Remarks
             ])
 
