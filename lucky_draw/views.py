@@ -71,10 +71,12 @@ class LuckyDrawSystemListCreateView(generics.ListCreateAPIView):
         )
 
         lucky_draw_system.save()
-        fest_config = FestConfig.objects.get_or_create(
-            lucky_draw_system=lucky_draw_system,
+        fest_config, created = FestConfig.objects.get_or_create(
+            franchise=franchise,
         )
-        fest_config.save()
+        if not created and not fest_config.lucky_draw_system:
+            fest_config.lucky_draw_system = lucky_draw_system
+            fest_config.save()
         serializer = LuckyDrawSystemSerializer(lucky_draw_system)
         return Response(serializer.data)
 
