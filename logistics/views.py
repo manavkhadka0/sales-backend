@@ -1571,22 +1571,21 @@ def generate_order_tracking_statement_optimized(
     )
     statement = []
 
-    # Calculate starting balance - FIXED LOGIC
-    # Get all activity BEFORE the start_date to calculate proper starting balance
-    pre_start_delivered = OrderChangeLog.objects.filter(
-        order__franchise_id=franchise_id,
-        order__logistics="YDM",
-        new_status="Delivered",
-        changed_at__date__lt=start_date,
-    ).values("order_id", "order__total_amount", "order__prepaid_amount").distinct()
-
-    pre_start_delivered_amount = sum(
-        float(log["order__total_amount"] or 0) -
-        float(log["order__prepaid_amount"] or 0)
-        for log in pre_start_delivered
+    # Calculate starting balance - USE SAME LOGIC AS DASHBOARD
+    # Get all delivered orders BEFORE the start_date (same as dashboard logic)
+    pre_start_delivered_orders = Order.objects.filter(
+        franchise_id=franchise_id,
+        logistics="YDM",
+        order_status="Delivered",
+        updated_at__date__lt=start_date,
     )
 
-    pre_start_delivered_count = pre_start_delivered.count()
+    pre_start_delivered_amount = sum(
+        float(o.total_amount or 0) - float(o.prepaid_amount or 0)
+        for o in pre_start_delivered_orders
+    )
+
+    pre_start_delivered_count = pre_start_delivered_orders.count()
     pre_start_delivery_charge = pre_start_delivered_count * 100
 
     pre_start_payments = float(
@@ -1601,11 +1600,24 @@ def generate_order_tracking_statement_optimized(
     running_balance = pre_start_delivered_amount - \
         pre_start_delivery_charge - pre_start_payments
 
+    # For daily calculations, also use Order table instead of logs to avoid duplicates
     for d in sorted(all_dates):
         total_order = len(daily_sent_orders.get(d, []))
         total_amount = sum(daily_sent_orders.get(d, []))
-        delivery_count = len(daily_delivered.get(d, []))
-        cash_in = sum(daily_delivered.get(d, []))
+
+        # Get delivered orders for this date from Order table (same as dashboard)
+        daily_delivered_orders = Order.objects.filter(
+            franchise_id=franchise_id,
+            logistics="YDM",
+            order_status="Delivered",
+            updated_at__date=d,
+        )
+
+        delivery_count = daily_delivered_orders.count()
+        cash_in = sum(
+            float(o.total_amount or 0) - float(o.prepaid_amount or 0)
+            for o in daily_delivered_orders
+        )
         delivery_charge = delivery_count * 100
         payment = daily_payments.get(d, 0)
 
