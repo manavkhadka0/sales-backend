@@ -65,3 +65,9 @@ class FestConfigSerializer(serializers.ModelSerializer):
             "sales_group",
         ]
         read_only_fields = ["id"]
+
+    def update(self, instance, validated_data):
+        # Clear lucky_draw_system if has_lucky_draw=False
+        if validated_data.get("has_lucky_draw") is False:
+            instance.lucky_draw_system = None
+        return super().update(instance, validated_data)

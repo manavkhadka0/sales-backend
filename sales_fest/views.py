@@ -92,16 +92,13 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
         ):
             # Delete all associated sales groups
             instance.sales_group.all().delete()
-        if (
-            serializer.validated_data.get("has_lucky_draw") is False
-            and instance.has_lucky_draw
-        ):
-            # Only if there is a lucky draw system
+        if serializer.validated_data.get("has_lucky_draw") is False:
             if instance.lucky_draw_system is not None:
-                # Clear the relation
                 instance.lucky_draw_system = None
-                instance.save(update_fields=["lucky_draw_system"])
+            # Remove lucky_draw_system from validated_data to prevent serializer overwrite
+            serializer.validated_data.pop("lucky_draw_system", None)
 
+        # Save serializer
         serializer.save(franchise_id=franchise_id)
 
 
