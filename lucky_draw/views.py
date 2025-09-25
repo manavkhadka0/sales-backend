@@ -129,6 +129,11 @@ class LuckyDrawSystemRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPI
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
+        fest_config = FestConfig.objects.get_or_create(
+            franchise=instance.franchise,
+        )
+        fest_config.lucky_draw_system = None
+        fest_config.save()
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
