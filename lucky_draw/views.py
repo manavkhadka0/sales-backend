@@ -74,8 +74,7 @@ class LuckyDrawSystemListCreateView(generics.ListCreateAPIView):
         fest_config = FestConfig.objects.get_or_create(
             lucky_draw_system=lucky_draw_system,
             defaults={
-                "start_date": start_date,
-                "end_date": end_date,
+                "franchise": franchise,
             },
         )
         fest_config.save()
