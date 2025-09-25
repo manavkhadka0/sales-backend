@@ -97,7 +97,7 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
             and instance.has_lucky_draw
         ):
             # Delete all associated lucky draw systems
-            instance.lucky_draw_system.all().delete()
+            instance.lucky_draw_system.delete()
 
         serializer.save(franchise_id=franchise_id)
 
