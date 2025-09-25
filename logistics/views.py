@@ -1605,3 +1605,186 @@ def generate_order_tracking_statement_optimized(
         )
 
     return statement
+
+
+class SentToYDMCSVExportView(APIView):
+    """
+    Export CSV data for orders that were sent to YDM on a specific date.
+    This view looks at OrderChangeLog entries to find when orders were actually sent to YDM.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Get the date parameter
+        sent_date = request.GET.get('sent_date')
+
+        if not sent_date:
+            return Response(
+                {"error": "sent_date parameter is required (format: YYYY-MM-DD)"},
+                status=400
+            )
+
+        try:
+            # Parse the date
+            sent_date_obj = datetime.strptime(sent_date, "%Y-%m-%d").date()
+        except ValueError:
+            return Response(
+                {"error": "Invalid date format. Use YYYY-MM-DD"},
+                status=400
+            )
+
+        # Get franchise_id from user or query parameter
+        franchise_id = request.GET.get('franchise_id')
+        if not franchise_id:
+            # Try to get from user's franchise
+            if hasattr(request.user, 'franchise') and request.user.franchise:
+                franchise_id = request.user.franchise.id
+            else:
+                return Response(
+                    {"error": "franchise_id parameter is required"},
+                    status=400
+                )
+
+        try:
+            franchise_id = int(franchise_id)
+        except ValueError:
+            return Response(
+                {"error": "Invalid franchise_id"},
+                status=400
+            )
+
+        # Find orders that were sent to YDM on the specified date
+        # First, get order IDs from logs
+        sent_logs = OrderChangeLog.objects.filter(
+            order__franchise_id=franchise_id,
+            order__logistics="YDM",
+            new_status="Sent to YDM",
+            changed_at__date=sent_date_obj
+        ).values_list('order_id', flat=True)
+
+        # Get the actual orders
+        orders = Order.objects.filter(
+            id__in=sent_logs
+        ).select_related(
+            'franchise', 'sales_person', 'dash_location'
+        ).prefetch_related(
+            'order_products__product__product'
+        ).order_by('created_at')
+
+        if not orders.exists():
+            return Response(
+                {"error": f"No orders found sent to YDM on {sent_date}"},
+                status=404
+            )
+
+        # Create CSV response
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="sent_to_ydm_{sent_date}.csv"'
+        writer = csv.writer(response)
+
+        # Write CSV header
+        writer.writerow([
+            "Date",
+            "Order Code",
+            "Customer Name",
+            "Contact Number",
+            "Alternative Number",
+            "Address",
+            "City",
+            "Landmark",
+            "Product Details",
+            "Total Amount",
+            "Prepaid Amount",
+            "Collection Amount",
+            "Delivery Charge",
+            "Net Amount",
+            "Payment Method",
+            "Order Status",
+            "Logistics",
+            "Sales Person",
+            "Franchise",
+            "Created At",
+            "Sent to YDM At",
+            "Remarks"
+        ])
+
+        total_orders = 0
+        total_amount = 0
+        total_collection = 0
+        total_delivery_charge = 0
+        total_net = 0
+
+        for order in orders:
+            # Get the exact time when it was sent to YDM
+            sent_log = order.change_logs.filter(
+                new_status="Sent to YDM"
+            ).order_by('changed_at').first()
+
+            sent_to_ydm_at = sent_log.changed_at if sent_log else order.created_at
+
+            # Format products string
+            products = order.order_products.all()
+            products_str = ", ".join([
+                f"{p.quantity}-{p.product.product.name}"
+                for p in products
+            ])
+
+            # Calculate amounts
+            collection_amount = float(
+                order.total_amount or 0) - float(order.prepaid_amount or 0)
+            delivery_charge = 100  # Standard delivery charge
+            net_amount = collection_amount - delivery_charge
+
+            # Build address
+            address_parts = []
+            if order.delivery_address:
+                address_parts.append(order.delivery_address)
+            if order.city:
+                address_parts.append(order.city)
+            if order.landmark:
+                address_parts.append(order.landmark)
+            full_address = ", ".join(address_parts)
+
+            # Write row
+            writer.writerow([
+                sent_date,  # Date
+                order.order_code,  # Order Code
+                order.full_name,  # Customer Name
+                order.phone_number,  # Contact Number
+                order.alternate_phone_number or "",  # Alternative Number
+                order.delivery_address or "",  # Address
+                order.city or "",  # City
+                order.landmark or "",  # Landmark
+                products_str,  # Product Details
+                float(order.total_amount or 0),  # Total Amount
+                float(order.prepaid_amount or 0),  # Prepaid Amount
+                collection_amount,  # Collection Amount
+                delivery_charge,  # Delivery Charge
+                net_amount,  # Net Amount
+                order.payment_method,  # Payment Method
+                order.order_status,  # Order Status
+                order.logistics,  # Logistics
+                order.sales_person.get_full_name() if order.sales_person else "",  # Sales Person
+                order.franchise.name if order.franchise else "",  # Franchise
+                order.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Created At
+                sent_to_ydm_at.strftime("%Y-%m-%d %H:%M:%S"),  # Sent to YDM At
+                order.remarks or ""  # Remarks
+            ])
+
+            # Update totals
+            total_orders += 1
+            total_amount += float(order.total_amount or 0)
+            total_collection += collection_amount
+            total_delivery_charge += delivery_charge
+            total_net += net_amount
+
+        # Add summary row
+        writer.writerow([])  # Empty row
+        writer.writerow(["SUMMARY"])
+        writer.writerow(["Total Orders", total_orders])
+        writer.writerow(["Total Amount", total_amount])
+        writer.writerow(["Total Collection", total_collection])
+        writer.writerow(["Total Delivery Charge", total_delivery_charge])
+        writer.writerow(["Total Net Amount", total_net])
+
+        return response

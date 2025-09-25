@@ -11,6 +11,7 @@ from .views import (
     InvoiceRetrieveUpdateDestroyView,
     OrderCommentListCreateView,
     OrderCommentRetrieveUpdateDestroyView,
+    SentToYDMCSVExportView,
     UpdateOrderStatusView,
     daily_orders_by_franchise,
     get_complete_dashboard_stats,
@@ -85,5 +86,10 @@ urlpatterns = [
         "logistics/franchise/<int:franchise_id>/statement/",
         FranchiseStatementAPIView.as_view(),
         name="franchise_statement_full",
+    ),
+    path(
+        "logistics/export-sent-to-ydm/",
+        SentToYDMCSVExportView.as_view(),
+        name="export-sent-to-ydm",
     ),
 ]
