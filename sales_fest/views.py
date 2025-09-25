@@ -96,8 +96,14 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
             serializer.validated_data.get("has_lucky_draw") is False
             and instance.has_lucky_draw
         ):
-            # Delete all associated lucky draw systems
-            instance.lucky_draw_system.delete()
+            # Store reference before clearing and deleting
+            lucky_draw_system_to_delete = instance.lucky_draw_system
+            # Clear the lucky_draw_system reference before deleting
+            instance.lucky_draw_system = None
+            instance.save()
+            # Delete the lucky draw system if it exists
+            if lucky_draw_system_to_delete:
+                lucky_draw_system_to_delete.delete()
 
         serializer.save(franchise_id=franchise_id)
 
