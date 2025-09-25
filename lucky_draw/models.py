@@ -49,9 +49,7 @@ class LuckyDrawSystem(models.Model):
     updated_at = models.DateField(auto_now=True)
     start_date = models.DateField()
     end_date = models.DateField()
-    uuid_key = models.CharField(
-        max_length=255, unique=True, default="", null=True, blank=True
-    )
+    uuid_key = models.CharField(max_length=255, default="", null=True, blank=True)
 
     def __str__(self):
         return self.name
