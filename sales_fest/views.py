@@ -98,9 +98,12 @@ class FestConfigRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView)
         ):
             # Only if there is a lucky draw system
             if instance.lucky_draw_system:
+                lucky_draw_system_to_delete = instance.lucky_draw_system
                 # Clear the relation
                 instance.lucky_draw_system = None
                 instance.save(update_fields=["lucky_draw_system"])
+                # Delete the old lucky draw system
+                lucky_draw_system_to_delete.delete()
 
         serializer.save(franchise_id=franchise_id)
 
