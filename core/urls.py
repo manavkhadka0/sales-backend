@@ -30,6 +30,8 @@ urlpatterns = (
         path("api/", include("logistics.urls")),
         path("api/", include("lucky_draw.urls")),
         path("api/", include("sales_fest.urls")),
+        path("api/", include("export_data.urls")),
+        path("api/", include("statistic.urls")),
     ]
     + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

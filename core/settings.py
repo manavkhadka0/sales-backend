@@ -53,6 +53,8 @@ INSTALLED_APPS = [
     "logistics",
     "lucky_draw",
     "sales_fest",
+    "export_data",
+    "statistic",
 ]
 
 MIDDLEWARE = [
