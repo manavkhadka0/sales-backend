@@ -5,7 +5,7 @@ from datetime import datetime, time
 
 import openpyxl
 from django.contrib.auth.models import User
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
@@ -391,6 +391,7 @@ class OrderFilter(django_filters.FilterSet):
     is_assigned = django_filters.BooleanFilter(
         method="filter_by_assigned_status", label="Filter by assignment status"
     )
+    is_bulk_order = django_filters.BooleanFilter(method="filter_bulk_orders")
 
     def filter_by_assigned_status(self, queryset, name, value):
         if value is not None:
@@ -399,6 +400,30 @@ class OrderFilter(django_filters.FilterSet):
             # If False, return unassigned orders
             return queryset.filter(assign_orders__isnull=True)
         return queryset
+
+    def filter_bulk_orders(self, queryset, name, value):
+        """Filter for bulk orders (orders with >3 quantity of matching products)"""
+        if value is None or not value:
+            return queryset  # Return all orders if is_bulk_order is False or not set
+
+            # Use default keywords from BulkOrdersView
+            product_keywords = "oil bottle"
+            keywords_list = [kw.strip().lower() for kw in product_keywords.split(",")]
+
+            keyword_filters = Q()
+            for keyword in keywords_list:
+                keyword_filters |= Q(
+                    order_products__product__product__name__icontains=keyword
+                )
+
+            annotated_orders = queryset.annotate(
+                matching_products_qty=Sum(
+                    "order_products__quantity", filter=keyword_filters
+                )
+            )
+
+            # Filter for bulk orders when is_bulk_order=True
+            return annotated_orders.filter(matching_products_qty__gte=3)
 
     class Meta:
         model = Order
@@ -416,6 +441,7 @@ class OrderFilter(django_filters.FilterSet):
             "logistics",
             "franchise",
             "is_assigned",
+            "is_bulk_order",
         ]
 
 
