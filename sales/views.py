@@ -407,23 +407,23 @@ class OrderFilter(django_filters.FilterSet):
             return queryset  # Return all orders if is_bulk_order is False or not set
 
             # Use default keywords from BulkOrdersView
-            product_keywords = "oil bottle"
-            keywords_list = [kw.strip().lower() for kw in product_keywords.split(",")]
+        product_keywords = "oil bottle"
+        keywords_list = [kw.strip().lower() for kw in product_keywords.split(",")]
 
-            keyword_filters = Q()
-            for keyword in keywords_list:
-                keyword_filters |= Q(
-                    order_products__product__product__name__icontains=keyword
-                )
-
-            annotated_orders = queryset.annotate(
-                matching_products_qty=Sum(
-                    "order_products__quantity", filter=keyword_filters
-                )
+        keyword_filters = Q()
+        for keyword in keywords_list:
+            keyword_filters |= Q(
+                order_products__product__product__name__icontains=keyword
             )
 
-            # Filter for bulk orders when is_bulk_order=True
-            return annotated_orders.filter(matching_products_qty__gte=3)
+        annotated_orders = queryset.annotate(
+            matching_products_qty=Sum(
+                "order_products__quantity", filter=keyword_filters
+            )
+        )
+
+        # Filter for bulk orders when is_bulk_order=True
+        return annotated_orders.filter(matching_products_qty__gte=3)
 
     class Meta:
         model = Order
