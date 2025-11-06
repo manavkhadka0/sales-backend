@@ -19,6 +19,9 @@ load_dotenv()
 
 # Reusable function for Dash login
 DASH_BASE_URL = os.getenv("DASH_BASE_URL")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+CLIENT_ID = os.getenv("CLIENT_ID")
+GRANT_TYPE = os.getenv("GRANT_TYPE")
 
 
 class DashListCreateView(ListCreateAPIView):
@@ -46,9 +49,11 @@ class DashListCreateView(ListCreateAPIView):
 
 def dash_login(email, password, dash_obj=None):
     # Use values from dash_obj if provided, else use defaults
-    client_id = dash_obj.client_id
-    client_secret = dash_obj.client_secret
-    grant_type = dash_obj.grant_type
+    client_id = dash_obj.client_id if dash_obj.client_id is not None else CLIENT_ID
+    client_secret = (
+        dash_obj.client_secret if dash_obj.client_secret is not None else CLIENT_SECRET
+    )
+    grant_type = dash_obj.grant_type if dash_obj.grant_type is not None else GRANT_TYPE
     DASH_LOGIN_URL = f"{DASH_BASE_URL}/api/v1/login/client/"
     body = {
         "clientId": client_id,
@@ -102,7 +107,7 @@ class DashLoginView(APIView):
         if not email or not password:
             return Response({"error": "Email and password are required."}, status=400)
         user = request.user if request.user.is_authenticated else None
-        dash = Dash.objects.get(franchise=user.franchise)
+        dash, created = Dash.objects.get_or_create(franchise=user.franchise)
         dash_obj, error = dash_login(email, password, dash_obj=dash)
         if dash_obj:
             serializer = DashSerializer(dash_obj)
