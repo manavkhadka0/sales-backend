@@ -109,7 +109,9 @@ class DashLoginView(APIView):
         if not email or not password:
             return Response({"error": "Email and password are required."}, status=400)
         user = request.user if request.user.is_authenticated else None
-        dash, created = Dash.objects.get_or_create(franchise=user.franchise)
+        dash, created = Dash.objects.get_or_create(
+            franchise=user.franchise, email=email
+        )
         dash_obj, error = dash_login(email, password, dash_obj=dash)
         if dash_obj:
             serializer = DashSerializer(dash_obj)
