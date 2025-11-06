@@ -1,21 +1,24 @@
 import os
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from sales.models import Order, OrderProduct
+from datetime import timedelta
+
 import requests
+from django.utils import timezone
+from dotenv import load_dotenv
+from rest_framework import status
+from rest_framework.generics import ListCreateAPIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from sales.models import Order, OrderProduct
+
 from .models import Dash
 from .serializers import DashLoginSerializer, DashSerializer
-from rest_framework import status
-from datetime import timedelta
-from django.utils import timezone
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.generics import ListCreateAPIView
-from dotenv import load_dotenv
 
 load_dotenv()
 
 # Reusable function for Dash login
-DASH_BASE_URL = os.getenv('DASH_BASE_URL')
+DASH_BASE_URL = os.getenv("DASH_BASE_URL")
 
 
 class DashListCreateView(ListCreateAPIView):
@@ -25,18 +28,20 @@ class DashListCreateView(ListCreateAPIView):
 
     def create(self, request, *args, **kwargs):
         user = request.user
-        if not hasattr(user, 'franchise') or not user.franchise:
+        if not hasattr(user, "franchise") or not user.franchise:
             return Response({"error": "User does not have a franchise."}, status=400)
 
         # Attach user and franchise to the data
         data = request.data.copy()
-        data['franchise'] = user.franchise.id
+        data["franchise"] = user.franchise.id
 
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        return Response(
+            serializer.data, status=status.HTTP_201_CREATED, headers=headers
+        )
 
 
 def dash_login(email, password, dash_obj=None):
@@ -50,7 +55,7 @@ def dash_login(email, password, dash_obj=None):
         "clientSecret": client_secret,
         "grantType": grant_type,
         "email": email,
-        "password": password
+        "password": password,
     }
     try:
         response = requests.post(DASH_LOGIN_URL, json=body)
@@ -59,7 +64,9 @@ def dash_login(email, password, dash_obj=None):
             access_token = data.get("accessToken")
             refresh_token = data.get("refreshToken")
             expires_in = data.get("expiresIn")
-            expires_at = timezone.now() + timedelta(seconds=expires_in) if expires_in else None
+            expires_at = (
+                timezone.now() + timedelta(seconds=expires_in) if expires_in else None
+            )
             dash_defaults = {
                 "password": password,
                 "access_token": access_token,
@@ -70,14 +77,17 @@ def dash_login(email, password, dash_obj=None):
                 "grant_type": grant_type,
             }
             dash_obj_db, created = Dash.objects.update_or_create(
-                email=email,
-                defaults=dash_defaults
+                email=email, defaults=dash_defaults
             )
             return dash_obj_db, None
         elif response.status_code == 422:
             return None, response.json()
         else:
-            return None, {"error": "Failed to login to Dash", "details": response.text, "status": response.status_code}
+            return None, {
+                "error": "Failed to login to Dash",
+                "details": response.text,
+                "status": response.status_code,
+            }
     except requests.RequestException as e:
         return None, {"error": "Failed to login to Dash", "details": str(e)}
 
@@ -107,7 +117,7 @@ class SendOrderToDashByIdView(APIView):
 
     def post(self, request, order_id):
         user = request.user
-        if not hasattr(user, 'franchise') or not user.franchise:
+        if not hasattr(user, "franchise") or not user.franchise:
             return Response({"error": "User does not have a franchise."}, status=400)
         try:
             dash_obj = Dash.objects.get(franchise=user.franchise)
@@ -115,7 +125,9 @@ class SendOrderToDashByIdView(APIView):
             return Response({"error": "Dash credentials not found."}, status=404)
 
         # Check if token is missing or expired
-        if not dash_obj.access_token or (dash_obj.expires_at and dash_obj.expires_at <= timezone.now()):
+        if not dash_obj.access_token or (
+            dash_obj.expires_at and dash_obj.expires_at <= timezone.now()
+        ):
             # Clear expired tokens before relogin
             dash_obj.access_token = None
             dash_obj.refresh_token = None
@@ -124,10 +136,14 @@ class SendOrderToDashByIdView(APIView):
 
             # Relogin to get fresh access token
             dash_obj, error = dash_login(
-                dash_obj.email, dash_obj.password, dash_obj=dash_obj)
+                dash_obj.email, dash_obj.password, dash_obj=dash_obj
+            )
             if not dash_obj:
                 status_code = error.get("status", 400)
-                return Response({"error": "Failed to refresh Dash token", **error}, status=status_code)
+                return Response(
+                    {"error": "Failed to refresh Dash token", **error},
+                    status=status_code,
+                )
 
             # Refresh the dash_obj from database to get the updated access_token
             dash_obj.refresh_from_db()
@@ -137,16 +153,20 @@ class SendOrderToDashByIdView(APIView):
         DASH_API_URL = f"{DASH_BASE_URL}/api/v1/clientOrder/add-order"
         HEADERS = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {access_token}"
+            "Authorization": f"Bearer {access_token}",
         }
 
         try:
             order = Order.objects.get(id=order_id)
         except Order.DoesNotExist:
-            return Response({"error": f"Order with id {order_id} does not exist."}, status=404)
+            return Response(
+                {"error": f"Order with id {order_id} does not exist."}, status=404
+            )
 
         if order.order_status == "Sent to Dash":
-            return Response({"error": "Order has already been sent to Dash."}, status=400)
+            return Response(
+                {"error": "Order has already been sent to Dash."}, status=400
+            )
 
         if order.order_status != "Processing":
             return Response({"error": "Order is not in Processing status."}, status=400)
@@ -160,8 +180,11 @@ class SendOrderToDashByIdView(APIView):
         if order.prepaid_amount:
             product_price = order.total_amount - order.prepaid_amount
 
-        payment_type = "pre-paid" if order.prepaid_amount and (
-            order.total_amount - order.prepaid_amount) == 0 else "cashOnDelivery"
+        payment_type = (
+            "pre-paid"
+            if order.prepaid_amount and (order.total_amount - order.prepaid_amount) == 0
+            else "cashOnDelivery"
+        )
         address_parts = []
         if getattr(order, "delivery_address", None):
             address_parts.append(order.delivery_address)
@@ -174,7 +197,9 @@ class SendOrderToDashByIdView(APIView):
             "receiver_contact": order.phone_number,
             "receiver_alternate_number": order.alternate_phone_number or "",
             "receiver_address": full_address,
-            "receiver_location": order.dash_location.name if order.dash_location else "",
+            "receiver_location": order.dash_location.name
+            if order.dash_location
+            else "",
             "payment_type": payment_type,
             "product_name": product_name,
             "client_note": order.remarks or "",
@@ -186,35 +211,64 @@ class SendOrderToDashByIdView(APIView):
         payload = {"customers": [customer]}
         try:
             dash_response = requests.post(
-                DASH_API_URL, json=payload, headers=HEADERS, timeout=30)
+                DASH_API_URL, json=payload, headers=HEADERS, timeout=30
+            )
             dash_response.raise_for_status()
 
             # Parse the response to get tracking codes
             response_data = dash_response.json()
             tracking_codes = []
-            if response_data.get('data', {}).get('detail'):
+            if response_data.get("data", {}).get("detail"):
                 tracking_codes = [
                     {
-                        'tracking_code': item.get('tracking_code'),
-                        'order_reference_id': item.get('order_reference_id')
+                        "tracking_code": item.get("tracking_code"),
+                        "order_reference_id": item.get("order_reference_id"),
                     }
-                    for item in response_data['data']['detail']
+                    for item in response_data["data"]["detail"]
                 ]
 
                 if tracking_codes:
-                    order.dash_tracking_code = tracking_codes[0]['tracking_code']
+                    order.dash_tracking_code = tracking_codes[0]["tracking_code"]
                     order.save()
 
             order.order_status = "Sent to Dash"
             order.save()
 
-            return Response({
-                "message": "Order sent to Dash successfully.",
-                "tracking_codes": tracking_codes,
-                "dash_response": response_data
-            }, status=200)
+            return Response(
+                {
+                    "message": "Order sent to Dash successfully.",
+                    "tracking_codes": tracking_codes,
+                    "dash_response": response_data,
+                },
+                status=200,
+            )
         except requests.RequestException as e:
-            return Response({
-                "error": "Failed to send order to Dash.",
-                "details": str(e)
-            }, status=500)
+            return Response(
+                {"error": "Failed to send order to Dash.", "details": str(e)},
+                status=500,
+            )
+
+
+class CheckDashLoginStatus(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if not hasattr(user, "franchise") or not user.franchise:
+            return Response({"error": "User does not have a franchise."}, status=400)
+        try:
+            dash_obj = Dash.objects.get(franchise=user.franchise)
+        except Dash.DoesNotExist:
+            return Response({"error": "Dash credentials not found."}, status=404)
+        if not dash_obj.access_token or (
+            dash_obj.expires_at and dash_obj.expires_at <= timezone.now()
+        ):
+            return Response({"error": "Dash token is missing or expired."}, status=400)
+        return Response(
+            {
+                "message": "Dash token is valid.",
+                "email": dash_obj.email,
+                "expires_at": dash_obj.expires_at,
+            },
+            status=200,
+        )
