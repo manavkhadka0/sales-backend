@@ -82,7 +82,9 @@ def dash_login(email, password, dash_obj=None):
                 "grant_type": grant_type,
             }
             dash_obj_db, created = Dash.objects.update_or_create(
-                email=email, defaults=dash_defaults
+                franchise=dash_obj.franchise,
+                email=email,
+                defaults=dash_defaults,
             )
             return dash_obj_db, None
         elif response.status_code == 422:
