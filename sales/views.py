@@ -550,16 +550,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
         elif user.role == "SuperAdmin":
             return Order.objects.filter(factory=user.factory).order_by("-id")
         elif user.role == "Packaging":
-            return Order.objects.filter(
-                franchise=user.franchise,
-                order_status__in=[
-                    "Pending",
-                    "Processing",
-                    "Sent to Dash",
-                    "Sent to YDM",
-                    "Delivered",
-                ],
-            ).order_by("-id")
+            return Order.objects.filter(franchise=user.franchise).order_by("-id")
         elif user.role == "YDM_Rider":
             assigned_order_ids = AssignOrder.objects.filter(user=user).values_list(
                 "order_id", flat=True
