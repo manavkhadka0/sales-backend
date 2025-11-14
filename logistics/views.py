@@ -220,7 +220,7 @@ def get_complete_dashboard_stats(request, franchise_id):
 
         valid_orders = (
             Order.objects.filter(franchise_id=franchise_id, logistics="YDM")
-            .filter(order_status="Delivered")
+            .filter(order_status="Delivered", is_delivery_free=False)
             .count()
         )
 
