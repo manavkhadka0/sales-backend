@@ -808,6 +808,33 @@ class OrderUpdateView(generics.UpdateAPIView):
         logistics = request.data.get("logistics", None)
         order_status = request.data.get("order_status", None)
 
+        # -----------------------------------------
+        # 1️⃣ HANDLE FREE DELIVERY TOGGLE (+/- 100)
+        # -----------------------------------------
+        new_is_delivery_free = request.data.get("is_delivery_free", None)
+
+        if new_is_delivery_free is not None:
+            # Convert "true"/"false" → boolean
+            new_is_delivery_free = str(new_is_delivery_free).lower() in [
+                "true",
+                "1",
+                "yes",
+            ]
+
+            # Toggle ON (False → True)
+            if new_is_delivery_free and not order.is_delivery_free:
+                order.total_amount = order.total_amount - 100
+
+            # Toggle OFF (True → False)
+            if not new_is_delivery_free and order.is_delivery_free:
+                order.total_amount = order.total_amount + 100
+
+            order.is_delivery_free = new_is_delivery_free
+            order.save()
+
+        # -----------------------------------------
+        # 2️⃣ LOGISTICS CHANGE LOGIC
+        # -----------------------------------------
         if logistics:
             order.logistics = logistics
             if logistics == "YDM":
@@ -816,6 +843,9 @@ class OrderUpdateView(generics.UpdateAPIView):
                 order.order_status = "Pending"
             order.save()
 
+        # -----------------------------------------
+        # 3️⃣ ORDER STATUS SHORTCUTS
+        # -----------------------------------------
         if order_status == "Sent to YDM":
             order.order_status = order_status
             order.logistics = "YDM"
@@ -825,16 +855,24 @@ class OrderUpdateView(generics.UpdateAPIView):
             order.logistics = "DASH"
             order.save()
 
+        # -----------------------------------------
+        # 4️⃣ PERFORM DRF NORMAL UPDATE
+        # -----------------------------------------
         response = super().update(request, *args, **kwargs)
         order.refresh_from_db()
 
+        # -----------------------------------------
+        # 5️⃣ ORDER STATUS CHANGE LOG ENTRY
+        # -----------------------------------------
         new_status = order.order_status
         if new_status != previous_status:
             create_order_log(
                 order, previous_status, new_status, user=request.user, comment=comment
             )
 
-        # Handle order cancellation and returns
+        # -----------------------------------------
+        # 6️⃣ HANDLE ORDER CANCELLATION / RETURNS
+        # -----------------------------------------
         if (
             order.order_status
             in [
@@ -845,22 +883,20 @@ class OrderUpdateView(generics.UpdateAPIView):
             ]
             and previous_status != order.order_status
         ):
-            # Restore inventory quantities for each product in the order
             order_products = OrderProduct.objects.filter(order=order).select_related(
                 "product__product"
             )
+
             for order_product in order_products:
                 try:
-                    # Get inventory using the product instance from order_product
                     inventory = Inventory.objects.get(
-                        product__id=order_product.product.product.id,  # Use the product ID
+                        product__id=order_product.product.product.id,
                         franchise=order.franchise,
                     )
                     old_quantity = inventory.quantity
                     inventory.quantity += order_product.quantity
                     inventory.save()
 
-                    # Log the inventory change
                     InventoryChangeLog.objects.create(
                         inventory=inventory,
                         user=request.user,
@@ -1404,6 +1440,25 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                                 {"error": "Invalid order_products format"},
                                 status=status.HTTP_400_BAD_REQUEST,
                             )
+
+            # ----------------------------
+            # 2️⃣ Handle free delivery toggle
+            # ----------------------------
+            if "is_delivery_free" in request.data:
+                new_is_delivery_free = str(
+                    request.data.get("is_delivery_free")
+                ).lower() in ["true", "1", "yes"]
+
+                # Deduct 100 if turned ON
+                if new_is_delivery_free and not instance.is_delivery_free:
+                    instance.total_amount -= 100
+
+                # Add 100 if turned OFF
+                if not new_is_delivery_free and instance.is_delivery_free:
+                    instance.total_amount += 100
+
+                modified_data["is_delivery_free"] = new_is_delivery_free
+                instance.is_delivery_free = new_is_delivery_free
 
             # Only include fields that are actually provided in the request
             fields_to_check = [
