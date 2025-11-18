@@ -82,17 +82,22 @@ def create_pickndrop_order(order, pickndrop):
         message = data.get("message", {})
         if message.get("status") == "success":
             delivery_data = message.get("data", {})
+            tracking_url = delivery_data.get("tracking_url")
+            tracking_code = None
+
+            if tracking_url:
+                tracking_code = tracking_url.rstrip("/").split("/")[-1]
 
             # SAVE LOGISTICS + TRACKING CODE
             order.logistics = "PicknDrop"
-            order.tracking_code = delivery_data.get("vendor_tracking_number")
+            order.tracking_code = tracking_code
             order.order_status = "Sent to PicknDrop"
             order.save(update_fields=["logistics", "tracking_code", "order_status"])
 
             return {
                 "status": "success",
                 "message": message.get("message"),
-                "tracking_code": delivery_data.get("vendor_tracking_number"),
+                "tracking_code": tracking_code,
                 "pickup_order_id": delivery_data.get("orderID"),
                 "tracking_url": delivery_data.get("tracking_url"),
             }
