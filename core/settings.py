@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "sales_fest",
     "export_data",
     "statistic",
+    "pickndrop",
 ]
 
 MIDDLEWARE = [
@@ -186,11 +187,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "https://ends-pcs-professor-spatial.trycloudflare.com",
+    "https://seats-circus-toward-float.trycloudflare.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
-    "https://ends-pcs-professor-spatial.trycloudflare.com",
+    "https://seats-circus-toward-float.trycloudflare.com",
 ]
 
 # Default primary key field type

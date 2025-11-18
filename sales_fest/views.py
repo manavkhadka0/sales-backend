@@ -136,6 +136,8 @@ class SalesGroupStatsView(generics.ListAPIView):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
 
         # Get sales groups

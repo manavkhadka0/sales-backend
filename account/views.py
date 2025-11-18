@@ -7,6 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import CustomUser, Distributor, Factory, Franchise, Logistics
 from .serializers import (
+    ChangePasswordByPhoneNumberSerializer,
     ChangePasswordSerializer,
     CustomUserSerializer,
     DistributorSerializer,
@@ -232,6 +233,21 @@ class ChangePassword(generics.GenericAPIView):
                 {"error": "Old password is incorrect"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        user.set_password(new_password)
+        user.save()
+        return Response(
+            {"message": "Password changed successfully"}, status=status.HTTP_200_OK
+        )
+
+
+class ChangePasswordByPhoneNumber(generics.GenericAPIView):
+    serializer_class = ChangePasswordByPhoneNumberSerializer
+
+    def post(self, request):
+        phone_number = request.data.get("phone_number")
+        new_password = request.data.get("new_password")
+
+        user = CustomUser.objects.get(phone_number=phone_number)
         user.set_password(new_password)
         user.save()
         return Response(

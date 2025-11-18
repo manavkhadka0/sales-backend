@@ -3,6 +3,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
     ChangePassword,
+    ChangePasswordByPhoneNumber,
     DemoUserList,
     DistributorListCreateView,
     FactoryListCreateView,
@@ -52,6 +53,11 @@ urlpatterns = [
         name="franchise-by-distributor",
     ),
     path("change-password/", ChangePassword.as_view(), name="change-password"),
+    path(
+        "forget-password/",
+        ChangePasswordByPhoneNumber.as_view(),
+        name="change-password-by-phone-number",
+    ),
     path("my-franchises/", UserFranchiseListView.as_view(), name="user-franchises"),
     path(
         "my-distributors/", UserDistributorListView.as_view(), name="user-distributors"

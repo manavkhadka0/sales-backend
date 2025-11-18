@@ -1,12 +1,14 @@
 from django.db import models
-from account.models import CustomUser, Franchise
+
+from account.models import Franchise
 
 # Create your models here.
 
 
 class Dash(models.Model):
     franchise = models.ForeignKey(
-        Franchise, on_delete=models.CASCADE, null=True, blank=True)
+        Franchise, on_delete=models.CASCADE, null=True, blank=True
+    )
     email = models.EmailField(max_length=255)
     password = models.CharField(max_length=255)
     client_id = models.IntegerField(null=True, blank=True)

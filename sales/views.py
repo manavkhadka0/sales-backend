@@ -508,7 +508,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 "delivery_type": request.data.get("delivery_type"),
                 "force_order": request.data.get("force_order"),
                 "logistics": request.data.get("logistics"),
-                "dash_location": request.data.get("dash_location"),
+                "location": request.data.get("location"),
                 "order_products": order_products,
             }
 
@@ -610,6 +610,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 "Returned By Customer",
                 "Returned By Dash",
                 "Return Pending",
+                "Returned By PicknDrop",
+                "Returned By YDM",
             ],
         ).exists()
         if not force_order and cancelled_returned_orders:
@@ -620,6 +622,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     "Returned By Customer",
                     "Returned By Dash",
                     "Return Pending",
+                    "Returned By PicknDrop",
+                    "Returned By YDM",
                 ],
             ).first()
             # Check if prepaid_amount is provided and is greater than 0
@@ -662,6 +666,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     "Returned By Dash",
                     "Delivered",
                     "Indrive",
+                    "Returned By PicknDrop",
+                    "Returned By YDM",
                 ]
             )
             if recent_orders.exists():
@@ -880,6 +886,7 @@ class OrderUpdateView(generics.UpdateAPIView):
                 "Returned By Customer",
                 "Returned By Dash",
                 "Returned By YDM",
+                "Returned By PicknDrop",
             ]
             and previous_status != order.order_status
         ):
@@ -1473,7 +1480,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 "total_amount",
                 "promo_code",
                 "remarks",
-                "dash_location",
+                "location",
                 "prepaid_amount",
                 "delivery_type",
                 "created_at",
@@ -1701,6 +1708,7 @@ class InventoryCheckView(generics.GenericAPIView):
 
 class SearchInJSONFieldFilter(DjangoFilterBackend):
     def filter_queryset(self, request, queryset, view):
+        queryset = super().filter_queryset(request, queryset, view)
         search_query = request.query_params.get("search", "").strip().lower()
         if not search_query:
             return queryset
@@ -1719,10 +1727,21 @@ class SearchInJSONFieldFilter(DjangoFilterBackend):
         return filtered_queryset
 
 
+class LocationFilter(django_filters.FilterSet):
+    logistics = django_filters.CharFilter(
+        field_name="logistics", lookup_expr="icontains"
+    )
+
+    class Meta:
+        model = Location
+        fields = ["logistics"]
+
+
 class LocationSearchAPIView(generics.ListAPIView):
     queryset = Location.objects.all()
     serializer_class = LocationSerializer
     filter_backends = [SearchInJSONFieldFilter]
+    filterset_class = LocationFilter
 
 
 class LocationUploadView(APIView):

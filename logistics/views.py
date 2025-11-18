@@ -1744,7 +1744,7 @@ class SentToYDMCSVExportView(APIView):
         # Get the actual orders
         orders = (
             Order.objects.filter(id__in=sent_logs)
-            .select_related("franchise", "sales_person", "dash_location")
+            .select_related("franchise", "sales_person", "location")
             .prefetch_related("order_products__product__product")
             .order_by("created_at")
         )

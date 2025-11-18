@@ -8,7 +8,7 @@ from .models import *
 
 class LocationAdmin(ModelAdmin):
     list_display = ["name", "coverage_areas"]
-    list_filter = ["name", "coverage_areas"]
+    list_filter = ["logistics"]
     search_fields = ["name", "coverage_areas"]
 
 
@@ -22,6 +22,7 @@ class OrderAdmin(ModelAdmin):
         "full_name",
         "date",
         "get_sales_person_name",
+        "franchise__name",
         "product_name",
         "delivery_address",
         "phone_number",

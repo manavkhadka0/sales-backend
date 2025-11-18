@@ -166,13 +166,13 @@ class OrderSerializer(serializers.ModelSerializer):
     order_products = OrderProductSerializer(many=True, required=False)
     promo_code = serializers.CharField(required=False, allow_null=True)
     payment_screenshot = serializers.FileField(required=False, allow_null=True)
-    dash_location = serializers.PrimaryKeyRelatedField(
+    location = serializers.PrimaryKeyRelatedField(
         queryset=Location.objects.all(),
         required=False,
         allow_null=True,
         write_only=True,
     )
-    dash_location_name = serializers.SerializerMethodField(read_only=True)
+    location_name = serializers.SerializerMethodField(read_only=True)
     ydm_rider = serializers.SerializerMethodField(read_only=True)
     ydm_rider_name = serializers.SerializerMethodField(read_only=True)
     comments = serializers.SerializerMethodField(read_only=True)
@@ -191,7 +191,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "phone_number",
             "alternate_phone_number",
             "payment_method",
-            "dash_location",
+            "location",
             "payment_screenshot",
             "order_status",
             "date",
@@ -205,8 +205,8 @@ class OrderSerializer(serializers.ModelSerializer):
             "prepaid_amount",
             "delivery_type",
             "logistics",
-            "dash_location_name",
-            "dash_tracking_code",
+            "location_name",
+            "tracking_code",
             "ydm_rider",
             "ydm_rider_name",
             "comments",
@@ -223,8 +223,8 @@ class OrderSerializer(serializers.ModelSerializer):
         assignment = obj.assign_orders.select_related("user").first()
         return assignment.user.first_name if assignment and assignment.user else None
 
-    def get_dash_location_name(self, obj):
-        return obj.dash_location.name if obj.dash_location else None
+    def get_location_name(self, obj):
+        return obj.location.name if obj.location else None
 
     def get_comments(self, obj):
         latest_comment = obj.comments.order_by("-id").first()
@@ -434,7 +434,7 @@ class SalesPersonStatisticsSerializer(serializers.Serializer):
 class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
-        fields = ["id", "name", "coverage_areas"]
+        fields = ["id", "logistics", "name", "coverage_areas"]
 
 
 class FileUploadSerializer(serializers.Serializer):

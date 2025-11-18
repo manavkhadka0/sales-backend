@@ -6,6 +6,14 @@ from django.db import models
 
 
 class Location(models.Model):
+    LOGISTICS_CHOICES = [
+        ("YDM", "YDM"),
+        ("DASH", "DASH"),
+        ("PicknDrop", "PicknDrop"),
+    ]
+    logistics = models.CharField(
+        max_length=255, choices=LOGISTICS_CHOICES, null=True, blank=True
+    )
     name = models.CharField(max_length=100)
     coverage_areas = models.JSONField(default=list)  # Stores list of strings
 
@@ -200,12 +208,14 @@ class Order(models.Model):
         ("Verified", "Verified"),
         ("Sent to Dash", "Sent to Dash"),
         ("Sent to YDM", "Sent to YDM"),
+        ("Sent to PicknDrop", "Sent to PicknDrop"),
         ("Delivered", "Delivered"),
         ("Indrive", "Indrive"),
         ("Cancelled", "Cancelled"),
         ("Returned By Customer", "Returned By Customer"),
         ("Returned By Dash", "Returned By Dash"),
         ("Returned By YDM", "Returned By YDM"),
+        ("Returned By PicknDrop", "Returned By PicknDrop"),
         ("Return Pending", "Return Pending"),
         ("Out For Delivery", "Out For Delivery"),
         ("Rescheduled", "Rescheduled"),
@@ -217,7 +227,7 @@ class Order(models.Model):
     LOGISTICS_CHOICES = [
         ("YDM", "YDM"),
         ("DASH", "DASH"),
-        ("Pick and Drop", "Pick and Drop"),
+        ("PicknDrop", "PicknDrop"),
         ("NCM", "NCM"),
     ]
     order_code = models.CharField(
@@ -247,7 +257,7 @@ class Order(models.Model):
     sales_person = models.ForeignKey(
         "account.CustomUser", on_delete=models.CASCADE, related_name="orders"
     )
-    dash_location = models.ForeignKey(
+    location = models.ForeignKey(
         "sales.Location",
         on_delete=models.CASCADE,
         related_name="orders",
@@ -290,7 +300,7 @@ class Order(models.Model):
     logistics = models.CharField(
         max_length=255, choices=LOGISTICS_CHOICES, default="YDM", null=True, blank=True
     )
-    dash_tracking_code = models.CharField(max_length=255, blank=True, null=True)
+    tracking_code = models.CharField(max_length=255, blank=True, null=True)
     is_delivery_free = models.BooleanField(default=False)
 
     def __str__(self):

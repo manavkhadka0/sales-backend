@@ -50,11 +50,15 @@ class DashListCreateView(ListCreateAPIView):
 def dash_login(email, password, dash_obj=None):
     # Use values from dash_obj if provided, else use defaults
     client_id = dash_obj.client_id if dash_obj.client_id is not None else CLIENT_ID
+    print("client_id", client_id)
     client_secret = (
         dash_obj.client_secret if dash_obj.client_secret is not None else CLIENT_SECRET
     )
+    print("client_secret", client_secret)
     grant_type = dash_obj.grant_type if dash_obj.grant_type is not None else GRANT_TYPE
+    print("grant_type", grant_type)
     DASH_LOGIN_URL = f"{DASH_BASE_URL}/api/v1/login/client/"
+    print("DASH_LOGIN_URL", DASH_LOGIN_URL)
     body = {
         "clientId": client_id,
         "clientSecret": client_secret,
@@ -62,8 +66,10 @@ def dash_login(email, password, dash_obj=None):
         "email": email,
         "password": password,
     }
+    print("body", body)
     try:
         response = requests.post(DASH_LOGIN_URL, json=body)
+        print("response", response)
         if response.status_code == 200:
             data = response.json().get("data", {})
             access_token = data.get("accessToken")
@@ -106,13 +112,31 @@ class DashLoginView(APIView):
     def post(self, request):
         email = request.data.get("email")
         password = request.data.get("password")
+
         if not email or not password:
             return Response({"error": "Email and password are required."}, status=400)
-        user = request.user if request.user.is_authenticated else None
-        dash, created = Dash.objects.get_or_create(
-            franchise=user.franchise, email=email
-        )
+
+        user = request.user
+        if not user or not hasattr(user, "franchise") or not user.franchise:
+            return Response({"error": "Franchise not found for user."}, status=400)
+
+        # Fetch the franchise's Dash login
+        dash = Dash.objects.filter(franchise=user.franchise).first()
+
+        if dash:
+            # UPDATE EXISTING RECORD
+            dash.email = email
+            dash.password = password
+            dash.save()
+        else:
+            # CREATE NEW RECORD (first time only)
+            dash = Dash.objects.create(
+                franchise=user.franchise, email=email, password=password
+            )
+
+        # Call login with updated dash
         dash_obj, error = dash_login(email, password, dash_obj=dash)
+
         if dash_obj:
             serializer = DashSerializer(dash_obj)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -206,9 +230,7 @@ class SendOrderToDashByIdView(APIView):
             "receiver_contact": order.phone_number,
             "receiver_alternate_number": order.alternate_phone_number or "",
             "receiver_address": full_address,
-            "receiver_location": order.dash_location.name
-            if order.dash_location
-            else "",
+            "receiver_location": order.location.name if order.location else "",
             "payment_type": payment_type,
             "product_name": product_name,
             "client_note": order.remarks or "",
@@ -237,7 +259,7 @@ class SendOrderToDashByIdView(APIView):
                 ]
 
                 if tracking_codes:
-                    order.dash_tracking_code = tracking_codes[0]["tracking_code"]
+                    order.tracking_code = tracking_codes[0]["tracking_code"]
                     order.save()
 
             order.order_status = "Sent to Dash"

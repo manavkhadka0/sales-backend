@@ -256,6 +256,15 @@ class ChangePasswordSerializer(serializers.ModelSerializer):
         fields = ["phone_number", "new_password"]
 
 
+class ChangePasswordByPhoneNumberSerializer(serializers.ModelSerializer):
+    phone_number = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+
+    class Meta:
+        model = CustomUser
+        fields = ["phone_number", "new_password"]
+
+
 class LogisticsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Logistics

@@ -108,7 +108,7 @@ class OrderCSVExportView(generics.GenericAPIView):
                         order.full_name,  # Customer Name
                         order.phone_number,  # Contact Number
                         order.alternate_phone_number or "",  # Alternative Number
-                        order.dash_location.name if order.dash_location else "",
+                        order.location.name if order.location else "",
                         "",
                         full_address,  # Address
                         "",
@@ -140,6 +140,8 @@ class SalesPersonOrderCSVExportView(generics.GenericAPIView):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
 
         # Get date range from query parameters
@@ -311,6 +313,8 @@ class SalesSummaryExportView(APIView):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
 
         # Filter orders in date range
@@ -425,9 +429,7 @@ class SalesSummaryExportView(APIView):
                         order.full_name,
                         order.phone_number,
                         order.alternate_phone_number or "",
-                        order.dash_location.name
-                        if getattr(order, "dash_location", None)
-                        else "",
+                        order.location.name if getattr(order, "location", None) else "",
                         getattr(order, "landmark", ""),
                         full_address,
                         "",
@@ -580,9 +582,7 @@ class PackagingSentToDashSummaryCSVView(APIView):
                     order.full_name,
                     order.phone_number,
                     order.alternate_phone_number or "",
-                    order.dash_location.name
-                    if getattr(order, "dash_location", None)
-                    else "",
+                    order.location.name if getattr(order, "location", None) else "",
                     getattr(order, "landmark", ""),
                     full_address,
                     products_str,
@@ -783,7 +783,7 @@ def export_orders_csv_api(request):
         "distributor",
         "factory",
         "sales_person",
-        "dash_location",
+        "location",
         "promo_code",
     ).prefetch_related("order_products__product__product")
 
@@ -841,6 +841,8 @@ def export_orders_csv_api(request):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
 
         # Initialize summary variables

@@ -37,6 +37,7 @@ class SalesStatisticsView(generics.GenericAPIView):
             "Returned By Dash",
             "Returned By YDM",
             "Return Pending",
+            "Returned By PicknDrop",
         ]
 
         # Calculate yesterday's date
@@ -93,6 +94,14 @@ class SalesStatisticsView(generics.GenericAPIView):
             returned_by_dash_amount=Sum(
                 "total_amount", filter=Q(order_status="Returned By Dash"), default=0
             ),
+            returned_by_pickndrop_count=Count(
+                "id", filter=Q(order_status="Returned By PicknDrop")
+            ),
+            returned_by_pickndrop_amount=Sum(
+                "total_amount",
+                filter=Q(order_status="Returned By PicknDrop"),
+                default=0,
+            ),
             return_pending_count=Count("id", filter=Q(order_status="Return Pending")),
             return_pending_amount=Sum(
                 "total_amount", filter=Q(order_status="Return Pending"), default=0
@@ -113,6 +122,8 @@ class SalesStatisticsView(generics.GenericAPIView):
                 or 0,
                 "returned_by_dash": all_time_stats["returned_by_dash_count"] or 0,
                 "return_pending": all_time_stats["return_pending_count"] or 0,
+                "returned_by_pickndrop": all_time_stats["returned_by_pickndrop_count"]
+                or 0,
             },
             "all_time_sales": float(all_time_stats["all_time_sales"] or 0),
             "all_time_cancelled_sales": float(
@@ -127,6 +138,9 @@ class SalesStatisticsView(generics.GenericAPIView):
                     all_time_stats["returned_by_dash_amount"] or 0
                 ),
                 "return_pending": float(all_time_stats["return_pending_amount"] or 0),
+                "returned_by_pickndrop": float(
+                    all_time_stats["returned_by_pickndrop_amount"] or 0
+                ),
             },
         }
 
@@ -178,6 +192,8 @@ class TopSalespersonView(generics.ListAPIView):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
 
         if user.role == "SuperAdmin":
@@ -270,6 +286,8 @@ class TopSalespersonView(generics.ListAPIView):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
 
         for index, item in enumerate(data):
@@ -356,6 +374,8 @@ class RevenueView(generics.ListAPIView):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
 
         try:
@@ -479,6 +499,8 @@ class RevenueWithCancelledView(generics.ListAPIView):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
 
         try:
@@ -534,6 +556,12 @@ class RevenueWithCancelledView(generics.ListAPIView):
                 ),
                 "return_pending_count": Count(
                     "id", filter=Q(order_status="Return Pending")
+                ),
+                "returned_by_pickndrop_count": Count(
+                    "id", filter=Q(order_status="Returned By PicknDrop")
+                ),
+                "returned_by_ydm_count": Count(
+                    "id", filter=Q(order_status="Returned By YDM")
                 ),
             }
 
@@ -667,6 +695,8 @@ class TopProductsView(generics.ListAPIView):
                 "Returned By Customer",
                 "Returned By Dash",
                 "Return Pending",
+                "Returned By PicknDrop",
+                "Returned By YDM",
             ]
 
             # Base query for order products based on user role
@@ -829,6 +859,8 @@ class DashboardStatsView(generics.GenericAPIView):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
 
         # Base queryset filters based on user role
@@ -1013,6 +1045,8 @@ class RevenueByProductView(generics.GenericAPIView):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
 
         # Filter orders based on user role
@@ -1131,6 +1165,8 @@ class SalesPersonStatisticsView(APIView):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
 
         try:
@@ -1284,6 +1320,8 @@ class SalesPersonRevenueView(generics.GenericAPIView):
             "Returned By Customer",
             "Returned By Dash",
             "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
         ]
         try:
             salesperson = CustomUser.objects.get(phone_number=phone_number)
@@ -1333,6 +1371,12 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                 ),
                 "return_pending_count": Count(
                     "id", filter=Q(order_status="Return Pending")
+                ),
+                "returned_by_pickndrop_count": Count(
+                    "id", filter=Q(order_status="Returned By PicknDrop")
+                ),
+                "returned_by_ydm_count": Count(
+                    "id", filter=Q(order_status="Returned By YDM")
                 ),
             }
 
@@ -1422,6 +1466,8 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                         "returned_by_customer": entry["returned_by_customer_count"],
                         "returned_by_dash": entry["returned_by_dash_count"],
                         "return_pending": entry["return_pending_count"],
+                        "returned_by_pickndrop": entry["returned_by_pickndrop_count"],
+                        "returned_by_ydm": entry["returned_by_ydm_count"],
                     },
                 }
                 for entry in revenue
