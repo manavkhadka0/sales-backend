@@ -64,7 +64,7 @@ class CustomUser(AbstractUser):
     is_deleted = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.username}"
+        return f"{self.first_name} - {self.phone_number}"
 
 
 class Logistics(models.Model):
