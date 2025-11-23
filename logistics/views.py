@@ -331,7 +331,7 @@ def get_complete_dashboard_stats(request, franchise_id):
                     ["Cancelled", "Returned By Customer", "Returned By YDM"]
                 ),
                 "Total Delivery Charge": {
-                    "nos": valid_orders.count(),
+                    "nos": orders.count(),
                     "amount": total_charge,
                 },
                 "Total Pending COD": {
