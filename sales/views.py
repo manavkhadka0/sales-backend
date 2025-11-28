@@ -455,7 +455,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
         rest_filters.SearchFilter,
         rest_filters.OrderingFilter,
     ]
-    search_fields = ["phone_number", "full_name", "order_code"]
+    search_fields = ["phone_number", "full_name", "order_code", "delivery_address"]
     ordering_fields = ["__all__"]
     pagination_class = CustomPagination
     parser_classes = (JSONParser, FormParser, MultiPartParser)
