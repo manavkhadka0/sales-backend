@@ -2,7 +2,6 @@
 import os
 
 import requests
-from dotenv import load_dotenv
 from rest_framework import status
 from rest_framework.generics import ListCreateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -13,8 +12,6 @@ from pickndrop.models import PickNDrop
 from pickndrop.serializers import PickNDropSerializer
 from pickndrop.utils import create_pickndrop_order
 from sales.models import Inventory, Location, Order, OrderProduct
-
-load_dotenv()
 
 
 class PickNDropListCreateView(ListCreateAPIView):
