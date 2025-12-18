@@ -602,60 +602,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
             # Convert string to bool if needed (e.g., from form-data)
             force_order = force_order.lower() in ["true", "1", "yes", "y"]
 
-        # Check if customer has previously cancelled or returned orders
-        cancelled_returned_orders = Order.objects.filter(
-            phone_number=phone_number,
-            order_status__in=[
-                "Cancelled",
-                "Returned By Customer",
-                "Returned By Dash",
-                "Return Pending",
-                "Returned By PicknDrop",
-                "Returned By YDM",
-            ],
-        ).exists()
-        if not force_order and cancelled_returned_orders:
-            recent_order = Order.objects.filter(
-                phone_number=phone_number,
-                order_status__in=[
-                    "Cancelled",
-                    "Returned By Customer",
-                    "Returned By Dash",
-                    "Return Pending",
-                    "Returned By PicknDrop",
-                    "Returned By YDM",
-                ],
-            ).first()
-            # Check if prepaid_amount is provided and is greater than 0
-            if not prepaid_amount or float(prepaid_amount) <= 0:
-                error_details = {
-                    "error": "This customer has previously cancelled or returned orders. Ask For Prepayment before placing a new order or Force Order.",
-                    "status": status.HTTP_403_FORBIDDEN,
-                    "requires_prepayment": True,
-                    "existing_order": {
-                        "order_id": recent_order.id,
-                        "created_at": recent_order.created_at,
-                        "salesperson": {
-                            "name": recent_order.sales_person.get_full_name()
-                            or recent_order.sales_person.first_name,
-                            "phone": recent_order.sales_person.phone_number,
-                        },
-                        "location": {
-                            "franchise": recent_order.franchise.name
-                            if recent_order.franchise
-                            else None,
-                            "distributor": recent_order.distributor.name
-                            if recent_order.distributor
-                            else None,
-                        },
-                        "order_status": recent_order.order_status,
-                    },
-                    "message": "Please ask for prepayment before placing the order for this customer.",
-                }
-                raise serializers.ValidationError(error_details)
-
         if not force_order:
-            # Check for recent orders with same phone number across ALL orders
+            # ---------------------------------------------------------
+            # 1. Check for Active Orders (Last 7 days)
+            # ---------------------------------------------------------
             seven_days_ago = timezone.now() - timezone.timedelta(days=7)
             recent_orders = Order.objects.filter(
                 phone_number=phone_number, created_at__gte=seven_days_ago
@@ -670,9 +620,11 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     "Returned By YDM",
                 ]
             )
+
             if recent_orders.exists():
                 recent_order = recent_orders.first()
                 error_details = {
+                    "key": "Active order found",
                     "error": f"Customer with phone number {phone_number} has an active order of within the last 7 days.",
                     "status": status.HTTP_403_FORBIDDEN,
                     "existing_order": {
@@ -695,12 +647,86 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     },
                 }
                 raise serializers.ValidationError(error_details)
-            # Get all product IDs ordered by this phone number in last 7 days
-            recent_product_ids = set(
-                OrderProduct.objects.filter(order__in=recent_orders).values_list(
-                    "product__product__id", flat=True
-                )
+
+            # ---------------------------------------------------------
+            # 2. Check for Cancelled/Returned Orders (Only if no Active Order)
+            # ---------------------------------------------------------
+            cancelled_statuses = [
+                "Cancelled",
+                "Returned By Customer",
+                "Returned By Dash",
+                "Return Pending",
+                "Returned By PicknDrop",
+                "Returned By YDM",
+            ]
+            delivered_statuses = ["Delivered", "Indrive"]
+
+            previous_orders = Order.objects.filter(phone_number=phone_number)
+            cancelled_orders = previous_orders.filter(
+                order_status__in=cancelled_statuses
             )
+
+            if cancelled_orders.exists():
+                cancelled_count = cancelled_orders.count()
+                delivered_orders_count = previous_orders.filter(
+                    order_status__in=delivered_statuses
+                ).count()
+
+                # Get franchises from cancelled orders
+                cancelled_franchises = set()
+                for order in cancelled_orders:
+                    if order.franchise and order.franchise.name:
+                        cancelled_franchises.add(order.franchise.name)
+
+                franchise_names = (
+                    ", ".join(sorted(list(cancelled_franchises)))
+                    if cancelled_franchises
+                    else "Unknown Franchise"
+                )
+
+                # Prepare details for all cancelled orders
+                existing_orders_data = []
+                for ord_obj in cancelled_orders.order_by("-created_at"):
+                    existing_orders_data.append(
+                        {
+                            "order_id": ord_obj.id,
+                            "created_at": ord_obj.created_at,
+                            "salesperson": {
+                                "name": ord_obj.sales_person.get_full_name()
+                                or ord_obj.sales_person.first_name,
+                                "phone": ord_obj.sales_person.phone_number,
+                            },
+                            "location": {
+                                "franchise": ord_obj.franchise.name
+                                if ord_obj.franchise
+                                else None,
+                                "distributor": ord_obj.distributor.name
+                                if ord_obj.distributor
+                                else None,
+                            },
+                            "order_status": ord_obj.order_status,
+                        }
+                    )
+
+                # Check if prepaid_amount is provided and is greater than 0
+                if not prepaid_amount or float(prepaid_amount) <= 0:
+                    error_details = {
+                        "key": "Cancelled/Returned order found",
+                        "error": f"Customer has {cancelled_count} Cancelled/Returned orders and {delivered_orders_count} Delivered orders.",
+                        "status": status.HTTP_403_FORBIDDEN,
+                        "requires_prepayment": True,
+                        "stats": {
+                            "cancelled_count": cancelled_count,
+                            "delivered_count": delivered_orders_count,
+                            "cancelled_from_franchises": list(cancelled_franchises),
+                        },
+                        "existing_orders": existing_orders_data,
+                        "message": f"Customer has {cancelled_count} cancelled orders (from {franchise_names}) and {delivered_orders_count} delivered orders. Please ask for prepayment or Force Order.",
+                    }
+                    raise serializers.ValidationError(error_details)
+
+            # Use empty set as described in previous logic (Active orders loop logic was redundant/empty)
+            recent_product_ids = set()
         else:
             recent_product_ids = set()
 
