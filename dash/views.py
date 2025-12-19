@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import requests
 from django.utils import timezone
+from dotenv import load_dotenv
 from rest_framework import status
 from rest_framework.generics import ListCreateAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -13,6 +14,8 @@ from sales.models import Order, OrderProduct
 
 from .models import Dash
 from .serializers import DashLoginSerializer, DashSerializer
+
+load_dotenv()
 
 # Reusable function for Dash login
 DASH_BASE_URL = os.getenv("DASH_BASE_URL")
