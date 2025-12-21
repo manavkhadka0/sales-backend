@@ -757,10 +757,17 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
                 # Check if there's enough quantity
                 if inventory_item.quantity < quantity:
-                    raise serializers.ValidationError(
-                        f"Insufficient inventory for product {inventory_item.product.name}. "
-                        f"Available: {inventory_item.quantity}, Requested: {quantity}"
-                    )
+                    error_details = {
+                        "key": "Insufficient inventory",
+                        "error": f"Insufficient inventory for product {inventory_item.product.name}.",
+                        "status": status.HTTP_403_FORBIDDEN,
+                        "inventory_details": {
+                            "product_name": inventory_item.product.name,
+                            "available_quantity": inventory_item.quantity,
+                            "requested_quantity": quantity,
+                        },
+                    }
+                    raise serializers.ValidationError(error_details)
 
             except Inventory.DoesNotExist:
                 raise serializers.ValidationError(
