@@ -608,7 +608,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
             # ---------------------------------------------------------
             seven_days_ago = timezone.now() - timezone.timedelta(days=7)
             recent_orders = Order.objects.filter(
-                phone_number=phone_number, created_at__gte=seven_days_ago
+                Q(phone_number=phone_number) | Q(alternate_phone_number=phone_number),
+                created_at__gte=seven_days_ago,
             ).exclude(
                 order_status__in=[
                     "Cancelled",
