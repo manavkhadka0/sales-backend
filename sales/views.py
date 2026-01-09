@@ -39,6 +39,7 @@ from .models import (
     PromoCode,
 )
 from .serializers import (
+    BulkOrderDateUpdateSerializer,
     FileUploadSerializer,
     InventoryChangeLogSerializer,
     InventoryRequestSerializer,
@@ -2101,3 +2102,97 @@ class InventoryDateSnapshotView(generics.GenericAPIView):
             return "Franchise", str(inventory.franchise)
         else:
             return "Unknown", "No Location Set"
+
+
+class BulkUpdateFranchiseOrderDateView(APIView):
+    """
+    API to bulk update today's franchise orders to a specific date.
+    """
+
+    permission_classes = []  # No permission required as per request
+    serializer_class = BulkOrderDateUpdateSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            target_date = serializer.validated_data["target_date"]
+            franchise_id = serializer.validated_data.get("franchise_id")
+
+            # Determine franchise
+            franchise = None
+            if franchise_id:
+                try:
+                    franchise = franchise_id
+                except Franchise.DoesNotExist:
+                    return Response(
+                        {"error": "Franchise not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            elif request.user.is_authenticated and hasattr(request.user, "franchise"):
+                franchise = request.user.franchise
+            elif request.user.is_authenticated and request.user.role == "Franchise":
+                # Fallback if hasattr fails but role is correct (should be covered by hasattr)
+                try:
+                    franchise = request.user.franchise
+                except Exception:
+                    pass
+
+            if not franchise:
+                return Response(
+                    {
+                        "error": "Franchise identifier required (franchise_id or authenticated franchise user)"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Get today's date
+            today = timezone.now().date()
+
+            # Find orders created today by this franchise
+            orders = Order.objects.filter(franchise=franchise, created_at__date=today)
+
+            orders_count = orders.count()
+
+            if orders_count == 0:
+                return Response(
+                    {
+                        "message": f"No orders found for franchise {franchise.name} created on {today}"
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Update orders
+            # preserving time component of created_at but changing date
+            updated_orders = []
+            for order in orders:
+                # Update date field
+                order.date = target_date
+
+                # Update created_at date part, keeping time part
+                current_time = (
+                    order.created_at.time()
+                    if order.created_at
+                    else timezone.now().time()
+                )
+                # Construct new datetime with target date and old time
+                # We need to make it timezone aware
+                new_dt = datetime.combine(target_date, current_time)
+                if timezone.is_naive(new_dt):
+                    new_dt = timezone.make_aware(new_dt)
+
+                order.created_at = new_dt
+                updated_orders.append(order)
+
+            # Bulk update
+            Order.objects.bulk_update(updated_orders, ["date", "created_at"])
+
+            return Response(
+                {
+                    "message": f"Successfully updated {orders_count} orders to date {target_date}",
+                    "franchise": franchise.name,
+                    "updated_count": orders_count,
+                    "target_date": target_date,
+                },
+                status=status.HTTP_200_OK,
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

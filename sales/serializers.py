@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from account.models import CustomUser
+from account.models import CustomUser, Franchise
 from account.serializers import SmallUserSerializer, UserSmallSerializer
 from logistics.serializers import OrderCommentSerializer
 
@@ -446,3 +446,10 @@ class InventorySnapshotSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     product_name = serializers.CharField()
     quantity = serializers.IntegerField()
+
+
+class BulkOrderDateUpdateSerializer(serializers.Serializer):
+    target_date = serializers.DateField(required=True)
+    franchise_id = serializers.PrimaryKeyRelatedField(
+        queryset=Franchise.objects.all(), required=False, allow_null=True
+    )

@@ -3,6 +3,7 @@ from django.urls import path
 
 from .views import (
     AllProductsListView,
+    BulkUpdateFranchiseOrderDateView,
     CommissionPaymentView,
     CurrentDatabaseModeView,
     DistributorInventoryListView,
@@ -104,5 +105,10 @@ urlpatterns = [
     path("switch-db/", switch_db),
     path(
         "current-database/", CurrentDatabaseModeView.as_view(), name="current-database"
+    ),
+    path(
+        "orders/bulk-update-date/",
+        BulkUpdateFranchiseOrderDateView.as_view(),
+        name="bulk-update-franchise-order-date",
     ),
 ]
