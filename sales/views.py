@@ -539,6 +539,12 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 return Response(error_detail, status=status.HTTP_403_FORBIDDEN)
             # Otherwise, return as 400
             return Response(error_detail, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            # Catch all other exceptions and return the actual error message
+            return Response(
+                {"error": str(e), "detail": "An error occurred during order creation"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     def get_queryset(self):
         user = self.request.user
