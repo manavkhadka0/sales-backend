@@ -271,6 +271,7 @@ class Order(models.Model):
     landmark = models.CharField(max_length=255, blank=True)
     phone_number = models.CharField(max_length=20)
     alternate_phone_number = models.CharField(max_length=20, blank=True)
+    country_code = models.CharField(max_length=10, null=True, blank=True)
     payment_method = models.CharField(max_length=255, choices=PAYMENT_CHOICES)
     payment_screenshot = models.FileField(
         upload_to="payment_screenshots/", blank=True, null=True

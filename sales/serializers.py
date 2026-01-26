@@ -188,6 +188,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "city",
             "delivery_address",
             "landmark",
+            "country_code",
             "phone_number",
             "alternate_phone_number",
             "payment_method",
