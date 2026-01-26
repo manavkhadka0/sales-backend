@@ -510,6 +510,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 "force_order": request.data.get("force_order"),
                 "logistics": request.data.get("logistics"),
                 "location": request.data.get("location"),
+                "country_code": request.data.get("country_code"),
                 "order_products": order_products,
             }
 
@@ -1524,6 +1525,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 "location",
                 "prepaid_amount",
                 "delivery_type",
+                "country_code",
                 "created_at",
                 "updated_at",
             ]
