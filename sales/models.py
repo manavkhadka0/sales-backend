@@ -66,7 +66,7 @@ class Inventory(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.product.name} - {self.quantity}-{self.franchise.name}"
+        return f"{self.product.name} - {self.quantity}-{self.franchise.name if self.franchise else 'unknown'}"
 
 
 class InventoryChangeLog(models.Model):
