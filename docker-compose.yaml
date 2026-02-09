@@ -3,10 +3,9 @@ version: "3.9"
 services:
   web:
     build: .
-    command: gunicorn core.wsgi:application --bind 0.0.0.0:8000
+    command: sh -c "python manage.py collectstatic --noinput && python manage.py migrate && gunicorn core.wsgi:application --bind 0.0.0.0:8000"
     volumes:
-      - yachu_sales_media_data:/app/media   # Persist media uploads
-      - yachu_sales_static_data:/app/static # Persist static files
+      - media_data:/app/media   # Persist media uploads
     networks:
       - coolify
 
@@ -15,5 +14,4 @@ networks:
     external: true
 
 volumes:
-  yachu_sales_media_data:
-  yachu_sales_static_data:
+  media_data:

@@ -28,11 +28,14 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy project code
 COPY . .
 
+# Collect static files
+RUN python manage.py collectstatic --noinput
+
 # Create media and static directories
-RUN mkdir -p /app/media /app/static
+RUN mkdir -p /app/media
 
 # Expose port
 EXPOSE 8000
 
 # Run server
-CMD ["gunicorn", "core.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["sh", "-c", "python manage.py migrate && gunicorn core.wsgi:application --bind 0.0.0.0:8000"]

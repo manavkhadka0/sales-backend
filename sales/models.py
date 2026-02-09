@@ -3,6 +3,8 @@ import uuid
 from django.db import models
 from django.utils import timezone
 
+from core.utils.s3bucket import PublicMediaStorage
+
 # Create your models here.
 
 
@@ -149,7 +151,12 @@ class InventoryRequest(models.Model):
 
 class Product(models.Model):
     name = models.CharField(max_length=255)
-    image = models.FileField(upload_to="products/", blank=True, null=True)
+    image = models.FileField(
+        upload_to="products/",
+        storage=PublicMediaStorage(),
+        blank=True,
+        null=True,
+    )
     description = models.TextField(blank=True)
 
     def __str__(self):
@@ -274,7 +281,10 @@ class Order(models.Model):
     country_code = models.CharField(max_length=10, null=True, blank=True)
     payment_method = models.CharField(max_length=255, choices=PAYMENT_CHOICES)
     payment_screenshot = models.FileField(
-        upload_to="payment_screenshots/", blank=True, null=True
+        upload_to="payment_screenshots/",
+        storage=PublicMediaStorage(),
+        blank=True,
+        null=True,
     )
     order_status = models.CharField(
         max_length=255, choices=ORDER_STATUS_CHOICES, default="Pending"

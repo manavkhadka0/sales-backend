@@ -14,6 +14,10 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+# from dotenv import load_dotenv
+
+# load_dotenv()
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -56,6 +60,7 @@ INSTALLED_APPS = [
     "export_data",
     "statistic",
     "pickndrop",
+    "storages",
 ]
 
 MIDDLEWARE = [
@@ -117,6 +122,18 @@ WSGI_APPLICATION = "core.wsgi.application"
 
 DATABASES = {
     "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "postgres",
+        "USER": "postgres",
+        "PASSWORD": "jWFeA5XqIqx0Apj4WYSNPCa5itfz1eO1PVu6pDYM6P3408zC6WnAem865eIrz6ug",
+        "HOST": "rgg4wkgk8wwoo4c8gk4c444o",
+        "PORT": "5432",
+    }
+}
+
+
+""" DATABASES = {
+    "default": {
         "ENGINE": "django.db.backends.postgresql_psycopg2",
         "NAME": "yachu_sales",
         "USER": "ratish",
@@ -128,7 +145,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "dummy_db.sqlite3",
     },
-}
+} """
 """ DATABASES = {
     'demo': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -252,3 +269,26 @@ TINYMCE_DEFAULT_CONFIG = {
     }""",
     "content_style": "body { font-family:Roboto,Helvetica,Arial,sans-serif; font-size:14px }",
 }
+
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
+AWS_S3_ENDPOINT_URL = "https://sgp1.digitaloceanspaces.com"
+AWS_S3_OBJECT_PARAMETERS = {
+    "CacheControl": "max-age=86400",
+}
+AWS_DEFAULT_ACL = "public-read"
+# Use a custom domain (e.g. CNAME to your Space) for serving media/static.
+# Override via AWS_S3_CUSTOM_DOMAIN in the environment if needed.
+AWS_S3_CUSTOM_DOMAIN = os.getenv("AWS_S3_CUSTOM_DOMAIN")
+AWS_S3_FILE_OVERWRITE = False
+AWS_QUERYSTRING_AUTH = False  # This is important for public access
+AWS_S3_SIGNATURE_VERSION = "s3v4"  # Use the latest signature version
+
+# Static and Media Files Configuration
+STATICFILES_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+DEFAULT_FILE_STORAGE = "core.utils.s3bucket.PublicMediaStorage"
+
+PUBLIC_MEDIA_LOCATION = "public/media"
+# Base media URL served from the custom domain
+MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/"
