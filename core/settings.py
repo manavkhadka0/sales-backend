@@ -109,16 +109,6 @@ WSGI_APPLICATION = "core.wsgi.application"
     }
 } """
 
-""" DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'yachu_sales',
-        'USER': 'ratish',
-        'PASSWORD': 'ratish123',
-        'HOST': 'localhost',
-        'PORT': '',
-    }
-} """
 
 DATABASES = {
     "default": {
