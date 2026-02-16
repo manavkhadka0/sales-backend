@@ -108,12 +108,17 @@ class UserListView(APIView):
         data = request.data.copy()
 
         if not request.user.is_authenticated or request.user.role in (
-            "SuperAdmin",
             "YDM_Rider",
             "YDM_Logistics",
             "YDM_Operator",
         ):
             data["factory"] = None
+            data["distributor"] = None
+            data["franchise"] = None
+            data["is_active"] = False
+        elif request.user.role == "SuperAdmin":
+            # For SuperAdmin, set factory to the logged-in user's factory
+            data["factory"] = request.user.factory.id if request.user.factory else None
             data["distributor"] = None
             data["franchise"] = None
             data["is_active"] = False
@@ -179,6 +184,27 @@ class DistributorListCreateView(generics.ListCreateAPIView):
 class FranchiseListCreateView(generics.ListCreateAPIView):
     queryset = Franchise.objects.all()
     serializer_class = FranchiseSerializer
+
+    def perform_create(self, serializer):
+        # Check if distributor is provided
+        distributor = serializer.validated_data.get("distributor")
+
+        # If no distributor is provided, create one with the same name as the franchise
+        if not distributor:
+            franchise_name = serializer.validated_data.get("name")
+            franchise_short_form = serializer.validated_data.get("short_form", None)
+
+            # Create a new distributor with the franchise name and user's factory
+            distributor = Distributor.objects.create(
+                name=franchise_name,
+                short_form=franchise_short_form,
+                factory=self.request.user.factory,
+            )
+
+            # Set the distributor for the franchise
+            serializer.save(distributor=distributor)
+        else:
+            serializer.save()
 
 
 class YDMFranchiseListCreateView(generics.ListAPIView):

@@ -5,6 +5,7 @@ from datetime import datetime, time
 
 import openpyxl
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.utils import timezone
@@ -161,7 +162,6 @@ class InventoryListCreateView(generics.ListCreateAPIView):
             """Helper method to handle inventory update or creation"""
             filter_kwargs = {f"{owner_type}": owner, "product": product}
             existing_inventory = Inventory.objects.filter(**filter_kwargs).first()
-
             if existing_inventory:
                 # Update existing inventory
                 new_quantity = existing_inventory.quantity + quantity
@@ -197,39 +197,47 @@ class InventoryListCreateView(generics.ListCreateAPIView):
         return update_or_create_inventory(owner, owner_type)
 
 
+class FactoryInventoryFilter(django_filters.FilterSet):
+    status = django_filters.CharFilter(field_name="status", lookup_expr="exact")
+
+    class Meta:
+        model = Inventory
+        fields = ["status"]
+
+
 class FactoryInventoryListView(generics.ListAPIView):
     serializer_class = InventorySerializer
-
-    queryset = Inventory.objects.filter(status="ready_to_dispatch")
+    queryset = Inventory.objects.all()
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = FactoryInventoryFilter
 
     def list(self, request, *args, **kwargs):
         user = self.request.user
-        if user.role == "SuperAdmin":
-            # Get all factories and their inventories
-            factories = Factory.objects.prefetch_related("inventory")
-            inventory_summary = []
-            for factory in factories:
-                inventory_summary.append(
-                    {
-                        "factory": factory.name,
-                        "inventory": [
-                            {
-                                "id": inventory.id,
-                                "product_id": inventory.product.id,
-                                "product": inventory.product.name,
-                                "quantity": inventory.quantity,
-                                "status": inventory.status,
-                            }
-                            for inventory in factory.inventory.all()
-                        ],
-                    }
-                )
-            # Return the summary for SuperAdmin
-            return Response(inventory_summary)
+        if user.factory:
+            # Apply filters to the user's factory inventory
+            inventory_queryset = self.filter_queryset(
+                Inventory.objects.filter(factory=user.factory)
+            )
+            return Response(
+                {
+                    "factory": user.factory.name,
+                    "inventory": [
+                        {
+                            "id": inventory.id,
+                            "product_id": inventory.product.id,
+                            "product": inventory.product.name,
+                            "quantity": inventory.quantity,
+                            "status": inventory.status,
+                        }
+                        for inventory in inventory_queryset
+                    ],
+                }
+            )
 
-        return (
-            Inventory.objects.none()
-        )  # Return an empty queryset for non-SuperAdmin users
+        return Response(
+            {"detail": "User has no assigned factory."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 class DistributorInventoryListView(generics.ListAPIView):
@@ -1153,86 +1161,36 @@ class Inventorylogs(generics.ListAPIView):
     pagination_class = CustomPagination
 
 
+class InventoryRequestFilterSet(django_filters.FilterSet):
+    status = django_filters.CharFilter(field_name="status", lookup_expr="icontains")
+
+    class Meta:
+        model = InventoryRequest
+        fields = {
+            "status": ["icontains"],
+        }
+
+
 class InventoryRequestView(generics.ListCreateAPIView):
-    queryset = InventoryRequest.objects.all()
     serializer_class = InventoryRequestSerializer
+    filter_backends = [DjangoFilterBackend]
+    pagination_class = CustomPagination
+    filterset_class = InventoryRequestFilterSet
 
-    def list(self, request, *args, **kwargs):
+    def get_queryset(self):
         user = self.request.user
-        queryset = self.get_queryset()
-
         if user.role == "SuperAdmin":
-            # SuperAdmin can see requests they receive and requests from others
-            incoming_requests = []
-            franchise_requests = []
-            distributor_requests = []
-
-            for request in queryset:
-                if request.factory == user.factory:
-                    # Requests coming to this factory
-                    incoming_requests.append(InventoryRequestSerializer(request).data)
-                elif request.user.role == "Franchise":
-                    # Requests made by franchises
-                    franchise_requests.append(InventoryRequestSerializer(request).data)
-                elif request.user.role == "Distributor":
-                    # Requests made by distributors
-                    distributor_requests.append(
-                        InventoryRequestSerializer(request).data
-                    )
-
-            return Response(
-                {
-                    "incoming_requests": incoming_requests,
-                    "franchise_requests": franchise_requests,
-                    "distributor_requests": distributor_requests,
-                }
-            )
-
-        elif user.role == "Distributor":
-            # Distributor can see their own requests and requests they receive
-            incoming_requests = []
-            outgoing_requests = []
-
-            for request in queryset:
-                if request.distributor == user.distributor:
-                    # Requests coming to this distributor
-                    incoming_requests.append(InventoryRequestSerializer(request).data)
-                elif request.user.distributor == user.distributor:
-                    # Requests made by this distributor
-                    outgoing_requests.append(InventoryRequestSerializer(request).data)
-
-            return Response(
-                {
-                    "incoming_requests": incoming_requests,
-                    "outgoing_requests": outgoing_requests,
-                }
-            )
-
+            return InventoryRequest.objects.all().order_by("-id")
         elif user.role == "Franchise":
-            # Franchise can see their own requests and requests they receive
-            incoming_requests = []
-            outgoing_requests = []
-
-            for request in queryset:
-                if request.franchise == user.franchise:
-                    # Requests coming to this franchise
-                    incoming_requests.append(InventoryRequestSerializer(request).data)
-                elif request.user.franchise == user.franchise:
-                    # Requests made by this franchise
-                    outgoing_requests.append(InventoryRequestSerializer(request).data)
-
-            return Response(
-                {
-                    "incoming_requests": incoming_requests,
-                    "outgoing_requests": outgoing_requests,
-                }
-            )
-
-        # Return an empty Response for non-authorized users
-        return Response([])
+            return InventoryRequest.objects.filter(
+                franchise=getattr(user, "franchise", None)
+            ).order_by("-id")
+        return InventoryRequest.objects.none()
 
     def perform_create(self, serializer):
-        serializer.save()
+        user = self.request.user
+        factory = getattr(user, "factory", None)
+        serializer.save(user=user, factory=factory)
 
 
 class InventoryRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -1245,16 +1203,92 @@ class InventoryRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
         return self.update(request, *args, partial=partial, **kwargs)
 
     def perform_update(self, serializer):
-        # Update the total_amount and status if provided in the request data
+        instance = serializer.instance
+        old_status = instance.status
+        new_status = self.request.data.get("status")
         total_amount = self.request.data.get("total_amount")
-        status = self.request.data.get("status")
 
         if total_amount is not None:
-            serializer.instance.total_amount = total_amount
-        if status is not None:
-            serializer.instance.status = status
+            instance.total_amount = total_amount
 
-        serializer.save()  # Save the updated instance
+        if new_status == "Accepted" and old_status != "Accepted":
+            with transaction.atomic():
+                # Process items from InventoryRequestItem (Multi-product support)
+                request_items = instance.request_items.all()
+                processed_anything = False
+
+                for item in request_items:
+                    source_inventory = None
+                    if instance.factory:
+                        try:
+                            source_inventory = Inventory.objects.get(
+                                factory=instance.factory,
+                                product=item.product,
+                                status="ready_to_dispatch",
+                            )
+                        except Inventory.DoesNotExist:
+                            raise serializers.ValidationError(
+                                f"Factory inventory not found for product {item.product.name}"
+                            )
+
+                    if source_inventory:
+                        if source_inventory.quantity < item.quantity:
+                            raise serializers.ValidationError(
+                                f"Insufficient quantity in source inventory for {item.product.name}. Available: {source_inventory.quantity}"
+                            )
+
+                        # Deduct from source
+                        old_source_qty = source_inventory.quantity
+                        source_inventory.quantity -= item.quantity
+                        source_inventory.save()
+
+                        InventoryChangeLog.objects.create(
+                            inventory=source_inventory,
+                            user=self.request.user,
+                            old_quantity=old_source_qty,
+                            new_quantity=source_inventory.quantity,
+                            action="update",
+                        )
+
+                    # Destination: Franchise
+                    if instance.franchise:
+                        dest_inventory, created = Inventory.objects.get_or_create(
+                            franchise=instance.franchise,
+                            product=item.product,
+                            status="ready_to_dispatch",
+                            defaults={"quantity": 0},
+                        )
+
+                        old_dest_qty = dest_inventory.quantity
+                        dest_inventory.quantity += item.quantity
+                        dest_inventory.save()
+
+                        InventoryChangeLog.objects.create(
+                            inventory=dest_inventory,
+                            user=self.request.user,
+                            old_quantity=old_dest_qty,
+                            new_quantity=dest_inventory.quantity,
+                            action="update",
+                        )
+                    processed_anything = True
+
+                if not processed_anything:
+                    raise serializers.ValidationError("Request has no products.")
+
+                instance.status = "Accepted"
+                instance.save()
+        else:
+            if new_status is not None:
+                instance.status = new_status
+            instance.save()
+
+
+class AllProductFilterSet(django_filters.FilterSet):
+    status = django_filters.CharFilter(field_name="status", lookup_expr="icontains")
+
+    class Meta:
+        model = Product
+        fields = ["status"]
 
 
 class AllProductsListView(generics.ListCreateAPIView):
@@ -1268,6 +1302,13 @@ class AllProductsListView(generics.ListCreateAPIView):
     search_fields = ["name"]
     ordering_fields = ["name", "id"]
     pagination_class = CustomPagination
+    filterset_class = AllProductFilterSet
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated and user.role == "SuperAdmin":
+            return Product.objects.all()
+        return Product.objects.filter(is_factory_ingredient=False)
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -1655,7 +1696,6 @@ class InventoryCheckView(generics.GenericAPIView):
 
     def get(self, request):
         franchise = request.query_params.get("franchise")
-        distributor = request.query_params.get("distributor")
         user = self.request.user
         critical_threshold = 50
 
@@ -1669,18 +1709,9 @@ class InventoryCheckView(generics.GenericAPIView):
                         inventory_items, critical_threshold
                     )
                     return Response(self._format_inventory_response(low_quantity_items))
-                elif distributor:
-                    inventory_items = self._get_inventory_by_owner(
-                        "distributor", distributor
-                    )
-                    low_quantity_items = self._get_low_quantity_items(
-                        inventory_items, critical_threshold
-                    )
-                    return Response(self._format_inventory_response(low_quantity_items))
 
                 response_data = {
                     "factory": {"low_quantity_items": [], "total_low_items": 0},
-                    "distributors": {},
                     "franchises": {},
                 }
 
@@ -1694,17 +1725,6 @@ class InventoryCheckView(generics.GenericAPIView):
                 response_data["factory"].update(
                     self._format_inventory_response(factory_low_items)
                 )
-
-                # Get distributor inventory
-                for dist in Distributor.objects.filter(factory=user.factory):
-                    dist_inventory = self._get_inventory_by_owner("distributor", dist)
-                    dist_low_items = self._get_low_quantity_items(
-                        dist_inventory, critical_threshold
-                    )
-                    if dist_low_items:
-                        response_data["distributors"][dist.name] = (
-                            self._format_inventory_response(dist_low_items)
-                        )
 
                 # Get franchise inventory
                 for fran in Franchise.objects.filter(distributor__factory=user.factory):
@@ -2204,3 +2224,81 @@ class BulkUpdateFranchiseOrderDateView(APIView):
                 status=status.HTTP_200_OK,
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class FactoryInventoryUsageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        user = request.user
+        if not user.factory:
+            return Response(
+                {
+                    "error": "Only users with an assigned factory can use factory inventory."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        inventory_data = request.data
+        if not isinstance(inventory_data, list):
+            return Response(
+                {"error": "Expected a list of inventory usage details."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            with transaction.atomic():
+                for item in inventory_data:
+                    inventory_id = item.get("inventory_id")
+                    quantity_to_deduct = item.get("quantity")
+
+                    if not inventory_id or quantity_to_deduct is None:
+                        raise ValueError(
+                            "inventory_id and quantity are required for each item."
+                        )
+
+                    try:
+                        quantity_to_deduct = int(quantity_to_deduct)
+                        if quantity_to_deduct <= 0:
+                            raise ValueError("Quantity must be a positive integer.")
+                    except (ValueError, TypeError):
+                        raise ValueError("Invalid quantity format.")
+
+                    try:
+                        inventory_item = Inventory.objects.get(
+                            id=inventory_id, factory=user.factory
+                        )
+                    except Inventory.DoesNotExist:
+                        raise ValueError(
+                            f"Inventory item with ID {inventory_id} not found in your factory."
+                        )
+
+                    if inventory_item.quantity < quantity_to_deduct:
+                        raise ValueError(
+                            f"Insufficient inventory for {inventory_item.product.name}. Available: {inventory_item.quantity}, Requested: {quantity_to_deduct}"
+                        )
+
+                    old_quantity = inventory_item.quantity
+                    inventory_item.quantity -= quantity_to_deduct
+                    inventory_item.save()
+
+                    InventoryChangeLog.objects.create(
+                        inventory=inventory_item,
+                        user=user,
+                        old_quantity=old_quantity,
+                        new_quantity=inventory_item.quantity,
+                        action="update",
+                    )
+
+            return Response(
+                {"message": "Inventory updated successfully."},
+                status=status.HTTP_200_OK,
+            )
+
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response(
+                {"error": f"An unexpected error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

@@ -8,6 +8,7 @@ from .views import (
     CurrentDatabaseModeView,
     DistributorInventoryListView,
     FactoryInventoryListView,
+    FactoryInventoryUsageView,
     FranchiseInventoryListView,
     InventoryChangeLogView,
     InventoryCheckView,
@@ -37,6 +38,11 @@ urlpatterns = [
         "factory-inventory/",
         FactoryInventoryListView.as_view(),
         name="factory-inventory-list",
+    ),
+    path(
+        "factory-inventory-usage/",
+        FactoryInventoryUsageView.as_view(),
+        name="factory-inventory-usage",
     ),
     path(
         "distributor-inventory/",

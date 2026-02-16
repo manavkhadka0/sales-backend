@@ -4,6 +4,8 @@ from .views import (
     BulkOrdersView,
     DashboardStatsView,
     LatestOrdersView,
+    ReportDetailView,
+    ReportView,
     RevenueByProductView,
     RevenueView,
     RevenueWithCancelledView,
@@ -15,6 +17,8 @@ from .views import (
 )
 
 urlpatterns = [
+    path("reports/", ReportView.as_view(), name="reports"),
+    path("reports/<int:pk>/", ReportDetailView.as_view(), name="report-detail"),
     path("latest-orders/", LatestOrdersView.as_view(), name="latest-orders"),
     path("statistics/", SalesStatisticsView.as_view(), name="sales-statistics"),
     path("top-salespersons/", TopSalespersonView.as_view(), name="top-salespersons"),

@@ -4,7 +4,10 @@ from django.db import models
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncMonth, TruncWeek, TruncYear
 from django.utils import timezone
+from django_filters import rest_framework as django_filters
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -16,8 +19,84 @@ from sales.serializers import (
     SalesPersonStatisticsSerializer,
     TopSalespersonSerializer,
 )
+from sales.views import CustomPagination
+
+from .models import Report
+from .serializers import ReportListSerializer, ReportSerializer
+
+
+class ReportFilter(django_filters.FilterSet):
+    franchise = django_filters.CharFilter(
+        field_name="franchise__id", lookup_expr="exact"
+    )
+    start_date = django_filters.DateFilter(method="filter_start_date")
+    end_date = django_filters.DateFilter(method="filter_end_date")
+
+    class Meta:
+        model = Report
+        fields = ["franchise", "start_date", "end_date"]
+
+    def filter_start_date(self, queryset, name, value):
+        if not value:
+            return queryset
+        start_date = timezone.make_aware(datetime.combine(value, datetime.min.time()))
+        return queryset.filter(created_at__gte=start_date)
+
+    def filter_end_date(self, queryset, name, value):
+        if not value:
+            return queryset
+        end_date = timezone.make_aware(datetime.combine(value, datetime.max.time()))
+        return queryset.filter(created_at__lte=end_date)
+
 
 # Create your views here.
+
+
+class ReportView(generics.ListCreateAPIView):
+    queryset = Report.objects.all()
+    serializer_class = ReportSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = CustomPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ReportFilter
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return ReportSerializer
+        return ReportListSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == "SuperAdmin":
+            return Report.objects.all().order_by("-created_at")
+        elif user.role == "Franchise":
+            return Report.objects.filter(franchise=user.franchise).order_by(
+                "-created_at"
+            )
+        return Report.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        now = timezone.localtime(timezone.now())
+
+        if now.hour >= 12:
+            raise ValidationError(
+                {"detail": "Reports can only be created before 12 PM."}
+            )
+
+        if Report.objects.filter(
+            franchise=user.franchise, created_at__date=now.date()
+        ).exists():
+            raise ValidationError(
+                {"detail": "A report for today has already been created."}
+            )
+
+        serializer.save(franchise=user.franchise)
+
+
+class ReportDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Report.objects.all()
+    serializer_class = ReportSerializer
 
 
 class LatestOrdersView(generics.ListAPIView):

@@ -60,7 +60,8 @@ class OrderAdmin(ModelAdmin):
 
 
 class ProductAdmin(ModelAdmin):
-    list_display = ["name", "id"]
+    list_display = ["name", "id", "is_factory_ingredient", "status"]
+    list_editable = ["is_factory_ingredient", "status"]
 
 
 class InventoryAdmin(ModelAdmin):
@@ -72,12 +73,23 @@ class InventoryChangeLogAdmin(ModelAdmin):
     list_filter = ["changed_at"]
 
 
+class InventoryRequestItemInline(TabularInline):
+    model = InventoryRequestItem
+    extra = 1
+
+
+class InventoryRequestAdmin(ModelAdmin):
+    list_display = ["franchise"]
+    list_filter = ["franchise"]
+    inlines = [InventoryRequestItemInline]
+
+
 admin.site.register(Product, ProductAdmin)
 admin.site.register(Order, OrderAdmin)
 admin.site.register(Inventory, InventoryAdmin)
 admin.site.register(Commission, ModelAdmin)
 admin.site.register(InventoryChangeLog, InventoryChangeLogAdmin)
-admin.site.register(InventoryRequest, ModelAdmin)
+admin.site.register(InventoryRequest, InventoryRequestAdmin)
 admin.site.register(PromoCode, ModelAdmin)
 admin.site.register(Location, LocationAdmin)
 

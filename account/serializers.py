@@ -227,6 +227,7 @@ class UserSmallSerializer(serializers.ModelSerializer):
 
 class SmallUserSerializer(serializers.ModelSerializer):
     franchise = serializers.StringRelatedField(read_only=True)
+    factory = serializers.StringRelatedField(read_only=True)
 
     class Meta:
         model = CustomUser
@@ -238,6 +239,7 @@ class SmallUserSerializer(serializers.ModelSerializer):
             "phone_number",
             "role",
             "franchise",
+            "factory",
             "address",
         )
 

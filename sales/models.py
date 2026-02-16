@@ -29,6 +29,8 @@ class Inventory(models.Model):
         ("incoming", "Incoming"),
         ("raw_material", "Raw Material"),
         ("ready_to_dispatch", "Ready to Dispatch"),
+        ("stickers", "Stickers"),
+        ("bottles", "Bottles"),
         ("damaged_returned", "Damaged/Returned"),
     ]
     distributor = models.ForeignKey(
@@ -130,14 +132,12 @@ class InventoryRequest(models.Model):
     factory = models.ForeignKey(
         "account.Factory", on_delete=models.CASCADE, null=True, blank=True
     )
-    distributor = models.ForeignKey(
-        "account.Distributor", on_delete=models.CASCADE, null=True, blank=True
+    franchise = models.ForeignKey(
+        "account.Franchise", on_delete=models.CASCADE, null=True, blank=True
     )
     user = models.ForeignKey(
         "account.CustomUser", on_delete=models.CASCADE, null=True, blank=True
     )
-    product = models.ForeignKey("sales.Product", on_delete=models.CASCADE)
-    quantity = models.PositiveIntegerField(default=0)
     total_amount = models.DecimalField(
         max_digits=10, decimal_places=2, default=0, blank=True, null=True
     )
@@ -146,10 +146,30 @@ class InventoryRequest(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.user.username} - {self.product} - {self.quantity}"
+        return f"{self.user.username if self.user else 'Unknown'} - {self.id}"
+
+
+class InventoryRequestItem(models.Model):
+    inventory_request = models.ForeignKey(
+        InventoryRequest, on_delete=models.CASCADE, related_name="request_items"
+    )
+    product = models.ForeignKey("sales.Product", on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.inventory_request.id} - {self.product.name} - {self.quantity}"
 
 
 class Product(models.Model):
+    STATUS_CHOICES = [
+        ("bottles", "Bottle"),
+        ("stickers", "Sticker"),
+        ("raw_material", "Raw Material"),
+        ("finished_product", "Finished Product"),
+    ]
+    status = models.CharField(
+        max_length=255, choices=STATUS_CHOICES, default="finished_product"
+    )
     name = models.CharField(max_length=255)
     image = models.FileField(
         upload_to="products/",
@@ -158,6 +178,7 @@ class Product(models.Model):
         null=True,
     )
     description = models.TextField(blank=True)
+    is_factory_ingredient = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name

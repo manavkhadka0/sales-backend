@@ -9,6 +9,7 @@ from .models import (
     Inventory,
     InventoryChangeLog,
     InventoryRequest,
+    InventoryRequestItem,
     Location,
     Order,
     OrderProduct,
@@ -318,33 +319,36 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         ]  # Add more fields as needed
 
 
-class InventoryRequestSerializer(serializers.ModelSerializer):
-    product = ProductSerializer(read_only=True)
+class InventoryRequestItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source="product.name")
     product_id = serializers.PrimaryKeyRelatedField(
-        queryset=Product.objects.all(),
-        write_only=True,
-        source="product",
-        required=False,
+        queryset=Product.objects.all(), source="product"
     )
 
-    user = UserSmallSerializer(read_only=True)
+    class Meta:
+        model = InventoryRequestItem
+        fields = ["id", "product_id", "product_name", "quantity"]
+
+
+class InventoryRequestSerializer(serializers.ModelSerializer):
+    request_items = InventoryRequestItemSerializer(many=True, required=False)
+    user = SmallUserSerializer(read_only=True)
+    franchise_name = serializers.ReadOnlyField(source="franchise.name")
 
     class Meta:
         model = InventoryRequest
         fields = [
             "id",
             "user",
-            "product",
-            "product_id",
-            "quantity",
+            "request_items",
             "factory",
-            "distributor",
             "franchise",
             "status",
+            "franchise_name",
             "total_amount",
             "created_at",
         ]
-        read_only_fields = ["total_amount", "user"]
+        read_only_fields = ["total_amount", "user", "factory"]
 
     def validate(self, data):
         user = self.context["request"].user
@@ -353,17 +357,22 @@ class InventoryRequestSerializer(serializers.ModelSerializer):
         if self.instance is not None:
             return data
 
-        factory = data.get("factory")
-        distributor = data.get("distributor")
+        # Get factory from user (automated)
+        factory = getattr(user, "factory", None)
         franchise = data.get("franchise")
+        request_items = data.get("request_items", [])
 
         # Validation for create only
         if not self.instance:
             # Check that at least one destination is specified
-            if not any([factory, distributor, franchise]):
+            if not any([factory, franchise]):
                 raise serializers.ValidationError(
-                    "Must specify at least one destination (factory, distributor, or franchise)"
+                    "Must specify at least one destination (factory or franchise)"
                 )
+
+            # Check if there are items
+            if not request_items:
+                raise serializers.ValidationError("Must specify a list of items")
 
             # Franchise validation
             if user.role == "Franchise":
@@ -372,39 +381,26 @@ class InventoryRequestSerializer(serializers.ModelSerializer):
                         "User is not associated with a franchise"
                     )
 
-            # Distributor validation
-            elif user.role == "Distributor":
-                if not hasattr(user, "distributor"):
-                    raise serializers.ValidationError(
-                        "User is not associated with a distributor"
-                    )
+            elif user.role == "SuperAdmin":
+                pass
 
             else:
                 raise serializers.ValidationError(
                     f"Users with role {user.role} cannot make inventory requests"
                 )
 
-            # Check for existing pending requests for the same product
-            existing_request = InventoryRequest.objects.filter(
-                user=user, product=data["product"], status="Pending"
-            )
-            if factory:
-                existing_request = existing_request.filter(factory=factory)
-            if distributor:
-                existing_request = existing_request.filter(distributor=distributor)
-            if franchise:
-                existing_request = existing_request.filter(franchise=franchise)
-
-            if existing_request.exists():
-                raise serializers.ValidationError(
-                    "You already have a pending request for this product"
-                )
-
         return data
 
     def create(self, validated_data):
-        validated_data["user"] = self.context["request"].user
-        return super().create(validated_data)
+        request_items_data = validated_data.pop("request_items", [])
+        inventory_request = InventoryRequest.objects.create(**validated_data)
+
+        for item_data in request_items_data:
+            InventoryRequestItem.objects.create(
+                inventory_request=inventory_request, **item_data
+            )
+
+        return inventory_request
 
 
 class TopSalespersonSerializer(serializers.ModelSerializer):
