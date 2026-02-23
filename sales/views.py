@@ -2019,10 +2019,9 @@ class LocationUploadView(APIView):
                 area.strip() for area in str(coverage_raw).split(",") if area.strip()
             ]
 
-            location, is_created = Location.objects.get_or_create(name=location_name)
-
-            # Always update logistics field
-            location.logistics = logistics_choice
+            location, is_created = Location.objects.get_or_create(
+                name=location_name, logistics=logistics_choice
+            )
 
             if is_created:
                 location.coverage_areas = coverage_list
