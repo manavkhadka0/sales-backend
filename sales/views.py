@@ -929,45 +929,62 @@ class OrderUpdateView(generics.UpdateAPIView):
         # -----------------------------------------
         # 6️⃣ HANDLE ORDER CANCELLATION / RETURNS
         # -----------------------------------------
-        if (
-            order.order_status
-            in [
-                "Cancelled",
-                "Returned By Customer",
-                "Returned By Dash",
-                "Returned By YDM",
-                "Returned By PicknDrop",
-            ]
-            and previous_status != order.order_status
-        ):
-            order_products = OrderProduct.objects.filter(order=order).select_related(
-                "product__product"
-            )
+        return_statuses = [
+            "Cancelled",
+            "Returned By Customer",
+            "Returned By Dash",
+            "Returned By YDM",
+            "Returned By PicknDrop",
+        ]
 
-            for order_product in order_products:
-                try:
-                    inventory = Inventory.objects.get(
-                        product__id=order_product.product.product.id,
-                        franchise=order.franchise,
-                    )
-                    old_quantity = inventory.quantity
-                    inventory.quantity += order_product.quantity
-                    inventory.save()
+        is_returning = new_status in return_statuses
+        was_returning = previous_status in return_statuses
 
-                    InventoryChangeLog.objects.create(
-                        inventory=inventory,
-                        user=request.user,
-                        old_quantity=old_quantity,
-                        new_quantity=inventory.quantity,
-                        action="order_cancelled",
-                    )
-                except Inventory.DoesNotExist:
-                    return Response(
-                        {
-                            "detail": f"Inventory not found for product {order_product.product.product.name}"
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+        if is_returning != was_returning:
+            with transaction.atomic():
+                if is_returning:
+                    # Moving TO Return/Cancelled -> Increase Stock
+                    for order_product in order.order_products.all():
+                        try:
+                            inv = order_product.product
+                            old_qty = inv.quantity
+                            inv.quantity += order_product.quantity
+                            inv.save()
+
+                            InventoryChangeLog.objects.create(
+                                inventory=inv,
+                                user=request.user,
+                                old_quantity=old_qty,
+                                new_quantity=inv.quantity,
+                                action="order_cancelled",
+                            )
+                        except Exception as e:
+                            print(f"Error restoring inventory: {e}")
+
+                else:
+                    # Moving FROM Return/Cancelled to Any Other Stage -> Decrease Stock
+                    for order_product in order.order_products.all():
+                        try:
+                            inv = order_product.product
+                            old_qty = inv.quantity
+
+                            if inv.quantity < order_product.quantity:
+                                raise Exception(
+                                    f"Insufficient inventory for {inv.product.name} to restore order."
+                                )
+
+                            inv.quantity -= order_product.quantity
+                            inv.save()
+
+                            InventoryChangeLog.objects.create(
+                                inventory=inv,
+                                user=request.user,
+                                old_quantity=old_qty,
+                                new_quantity=inv.quantity,
+                                action="order_created",
+                            )
+                        except Exception as e:
+                            raise e
 
         return response
 
@@ -1610,12 +1627,8 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # If someone tries to update the status, return an error
-            if "order_status" in request.data:
-                return Response(
-                    {"error": "Order status cannot be updated through this endpoint"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            # Status update is now allowed for cancellation and restoration
+            # Removed the block that prevented order_status updates
 
             # Update the instance with only the modified fields
             serializer = self.get_serializer(instance, data=modified_data, partial=True)
@@ -1627,17 +1640,152 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 order, old_status, new_status, user=request.user, comment=comment
             )
 
-            # Handle order products if provided
-            if order_products is not None:
-                # Delete existing order products
-                instance.order_products.all().delete()
-                # Create new order products
-                for product_data in order_products:
-                    OrderProduct.objects.create(
-                        order=instance,
-                        product_id=product_data["product_id"],
-                        quantity=product_data["quantity"],
-                    )
+            # ---------------------------------------------------------
+            # 3️⃣ Handle inventory sync for products and status changes
+            # ---------------------------------------------------------
+            inventoried_statuses = [
+                "Pending",
+                "Processing",
+                "Verified",
+                "Sent to Dash",
+                "Sent to YDM",
+                "Sent to PicknDrop",
+                "Delivered",
+                "Indrive",
+                "Out For Delivery",
+                "Rescheduled",
+            ]
+
+            return_statuses = [
+                "Cancelled",
+                "Returned By Customer",
+                "Returned By Dash",
+                "Returned By YDM",
+                "Returned By PicknDrop",
+            ]
+
+            old_status = instance.order_status
+            new_status = modified_data.get("order_status", old_status)
+
+            was_active = old_status in inventoried_statuses
+            is_active = new_status in inventoried_statuses
+
+            is_returning = new_status in return_statuses
+            was_returning = old_status in return_statuses
+
+            products_updated = order_products is not None
+            status_changed = new_status != old_status
+
+            with transaction.atomic():
+                if products_updated:
+                    # If it was active, restore the OLD products back to stock
+                    if was_active:
+                        for old_op in instance.order_products.all():
+                            try:
+                                inv = old_op.product
+                                old_qty = inv.quantity
+                                inv.quantity += old_op.quantity
+                                inv.save()
+                                InventoryChangeLog.objects.create(
+                                    inventory=inv,
+                                    user=request.user,
+                                    old_quantity=old_qty,
+                                    new_quantity=inv.quantity,
+                                    action="order_cancelled",
+                                )
+                            except Exception as e:
+                                print(f"Error restoring inventory: {e}")
+
+                    # Delete existing products
+                    instance.order_products.all().delete()
+
+                    # Create new products and deduct if NEW status is active
+                    for product_data in order_products:
+                        qty = int(product_data["quantity"])
+                        inv_id = product_data["product_id"]
+
+                        OrderProduct.objects.create(
+                            order=instance, product_id=inv_id, quantity=qty
+                        )
+
+                        if is_active:
+                            try:
+                                # Organizational lookup for inventory (priority: franchise > distributor > factory)
+                                if instance.franchise:
+                                    inv = Inventory.objects.get(
+                                        id=inv_id, franchise=instance.franchise
+                                    )
+                                elif instance.distributor:
+                                    inv = Inventory.objects.get(
+                                        id=inv_id, distributor=instance.distributor
+                                    )
+                                elif instance.factory:
+                                    inv = Inventory.objects.get(
+                                        id=inv_id, factory=instance.factory
+                                    )
+                                else:
+                                    inv = Inventory.objects.get(id=inv_id)
+
+                                old_qty = inv.quantity
+                                inv.quantity -= qty
+                                inv.save()
+                                InventoryChangeLog.objects.create(
+                                    inventory=inv,
+                                    user=request.user,
+                                    old_quantity=old_qty,
+                                    new_quantity=inv.quantity,
+                                    action="order_created",
+                                )
+                            except Inventory.DoesNotExist:
+                                raise Exception(
+                                    f"Inventory ID {inv_id} not found for this organization."
+                                )
+
+                elif status_changed:
+                    # Scenario: Products didn't change, but status moved
+                    if was_active and is_returning:
+                        # Moving from Active -> Return/Cancelled
+                        # Restore CURRENT products to stock
+                        for current_op in instance.order_products.all():
+                            try:
+                                inv = current_op.product
+                                old_qty = inv.quantity
+                                inv.quantity += current_op.quantity
+                                inv.save()
+                                InventoryChangeLog.objects.create(
+                                    inventory=inv,
+                                    user=request.user,
+                                    old_quantity=old_qty,
+                                    new_quantity=inv.quantity,
+                                    action="order_cancelled",
+                                )
+                            except Exception as e:
+                                print(f"Error restoring inventory: {e}")
+
+                    elif was_returning and not is_returning:
+                        # Moving from Return/Cancelled -> Any other stage
+                        # Deduct CURRENT products from stock
+                        for current_op in instance.order_products.all():
+                            try:
+                                inv = current_op.product
+                                old_qty = inv.quantity
+
+                                if inv.quantity < current_op.quantity:
+                                    raise Exception(
+                                        f"Insufficient inventory for {inv.product.name} to restore order."
+                                    )
+
+                                inv.quantity -= current_op.quantity
+                                inv.save()
+                                InventoryChangeLog.objects.create(
+                                    inventory=inv,
+                                    user=request.user,
+                                    old_quantity=old_qty,
+                                    new_quantity=inv.quantity,
+                                    action="order_created",
+                                )
+                            except Exception as e:
+                                raise e
 
             # Update promo code usage if changed and provided
             if (

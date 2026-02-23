@@ -113,14 +113,24 @@ WSGI_APPLICATION = "core.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "postgres",
-        "USER": "postgres",
-        "PASSWORD": "jWFeA5XqIqx0Apj4WYSNPCa5itfz1eO1PVu6pDYM6P3408zC6WnAem865eIrz6ug",
-        "HOST": "rgg4wkgk8wwoo4c8gk4c444o",
-        "PORT": "5432",
+        "NAME": os.getenv("DB_NAME"),
+        "USER": os.getenv("DB_USER"),
+        "PASSWORD": os.getenv("DB_PASSWORD"),
+        "HOST": os.getenv("DB_HOST"),
+        "PORT": os.getenv("DB_PORT"),
     }
 }
 
+""" DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "salesdb", 
+        "USER": "salesuser",  
+        "PASSWORD": "salespass", 
+        "HOST": "localhost",  
+        "PORT": "5432",  
+    }
+} """
 
 """ DATABASES = {
     "default": {
@@ -196,13 +206,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
-    "https://zone-kind-centuries-finding.trycloudflare.com",
+    "https://studying-collection-brilliant-matched.trycloudflare.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
-    "https://zone-kind-centuries-finding.trycloudflare.com",
+    "https://studying-collection-brilliant-matched.trycloudflare.com",
 ]
 
 # Default primary key field type
