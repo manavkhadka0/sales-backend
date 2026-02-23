@@ -1959,9 +1959,12 @@ class LocationUploadView(APIView):
     serializer_class = FileUploadSerializer
 
     def post(self, request):
-        uploaded_file = request.FILES.get("file")
-        if not uploaded_file:
-            return Response({"error": "No file provided"}, status=400)
+        serializer = self.serializer_class(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+
+        uploaded_file = serializer.validated_data.get("file")
+        logistics_choice = serializer.validated_data.get("logistics")
 
         filename = uploaded_file.name.lower()
 
@@ -2017,6 +2020,9 @@ class LocationUploadView(APIView):
             ]
 
             location, is_created = Location.objects.get_or_create(name=location_name)
+
+            # Always update logistics field
+            location.logistics = logistics_choice
 
             if is_created:
                 location.coverage_areas = coverage_list

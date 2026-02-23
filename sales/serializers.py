@@ -436,6 +436,9 @@ class LocationSerializer(serializers.ModelSerializer):
 
 class FileUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
+    logistics = serializers.ChoiceField(
+        choices=Location.LOGISTICS_CHOICES, required=True
+    )
 
 
 class InventorySnapshotSerializer(serializers.Serializer):
