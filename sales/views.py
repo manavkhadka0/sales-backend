@@ -1978,7 +1978,9 @@ class LocationUploadView(APIView):
                 area_idx = headers.index("Coverage Area")
 
                 for row in sheet.iter_rows(min_row=2, values_only=True):
-                    rows.append([row[loc_idx], row[area_idx]])
+                    # Validate row length before indexing to prevent "tuple index out of range"
+                    if len(row) > max(loc_idx, area_idx):
+                        rows.append([row[loc_idx], row[area_idx]])
 
             elif filename.endswith(".csv"):
                 # Read CSV file in-memory
@@ -1991,7 +1993,9 @@ class LocationUploadView(APIView):
                 area_idx = headers.index("Coverage Area")
 
                 for row in reader:
-                    rows.append([row[loc_idx], row[area_idx]])
+                    # Validate row length before indexing to prevent "tuple index out of range"
+                    if len(row) > max(loc_idx, area_idx):
+                        rows.append([row[loc_idx], row[area_idx]])
 
             else:
                 return Response(
