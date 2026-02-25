@@ -9,6 +9,7 @@ from .views import (
     DistributorInventoryListView,
     FactoryInventoryListView,
     FactoryInventoryUsageView,
+    FranchiseHistoricalOrderView,
     FranchiseInventoryListView,
     InventoryChangeLogView,
     InventoryCheckView,
@@ -116,5 +117,10 @@ urlpatterns = [
         "orders/bulk-update-date/",
         BulkUpdateFranchiseOrderDateView.as_view(),
         name="bulk-update-franchise-order-date",
+    ),
+    path(
+        "orders/historical/",
+        FranchiseHistoricalOrderView.as_view(),
+        name="franchise-historical-orders",
     ),
 ]

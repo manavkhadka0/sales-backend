@@ -1,9 +1,10 @@
 import csv
 import io
 import json
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 import openpyxl
+from dateutil.relativedelta import relativedelta
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Q, Sum
@@ -2459,3 +2460,101 @@ class FactoryInventoryUsageView(APIView):
                 {"error": f"An unexpected error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class HistoricalOrderPagination(PageNumberPagination):
+    page_size_query_param = "page_size"
+    max_page_size = 1000
+
+    def paginate_queryset(self, queryset, request, view=None):
+        count = queryset.count()
+
+        # Change this to 12 when you want exactly 12 pages for the 12 salespersons
+        target_pages = 12
+
+        # The math to divide exactly into 'target_pages' pages is:
+        # (count + target_pages - 1) // target_pages
+        self.page_size = max(1, (count + target_pages - 1) // target_pages)
+
+        return super().paginate_queryset(queryset, request, view)
+
+
+class FranchiseHistoricalOrderView(generics.ListAPIView):
+    """
+    API to view order data of the franchise from 6 months ago.
+    The data window rotates every day (sequential week rotation).
+    Returns up to 250 records by default. Configurable via page_size.
+    Restricted to specific roles.
+    """
+
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = HistoricalOrderPagination
+
+    def get_queryset(self):
+        user = self.request.user
+
+        # Restriction: Role must be Franchise or SalesPerson
+        if user.role not in ["Franchise", "SalesPerson"]:
+            return Order.objects.none()
+
+        franchise = getattr(user, "franchise", None)
+        # Calculation logic:
+        # 1. Target month is 6 months ago from today
+        today = timezone.now().date()
+        six_months_ago = today - relativedelta(months=6)
+        target_month_start = six_months_ago.replace(day=1)
+
+        # 2. Sequential week rotation logic:
+        # If today is day X of the month, which "week" offset do we use?
+        # rotation_index cycles 0, 1, 2, 3, 4 every day (modulo 5)
+        rotation_index = (today.day - 1) % 5
+
+        # Each "rotation" shows a 7-day window starting from target_month_start
+        start_date = target_month_start + timedelta(days=rotation_index * 7)
+        end_date = start_date + timedelta(days=6)
+
+        return Order.objects.filter(
+            franchise=franchise, date__range=[start_date, end_date]
+        ).order_by("-id")
+
+    def list(self, request, *args, **kwargs):
+        user = self.request.user
+
+        # Preliminary check for role
+        if user.role not in ["Franchise", "SalesPerson"]:
+            return Response(
+                {"error": "Access restricted to Franchise and SalesPerson only."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        franchise = getattr(user, "franchise", None)
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+
+        # Include range info in response for better UX
+        today = timezone.now().date()
+        six_months_ago = today - relativedelta(months=6)
+        target_month_start = six_months_ago.replace(day=1)
+        rotation_index = (today.day - 1) % 5
+        start_date = target_month_start + timedelta(days=rotation_index * 7)
+        end_date = start_date + timedelta(days=6)
+
+        rotation_data = {
+            "rotation_index": rotation_index,
+            "franchise": franchise.name if franchise else None,
+            "date_range": {"start": start_date, "end": end_date},
+        }
+
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response = self.get_paginated_response(serializer.data)
+            # Add custom fields to paginated response
+            response.data.update(rotation_data)
+            return response
+
+        serializer = self.get_serializer(queryset, many=True)
+        response_data = {"count": queryset.count()}
+        response_data.update(rotation_data)
+        response_data["results"] = serializer.data
+        return Response(response_data)

@@ -206,13 +206,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
-    "https://studying-collection-brilliant-matched.trycloudflare.com",
+    "https://progressive-saint-terry-fitted.trycloudflare.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
-    "https://studying-collection-brilliant-matched.trycloudflare.com",
+    "https://progressive-saint-terry-fitted.trycloudflare.com",
 ]
 
 # Default primary key field type
