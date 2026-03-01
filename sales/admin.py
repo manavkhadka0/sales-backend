@@ -40,6 +40,7 @@ class OrderAdmin(ModelAdmin):
         "franchise__name",
     ]
     search_fields = ["full_name", "phone_number", "sales_person__first_name"]
+    autocomplete_fields = ["sales_person"]
 
     def get_sales_person_name(self, obj):
         return obj.sales_person.first_name
