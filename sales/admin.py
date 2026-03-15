@@ -95,3 +95,4 @@ admin.site.register(PromoCode, ModelAdmin)
 admin.site.register(Location, LocationAdmin)
 
 admin.site.register(DatabaseMode, ModelAdmin)
+admin.site.register(HistoricalDataConfig, ModelAdmin)

@@ -374,3 +374,27 @@ class DatabaseMode(models.Model):
     @classmethod
     def get_solo(cls):
         return cls.objects.get_or_create(pk=1)[0]
+
+
+class HistoricalDataConfig(models.Model):
+    months_ago = models.PositiveIntegerField(
+        default=6, help_text="Number of months to go back from today."
+    )
+    base_week = models.PositiveIntegerField(
+        default=1,
+        help_text="The starting week for rotation (1st of month = base_week).",
+    )
+
+    def save(self, *args, **kwargs):
+        self.pk = 1  # Enforce singleton
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        pass  # Prevent deletion
+
+    @classmethod
+    def get_solo(cls):
+        return cls.objects.get_or_create(pk=1, defaults={"months_ago": 6, "base_week": 1})[0]
+
+    def __str__(self):
+        return f"Historical Config: {self.months_ago} months ago, Base Week {self.base_week}"

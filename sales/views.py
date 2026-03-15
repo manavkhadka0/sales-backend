@@ -31,6 +31,7 @@ from logistics.utils import create_order_log
 from .models import (
     Commission,
     DatabaseMode,
+    HistoricalDataConfig,
     Inventory,
     InventoryChangeLog,
     InventoryRequest,
@@ -2499,19 +2500,21 @@ class FranchiseHistoricalOrderView(generics.ListAPIView):
             return Order.objects.none()
 
         franchise = getattr(user, "franchise", None)
-        # Calculation logic:
-        # 1. Target month is 6 months ago from today
+        
+        # Calculation logic using HistoricalDataConfig
+        config = HistoricalDataConfig.get_solo()
         today = timezone.now().date()
-        six_months_ago = today - relativedelta(months=6)
-        target_month_start = six_months_ago.replace(day=1)
+        
+        # 1. Target month is months_ago from today
+        target_month_start = (today - relativedelta(months=config.months_ago)).replace(day=1)
 
         # 2. Sequential week rotation logic:
-        # If today is day X of the month, which "week" offset do we use?
-        # rotation_index cycles 0, 1, 2, 3, 4 every day (modulo 5)
-        rotation_index = (today.day - 1) % 5
+        # We start from base_week and increment by 1 for every day past the 1st of the month
+        rotation_offset = today.day - 1
+        effective_week = config.base_week + rotation_offset
 
-        # Each "rotation" shows a 7-day window starting from target_month_start
-        start_date = target_month_start + timedelta(days=rotation_index * 7)
+        # Each rotation shows a 7-day window
+        start_date = target_month_start + timedelta(days=(effective_week - 1) * 7)
         end_date = start_date + timedelta(days=6)
 
         return Order.objects.filter(
@@ -2533,15 +2536,18 @@ class FranchiseHistoricalOrderView(generics.ListAPIView):
         page = self.paginate_queryset(queryset)
 
         # Include range info in response for better UX
+        config = HistoricalDataConfig.get_solo()
         today = timezone.now().date()
-        six_months_ago = today - relativedelta(months=6)
-        target_month_start = six_months_ago.replace(day=1)
-        rotation_index = (today.day - 1) % 5
-        start_date = target_month_start + timedelta(days=rotation_index * 7)
+        target_month_start = (today - relativedelta(months=config.months_ago)).replace(day=1)
+        
+        rotation_offset = today.day - 1
+        effective_week = config.base_week + rotation_offset
+        
+        start_date = target_month_start + timedelta(days=(effective_week - 1) * 7)
         end_date = start_date + timedelta(days=6)
 
         rotation_data = {
-            "rotation_index": rotation_index,
+            "rotation_index": effective_week,
             "franchise": franchise.name if franchise else None,
             "date_range": {"start": start_date, "end": end_date},
         }
