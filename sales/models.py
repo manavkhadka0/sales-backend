@@ -384,8 +384,20 @@ class HistoricalDataConfig(models.Model):
         default=1,
         help_text="The starting week for rotation (1st of month = base_week).",
     )
+    base_date = models.DateField(
+        default=timezone.localdate,
+        help_text="The date when base_week was last set (used for daily increment).",
+    )
 
     def save(self, *args, **kwargs):
+        if self.pk:
+            try:
+                old_obj = HistoricalDataConfig.objects.get(pk=self.pk)
+                # If base_week is manually changed, reset base_date to today
+                if old_obj.base_week != self.base_week:
+                    self.base_date = timezone.localdate()
+            except HistoricalDataConfig.DoesNotExist:
+                pass
         self.pk = 1  # Enforce singleton
         super().save(*args, **kwargs)
 
@@ -394,7 +406,9 @@ class HistoricalDataConfig(models.Model):
 
     @classmethod
     def get_solo(cls):
-        return cls.objects.get_or_create(pk=1, defaults={"months_ago": 6, "base_week": 1})[0]
+        return cls.objects.get_or_create(
+            pk=1, defaults={"months_ago": 6, "base_week": 1, "base_date": timezone.localdate()}
+        )[0]
 
     def __str__(self):
-        return f"Historical Config: {self.months_ago} months ago, Base Week {self.base_week}"
+        return f"Historical Config: {self.months_ago} months ago, Base Week {self.base_week} from {self.base_date}"

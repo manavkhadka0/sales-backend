@@ -2508,9 +2508,9 @@ class FranchiseHistoricalOrderView(generics.ListAPIView):
         # 1. Target month is months_ago from today
         target_month_start = (today - relativedelta(months=config.months_ago)).replace(day=1)
 
-        # 2. Sequential week rotation logic:
-        # We start from base_week and increment by 1 for every day past the 1st of the month
-        rotation_offset = today.day - 1
+        # 2. Sequential daily rotation logic:
+        # Each day past base_date increments effective_week by 1
+        rotation_offset = (today - config.base_date).days
         effective_week = config.base_week + rotation_offset
 
         # Each rotation shows a 7-day window
@@ -2540,7 +2540,7 @@ class FranchiseHistoricalOrderView(generics.ListAPIView):
         today = timezone.now().date()
         target_month_start = (today - relativedelta(months=config.months_ago)).replace(day=1)
         
-        rotation_offset = today.day - 1
+        rotation_offset = (today - config.base_date).days
         effective_week = config.base_week + rotation_offset
         
         start_date = target_month_start + timedelta(days=(effective_week - 1) * 7)
