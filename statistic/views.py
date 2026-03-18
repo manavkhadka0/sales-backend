@@ -31,22 +31,24 @@ class ReportFilter(django_filters.FilterSet):
     )
     start_date = django_filters.DateFilter(method="filter_start_date")
     end_date = django_filters.DateFilter(method="filter_end_date")
+    date = django_filters.DateFilter(field_name="date", lookup_expr="exact")
 
     class Meta:
         model = Report
-        fields = ["franchise", "start_date", "end_date"]
+        fields = ["franchise", "start_date", "end_date", "date"]
+
 
     def filter_start_date(self, queryset, name, value):
         if not value:
             return queryset
         start_date = timezone.make_aware(datetime.combine(value, datetime.min.time()))
-        return queryset.filter(created_at__gte=start_date)
+        return queryset.filter(date__gte=start_date)
 
     def filter_end_date(self, queryset, name, value):
         if not value:
             return queryset
         end_date = timezone.make_aware(datetime.combine(value, datetime.max.time()))
-        return queryset.filter(created_at__lte=end_date)
+        return queryset.filter(date__lte=end_date)
 
 
 # Create your views here.
@@ -73,6 +75,10 @@ class ReportView(generics.ListCreateAPIView):
             return Report.objects.filter(franchise=user.franchise).order_by(
                 "-created_at"
             )
+        elif user.role == "SalesPerson":
+            return Report.objects.filter(reported_by=user).order_by(
+                "-created_at"
+            )
         return Report.objects.none()
 
     def perform_create(self, serializer):
@@ -85,13 +91,14 @@ class ReportView(generics.ListCreateAPIView):
             )
 
         if Report.objects.filter(
-            franchise=user.franchise, created_at__date=now.date()
+            franchise=user.franchise, reported_by=user, created_at__date=now.date()
         ).exists():
             raise ValidationError(
                 {"detail": "A report for today has already been created."}
             )
 
-        serializer.save(franchise=user.franchise)
+        report_date = now.date() - timezone.timedelta(days=1)
+        serializer.save(franchise=user.franchise, reported_by=user, date=report_date)
 
 
 class ReportDetailView(generics.RetrieveUpdateDestroyAPIView):

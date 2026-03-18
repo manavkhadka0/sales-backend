@@ -7,6 +7,9 @@ class Report(models.Model):
     franchise = models.ForeignKey(
         "account.Franchise", on_delete=models.CASCADE, null=True, blank=True
     )
+    reported_by=models.ForeignKey(
+        "account.CustomUser", on_delete=models.CASCADE, null=True, blank=True
+    )
     message_received_fb = models.IntegerField(null=True, blank=True)
     message_received_whatsapp = models.IntegerField(null=True, blank=True)
     message_received_tiktok = models.IntegerField(null=True, blank=True)
@@ -19,6 +22,7 @@ class Report(models.Model):
     customer_to_package = models.IntegerField(null=True, blank=True)
     free_treatment = models.IntegerField(null=True, blank=True)
     remarks = models.TextField(null=True, blank=True)
+    date=models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
