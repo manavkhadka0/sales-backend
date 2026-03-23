@@ -2574,16 +2574,38 @@ class OrderExportCSVView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        franchise = serializer.validated_data["franchise"]
-        print("franchise",franchise)
+        franchise_input = serializer.validated_data["franchise"]
         location_name = serializer.validated_data["location_name"]
-        print("location_name",location_name)
+
+        # Try to get franchise by ID or Name
+        franchise = None
+        if franchise_input.isdigit():
+            franchise = Franchise.objects.filter(id=int(franchise_input)).first()
+        
+        if not franchise:
+            franchise = Franchise.objects.filter(name__icontains=franchise_input).first()
+
+        if not franchise:
+            return Response(
+                {"detail": f"Franchise '{franchise_input}' not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        excluded_statuses = [
+            "Cancelled",
+            "Returned By Customer",
+            "Returned By Dash",
+            "Return Pending",
+            "Returned By PicknDrop",
+            "Returned By YDM",
+        ]
 
         # Filter orders
         orders = Order.objects.filter(
             franchise=franchise,
             total_amount__lte=3650,
-            order_status="Delivered",
+        ).exclude(
+            order_status__in=excluded_statuses
         ).filter(
             Q(location__name__icontains=location_name) | Q(delivery_address__icontains=location_name)
         ).select_related("location")
