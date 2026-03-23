@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Q, Sum
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.decorators import method_decorator
@@ -49,6 +49,7 @@ from .serializers import (
     InventorySerializer,
     InventorySnapshotSerializer,
     LocationSerializer,
+    OrderExportSerializer,
     OrderSerializer,
     ProductSerializer,
     PromoCodeSerializer,
@@ -2564,3 +2565,51 @@ class FranchiseHistoricalOrderView(generics.ListAPIView):
         response_data.update(rotation_data)
         response_data["results"] = serializer.data
         return Response(response_data)
+
+class OrderExportCSVView(generics.GenericAPIView):
+    queryset = Order.objects.all()
+    serializer_class = OrderExportSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        franchise = serializer.validated_data["franchise"]
+        print("franchise",franchise)
+        location_name = serializer.validated_data["location_name"]
+        print("location_name",location_name)
+
+        # Filter orders
+        orders = Order.objects.filter(
+            franchise=franchise,
+            total_amount__lte=3650,
+            order_status="Delivered",
+        ).filter(
+            Q(location__name__icontains=location_name) | Q(delivery_address__icontains=location_name)
+        ).select_related("location")
+
+        if not orders.exists():
+            return Response(
+                {"detail": "No orders found matching the criteria."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Create the HttpResponse object with the appropriate CSV header.
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = (
+            f'attachment; filename="orders_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+        )
+
+        writer = csv.writer(response)
+        writer.writerow(["Name", "Phone Number", "Location"])
+
+        for order in orders:
+            writer.writerow(
+                [
+                    order.full_name,
+                    order.phone_number,
+                    order.delivery_address if order.delivery_address else "N/A",
+                ]
+            )
+
+        return response

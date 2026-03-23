@@ -453,3 +453,10 @@ class BulkOrderDateUpdateSerializer(serializers.Serializer):
     franchise_id = serializers.PrimaryKeyRelatedField(
         queryset=Franchise.objects.all(), required=False, allow_null=True
     )
+
+
+class OrderExportSerializer(serializers.Serializer):
+    franchise = serializers.PrimaryKeyRelatedField(
+        queryset=Franchise.objects.all(), required=True
+    )
+    location_name = serializers.CharField(required=True)

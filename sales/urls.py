@@ -22,6 +22,7 @@ from .views import (
     LocationSearchAPIView,
     LocationUploadView,
     OrderDetailUpdateView,
+    OrderExportCSVView,
     OrderListCreateView,
     OrderUpdateView,
     ProductListView,
@@ -122,5 +123,10 @@ urlpatterns = [
         "orders/historical/",
         FranchiseHistoricalOrderView.as_view(),
         name="franchise-historical-orders",
+    ),
+    path(
+        "export-orders-csv/",
+        OrderExportCSVView.as_view(),
+        name="export-orders-csv",
     ),
 ]
