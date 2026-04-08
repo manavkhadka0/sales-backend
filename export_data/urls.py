@@ -5,6 +5,7 @@ from .views import (
     PackagingSentToDashSummaryCSVView,
     SalesPersonOrderCSVExportView,
     SalesSummaryExportView,
+    YachuFullOrderExportView,
     export_orders_csv_api,
 )
 
@@ -22,4 +23,9 @@ urlpatterns = [
         name="packaging-summary",
     ),
     path("export-summary/", export_orders_csv_api, name="export-summary"),
+    path(
+        "yachu-full-export/",
+        YachuFullOrderExportView.as_view(),
+        name="yachu-full-export",
+    ),
 ]

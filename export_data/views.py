@@ -1,8 +1,9 @@
 import csv
+import io
 from datetime import datetime
 
-from django.db.models import Count, Q, Sum
-from django.http import HttpResponse
+from django.db.models import Count, Prefetch, Q, Sum
+from django.http import HttpResponse, StreamingHttpResponse
 from django.utils import timezone
 from django_filters import rest_framework as django_filters
 from rest_framework import generics, status
@@ -60,29 +61,27 @@ class OrderCSVExportView(generics.GenericAPIView):
             writer = csv.writer(response)
 
             # Write header row with new fields
-            writer.writerow(
-                [
-                    "Customer Name",
-                    "Contact Number",
-                    "Alternative Number",
-                    "Location",
-                    "Customer Landmark",
-                    "Address",
-                    "Customer Order ID",
-                    "Product Name",
-                    "Product Price",
-                    "Payment Type",
-                    "Client Note",
-                ]
-            )
+            writer.writerow([
+                "Customer Name",
+                "Contact Number",
+                "Alternative Number",
+                "Location",
+                "Customer Landmark",
+                "Address",
+                "Customer Order ID",
+                "Product Name",
+                "Product Price",
+                "Payment Type",
+                "Client Note",
+            ])
 
             # Write data rows
             for order in orders:
                 # Format products string as requested
                 products = OrderProduct.objects.filter(order=order)
-                products_str = ",".join(
-                    [f"{p.quantity}-{p.product.product.name}" for p in products]
-                )
+                products_str = ",".join([
+                    f"{p.quantity}-{p.product.product.name}" for p in products
+                ])
 
                 # Calculate product price
                 product_price = order.total_amount
@@ -103,21 +102,19 @@ class OrderCSVExportView(generics.GenericAPIView):
                     address_parts.append(order.city)
                 full_address = ", ".join(address_parts)
 
-                writer.writerow(
-                    [
-                        order.full_name,  # Customer Name
-                        order.phone_number,  # Contact Number
-                        order.alternate_phone_number or "",  # Alternative Number
-                        order.location.name if order.location else "",
-                        "",
-                        full_address,  # Address
-                        "",
-                        products_str,  # Product Name
-                        product_price,  # Product Price
-                        payment_type,  # Payment Type
-                        order.remarks or "",  # Client Note
-                    ]
-                )
+                writer.writerow([
+                    order.full_name,  # Customer Name
+                    order.phone_number,  # Contact Number
+                    order.alternate_phone_number or "",  # Alternative Number
+                    order.location.name if order.location else "",
+                    "",
+                    full_address,  # Address
+                    "",
+                    products_str,  # Product Name
+                    product_price,  # Product Price
+                    payment_type,  # Payment Type
+                    order.remarks or "",  # Client Note
+                ])
 
             # After successful export, update all processed orders to "Sent to Dash"
             orders.update(order_status="Sent to Dash")
@@ -195,20 +192,18 @@ class SalesPersonOrderCSVExportView(generics.GenericAPIView):
             writer = csv.writer(response)
 
             # Write header row with new fields
-            writer.writerow(
-                [
-                    "Date",
-                    "Customer Name",
-                    "Contact Number",
-                    "Alternative Number",
-                    "Address",
-                    "Product Name",
-                    "Product Price",
-                    "Payment Type",
-                    "Order Status",
-                    "Remarks",
-                ]
-            )
+            writer.writerow([
+                "Date",
+                "Customer Name",
+                "Contact Number",
+                "Alternative Number",
+                "Address",
+                "Product Name",
+                "Product Price",
+                "Payment Type",
+                "Order Status",
+                "Remarks",
+            ])
 
             # Initialize summary variables
             total_orders = 0
@@ -222,9 +217,9 @@ class SalesPersonOrderCSVExportView(generics.GenericAPIView):
             for order in orders:
                 # Format products string as requested
                 products = OrderProduct.objects.filter(order=order)
-                products_str = ",".join(
-                    [f"{p.quantity}-{p.product.product.name}" for p in products]
-                )
+                products_str = ",".join([
+                    f"{p.quantity}-{p.product.product.name}" for p in products
+                ])
 
                 # Calculate product price
                 product_price = order.total_amount
@@ -241,24 +236,22 @@ class SalesPersonOrderCSVExportView(generics.GenericAPIView):
                     total_cancelled_orders += 1
                     total_cancelled_amount += product_price
 
-                writer.writerow(
-                    [
-                        order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                        order.full_name,  # Customer Name
-                        order.phone_number,  # Contact Number
-                        order.alternate_phone_number or "",  # Alternative Number
-                        order.delivery_address,  # Address
-                        products_str,  # Product Name
-                        # Product Price
-                        f"{product_price}",
-                        order.payment_method
-                        +
-                        # Payment Type
-                        (f" ({order.prepaid_amount})" if order.prepaid_amount else ""),
-                        order.order_status,
-                        order.remarks or "",  # Client Note
-                    ]
-                )
+                writer.writerow([
+                    order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    order.full_name,  # Customer Name
+                    order.phone_number,  # Contact Number
+                    order.alternate_phone_number or "",  # Alternative Number
+                    order.delivery_address,  # Address
+                    products_str,  # Product Name
+                    # Product Price
+                    f"{product_price}",
+                    order.payment_method
+                    +
+                    # Payment Type
+                    (f" ({order.prepaid_amount})" if order.prepaid_amount else ""),
+                    order.order_status,
+                    order.remarks or "",  # Client Note
+                ])
 
             # Add summary statistics
             writer.writerow([])  # Empty row for spacing
@@ -351,9 +344,8 @@ class SalesSummaryExportView(APIView):
 
         # Product-wise sales (non-cancelled)
         product_sales = (
-            OrderProduct.objects.filter(
-                order__in=orders.exclude(order_status__in=cancelled_statuses)
-            )
+            OrderProduct.objects
+            .filter(order__in=orders.exclude(order_status__in=cancelled_statuses))
             .values("product__product__id", "product__product__name")
             .annotate(quantity_sold=Sum("quantity"))
             .order_by("-quantity_sold")
@@ -361,9 +353,8 @@ class SalesSummaryExportView(APIView):
 
         # Product-wise cancelled sales
         cancelled_product_sales = (
-            OrderProduct.objects.filter(
-                order__in=orders.filter(order_status__in=cancelled_statuses)
-            )
+            OrderProduct.objects
+            .filter(order__in=orders.filter(order_status__in=cancelled_statuses))
             .values("product__product__id", "product__product__name")
             .annotate(quantity_cancelled=Sum("quantity"))
             .order_by("-quantity_cancelled")
@@ -378,37 +369,35 @@ class SalesSummaryExportView(APIView):
 
             writer.writerow(["SALES SUMMARY REPORT"])
             writer.writerow([f"Date Range: {start_date} to {end_date}"])
-            writer.writerow(
-                [f"Generated On: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"]
-            )
+            writer.writerow([
+                f"Generated On: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            ])
             writer.writerow([])
 
             # Report Title and Date Range
             # 1. Write Order Data Table
             writer.writerow(["ORDER DETAILS"])
-            writer.writerow(
-                [
-                    "Date",
-                    "Customer Name",
-                    "Contact Number",
-                    "Alternative Number",
-                    "Location",
-                    "Customer Landmark",
-                    "Address",
-                    "Customer Order ID",
-                    "Product Name",
-                    "Product Price",
-                    "Payment Type",
-                    "Order Status",
-                    "Client Note",
-                ]
-            )
+            writer.writerow([
+                "Date",
+                "Customer Name",
+                "Contact Number",
+                "Alternative Number",
+                "Location",
+                "Customer Landmark",
+                "Address",
+                "Customer Order ID",
+                "Product Name",
+                "Product Price",
+                "Payment Type",
+                "Order Status",
+                "Client Note",
+            ])
 
             for order in orders:
                 products = OrderProduct.objects.filter(order=order)
-                products_str = ", ".join(
-                    [f"{p.quantity}-{p.product.product.name}" for p in products]
-                )
+                products_str = ", ".join([
+                    f"{p.quantity}-{p.product.product.name}" for p in products
+                ])
                 product_price = order.total_amount
                 payment_type = (
                     "pre-paid"
@@ -423,23 +412,21 @@ class SalesSummaryExportView(APIView):
                     address_parts.append(order.city)
                 full_address = ", ".join(address_parts)
 
-                writer.writerow(
-                    [
-                        order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                        order.full_name,
-                        order.phone_number,
-                        order.alternate_phone_number or "",
-                        order.location.name if getattr(order, "location", None) else "",
-                        getattr(order, "landmark", ""),
-                        full_address,
-                        "",
-                        products_str,
-                        product_price,
-                        payment_type,
-                        order.order_status,
-                        order.remarks or "",
-                    ]
-                )
+                writer.writerow([
+                    order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    order.full_name,
+                    order.phone_number,
+                    order.alternate_phone_number or "",
+                    order.location.name if getattr(order, "location", None) else "",
+                    getattr(order, "landmark", ""),
+                    full_address,
+                    "",
+                    products_str,
+                    product_price,
+                    payment_type,
+                    order.order_status,
+                    order.remarks or "",
+                ])
 
             # 2. Blank row before summary
             writer.writerow([])
@@ -518,7 +505,8 @@ class PackagingSentToDashSummaryCSVView(APIView):
         total_orders = orders.count()
 
         product_sales = (
-            OrderProduct.objects.filter(order__in=orders)
+            OrderProduct.objects
+            .filter(order__in=orders)
             .values("product__product__name")
             .annotate(quantity_sold=Sum("quantity"))
             .order_by("-quantity_sold")
@@ -540,28 +528,26 @@ class PackagingSentToDashSummaryCSVView(APIView):
 
         # 1. Write Order Data Table
         writer.writerow(["ORDER DETAILS"])
-        writer.writerow(
-            [
-                "Date",
-                "Customer Name",
-                "Contact Number",
-                "Alternative Number",
-                "Location",
-                "Customer Landmark",
-                "Address",
-                "Product Name",
-                "Product Price",
-                "Payment Type",
-                "Order Status",
-                "Dash Delivery Charge",
-            ]
-        )
+        writer.writerow([
+            "Date",
+            "Customer Name",
+            "Contact Number",
+            "Alternative Number",
+            "Location",
+            "Customer Landmark",
+            "Address",
+            "Product Name",
+            "Product Price",
+            "Payment Type",
+            "Order Status",
+            "Dash Delivery Charge",
+        ])
 
         for order in orders:
             products = OrderProduct.objects.filter(order=order)
-            products_str = ", ".join(
-                [f"{p.quantity}-{p.product.product.name}" for p in products]
-            )
+            products_str = ", ".join([
+                f"{p.quantity}-{p.product.product.name}" for p in products
+            ])
             product_price = order.total_amount
             payment_type = (
                 "pre-paid"
@@ -576,22 +562,20 @@ class PackagingSentToDashSummaryCSVView(APIView):
                 address_parts.append(order.city)
             full_address = ", ".join(address_parts)
 
-            writer.writerow(
-                [
-                    order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                    order.full_name,
-                    order.phone_number,
-                    order.alternate_phone_number or "",
-                    order.location.name if getattr(order, "location", None) else "",
-                    getattr(order, "landmark", ""),
-                    full_address,
-                    products_str,
-                    product_price,
-                    payment_type,
-                    order.order_status,
-                    "",
-                ]
-            )
+            writer.writerow([
+                order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                order.full_name,
+                order.phone_number,
+                order.alternate_phone_number or "",
+                order.location.name if getattr(order, "location", None) else "",
+                getattr(order, "landmark", ""),
+                full_address,
+                products_str,
+                product_price,
+                payment_type,
+                order.order_status,
+                "",
+            ])
 
         # 2. Blank row before summary
         writer.writerow([])
@@ -724,7 +708,8 @@ class CustomOrderFilter(django_filters.FilterSet):
         if value:
             # Get customers with multiple orders
             customers_with_multiple = (
-                Order.objects.values("phone_number")
+                Order.objects
+                .values("phone_number")
                 .annotate(order_count=Count("id"))
                 .filter(order_count__gt=1)
                 .values_list("phone_number", flat=True)
@@ -820,20 +805,18 @@ def export_orders_csv_api(request):
         writer = csv.writer(response)
 
         # Write header row matching the existing format
-        writer.writerow(
-            [
-                "Date",
-                "Customer Name",
-                "Contact Number",
-                "Alternative Number",
-                "Address",
-                "Product Name",
-                "Product Price",
-                "Payment Type",
-                "Order Status",
-                "Remarks",
-            ]
-        )
+        writer.writerow([
+            "Date",
+            "Customer Name",
+            "Contact Number",
+            "Alternative Number",
+            "Address",
+            "Product Name",
+            "Product Price",
+            "Payment Type",
+            "Order Status",
+            "Remarks",
+        ])
 
         # Excluded statuses for summary calculations
         excluded_statuses = [
@@ -857,9 +840,9 @@ def export_orders_csv_api(request):
         for order in filtered_orders:
             # Format products string as in existing code
             products = OrderProduct.objects.filter(order=order)
-            products_str = ",".join(
-                [f"{p.quantity}-{p.product.product.name}" for p in products]
-            )
+            products_str = ",".join([
+                f"{p.quantity}-{p.product.product.name}" for p in products
+            ])
 
             # Calculate product price
             product_price = float(order.total_amount)
@@ -881,20 +864,18 @@ def export_orders_csv_api(request):
             if order.prepaid_amount:
                 payment_type += f" ({order.prepaid_amount})"
 
-            writer.writerow(
-                [
-                    order.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Date
-                    order.full_name,  # Customer Name
-                    order.phone_number,  # Contact Number
-                    order.alternate_phone_number or "",  # Alternative Number
-                    order.delivery_address,  # Address
-                    products_str,  # Product Name
-                    f"{product_price}",  # Product Price
-                    payment_type,  # Payment Type
-                    order.order_status,  # Order Status
-                    order.remarks or "",  # Remarks
-                ]
-            )
+            writer.writerow([
+                order.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Date
+                order.full_name,  # Customer Name
+                order.phone_number,  # Contact Number
+                order.alternate_phone_number or "",  # Alternative Number
+                order.delivery_address,  # Address
+                products_str,  # Product Name
+                f"{product_price}",  # Product Price
+                payment_type,  # Payment Type
+                order.order_status,  # Order Status
+                order.remarks or "",  # Remarks
+            ])
 
         # Add summary statistics at the end
         writer.writerow([])  # Empty row for spacing
@@ -920,3 +901,154 @@ def export_orders_csv_api(request):
             {"error": f"Failed to export orders: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+class YachuFullOrderExportView(APIView):
+    """
+    Streams a full-data CSV of ALL orders where factory name contains "yachu".
+
+    Each order occupies one row. Every unique product name gets its own
+    column showing the quantity ordered (0 if not in that order).
+
+    No filters are applied — the entire orders dataset for Yachu is exported.
+    Uses StreamingHttpResponse + a Python generator so the whole result set
+    is never held in memory at once — safe for 37 000+ rows.
+    """
+
+    # ---------- helpers ----------
+
+    @staticmethod
+    def _echo_row(writer_buffer, writer, row):
+        """Write one CSV row and return the accumulated bytes, then reset."""
+        writer.writerow(row)
+        data = writer_buffer.getvalue()
+        writer_buffer.truncate(0)
+        writer_buffer.seek(0)
+        return data
+
+    # ---------- main ----------
+
+    def get(self, request):
+        base_qs = (
+            Order.objects
+            .filter(factory__name__icontains="yachu")
+            .select_related(
+                "franchise",
+                "sales_person",
+                "factory",
+            )
+            .prefetch_related(
+                Prefetch(
+                    "order_products",
+                    queryset=OrderProduct.objects.select_related("product__product"),
+                )
+            )
+            .order_by("id")
+        )
+
+        if not base_qs.exists():
+            return Response(
+                {"error": "No Yachu orders found."},
+                status=404,
+            )
+
+        # -- PASS 1: collect all distinct product names (sorted) --------------
+        # We do this in a single aggregation query — fast and light.
+        product_names_qs = (
+            OrderProduct.objects
+            .filter(order__in=base_qs.values("id"))
+            .values_list("product__product__name", flat=True)
+            .distinct()
+            .order_by("product__product__name")
+        )
+        product_names = list(product_names_qs)  # e.g. ["500ml Oil", "1L Oil", ...]
+
+        # -- PASS 2: stream rows via generator --------------------------------
+        filename = f"yachu_orders_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
+
+        response = StreamingHttpResponse(
+            self._generate_rows(base_qs, product_names),
+            content_type="text/csv; charset=utf-8-sig",  # utf-8-sig adds BOM for Excel
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    # ---------- generator ---------------------------------------------------
+
+    def _generate_rows(self, queryset, product_names):
+        """
+        Generator that yields CSV-encoded bytes one row at a time.
+        Uses a StringIO / csv.writer pair so we never build the whole
+        file in memory.
+        """
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+
+        # -- header row -------------------------------------------------------
+        fixed_headers = [
+            "Franchise Name",
+            "Sales Person",
+            "Date",
+            "Order Code",
+            "Full Name",
+            "Delivery Type",
+            "City",
+            "Delivery Address",
+            "Landmark",
+            "Phone Number",
+            "Alternate Phone Number",
+            "Payment Method",
+            "Prepaid Amount",
+            "Total Amount",
+            "Logistics",
+            "Order Status",
+            "Remarks",
+        ]
+        yield self._echo_row(buf, writer, fixed_headers + product_names)
+
+        # -- data rows --------------------------------------------------------
+        # iterate() avoids a massive queryset cache; chunk_size keeps memory low
+        for order in queryset.iterator(chunk_size=500):
+            # Build product qty map for this order
+            product_qty: dict[str, int] = {}
+            for op in order.order_products.all():
+                try:
+                    name = op.product.product.name
+                    product_qty[name] = product_qty.get(name, 0) + op.quantity
+                except AttributeError:
+                    pass
+
+            # Resolve FK display values safely
+            franchise_name = (
+                order.franchise.name if order.franchise_id and order.franchise else ""
+            )
+            sales_person_name = (
+                f"{order.sales_person.first_name} {order.sales_person.last_name}".strip()
+                if order.sales_person_id
+                else ""
+            )
+
+            fixed_values = [
+                franchise_name,
+                sales_person_name,
+                order.date.strftime("%Y-%m-%d") if order.date else "",
+                order.order_code or "",
+                order.full_name or "",
+                order.delivery_type or "",
+                order.city or "",
+                order.delivery_address or "",
+                order.landmark or "",
+                order.phone_number or "",
+                order.alternate_phone_number or "",
+                order.payment_method or "",
+                float(order.prepaid_amount) if order.prepaid_amount else 0,
+                float(order.total_amount) if order.total_amount else 0,
+                order.logistics or "",
+                order.order_status or "",
+                order.remarks or "",
+            ]
+
+            # One column per product — 0 if the product wasn't in this order
+            product_values = [product_qty.get(name, 0) for name in product_names]
+
+            yield self._echo_row(buf, writer, fixed_values + product_values)
