@@ -989,7 +989,6 @@ class YachuFullOrderExportView(APIView):
             "Franchise Name",
             "Sales Person",
             "Date",
-            "Order Code",
             "Full Name",
             "Delivery Type",
             "City",
@@ -1031,8 +1030,9 @@ class YachuFullOrderExportView(APIView):
             fixed_values = [
                 franchise_name,
                 sales_person_name,
-                order.date.strftime("%Y-%m-%d") if order.date else "",
-                order.order_code or "",
+                order.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                if order.created_at
+                else "",
                 order.full_name or "",
                 order.delivery_type or "",
                 order.city or "",
