@@ -936,6 +936,7 @@ class YachuFullOrderExportView(APIView):
                 "franchise",
                 "sales_person",
                 "factory",
+                "location",
             )
             .prefetch_related(
                 Prefetch(
@@ -993,15 +994,13 @@ class YachuFullOrderExportView(APIView):
             "Delivery Type",
             "City",
             "Delivery Address",
-            "Landmark",
+            "Logistic Location",
             "Phone Number",
-            "Alternate Phone Number",
             "Payment Method",
             "Prepaid Amount",
             "Total Amount",
             "Logistics",
             "Order Status",
-            "Remarks",
         ]
         yield self._echo_row(buf, writer, fixed_headers + product_names)
 
@@ -1037,15 +1036,13 @@ class YachuFullOrderExportView(APIView):
                 order.delivery_type or "",
                 order.city or "",
                 order.delivery_address or "",
-                order.landmark or "",
+                order.location.name if order.location else "",
                 order.phone_number or "",
-                order.alternate_phone_number or "",
                 order.payment_method or "",
                 float(order.prepaid_amount) if order.prepaid_amount else 0,
                 float(order.total_amount) if order.total_amount else 0,
                 order.logistics or "",
                 order.order_status or "",
-                order.remarks or "",
             ]
 
             # One column per product — 0 if the product wasn't in this order
