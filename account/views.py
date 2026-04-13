@@ -38,7 +38,8 @@ class UserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         # Check if phone number belongs to another user
         if (
             new_phone
-            and CustomUser.objects.filter(phone_number=new_phone)
+            and CustomUser.objects
+            .filter(phone_number=new_phone)
             .exclude(id=instance.id)
             .exists()
         ):
@@ -119,8 +120,15 @@ class UserListView(APIView):
         elif request.user.role == "SuperAdmin":
             # For SuperAdmin, set factory to the logged-in user's factory
             data["factory"] = request.user.factory.id if request.user.factory else None
-            data["distributor"] = None
-            data["franchise"] = None
+
+            if data.get("franchise") and not data.get("distributor"):
+                try:
+                    franchise_obj = Franchise.objects.get(id=data.get("franchise"))
+                    if franchise_obj.distributor:
+                        data["distributor"] = franchise_obj.distributor.id
+                except Franchise.DoesNotExist:
+                    pass
+
             data["is_active"] = False
         else:
             if request.user.role == "Franchise":
