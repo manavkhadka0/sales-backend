@@ -221,21 +221,19 @@ class FactoryInventoryListView(generics.ListAPIView):
             inventory_queryset = self.filter_queryset(
                 Inventory.objects.filter(factory=user.factory)
             )
-            return Response(
-                {
-                    "factory": user.factory.name,
-                    "inventory": [
-                        {
-                            "id": inventory.id,
-                            "product_id": inventory.product.id,
-                            "product": inventory.product.name,
-                            "quantity": inventory.quantity,
-                            "status": inventory.status,
-                        }
-                        for inventory in inventory_queryset
-                    ],
-                }
-            )
+            return Response({
+                "factory": user.factory.name,
+                "inventory": [
+                    {
+                        "id": inventory.id,
+                        "product_id": inventory.product.id,
+                        "product": inventory.product.name,
+                        "quantity": inventory.quantity,
+                        "status": inventory.status,
+                    }
+                    for inventory in inventory_queryset
+                ],
+            })
 
         return Response(
             {"detail": "User has no assigned factory."},
@@ -319,7 +317,8 @@ class FranchiseInventoryListView(generics.ListAPIView):
         if user.role == "SuperAdmin":
             # Get all franchises with their distributors
             franchises = (
-                Franchise.objects.filter(distributor__factory=user.factory)
+                Franchise.objects
+                .filter(distributor__factory=user.factory)
                 .prefetch_related("inventory", "distributor")
                 .all()
             )
@@ -580,7 +579,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
             ).order_by("-id")
         elif user.role == "YDM_Logistics":
             return (
-                Order.objects.filter(logistics="YDM")
+                Order.objects
+                .filter(logistics="YDM")
                 .order_by("-id")
                 .exclude(
                     order_status__in=[
@@ -594,7 +594,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
             )
         elif user.role == "YDM_Operator":
             return (
-                Order.objects.filter(logistics="YDM")
+                Order.objects
+                .filter(logistics="YDM")
                 .order_by("-id")
                 .exclude(
                     order_status__in=[
@@ -707,26 +708,24 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 # Prepare details for all cancelled orders
                 existing_orders_data = []
                 for ord_obj in cancelled_orders.order_by("-created_at"):
-                    existing_orders_data.append(
-                        {
-                            "order_id": ord_obj.id,
-                            "created_at": ord_obj.created_at,
-                            "salesperson": {
-                                "name": ord_obj.sales_person.get_full_name()
-                                or ord_obj.sales_person.first_name,
-                                "phone": ord_obj.sales_person.phone_number,
-                            },
-                            "location": {
-                                "franchise": ord_obj.franchise.name
-                                if ord_obj.franchise
-                                else None,
-                                "distributor": ord_obj.distributor.name
-                                if ord_obj.distributor
-                                else None,
-                            },
-                            "order_status": ord_obj.order_status,
-                        }
-                    )
+                    existing_orders_data.append({
+                        "order_id": ord_obj.id,
+                        "created_at": ord_obj.created_at,
+                        "salesperson": {
+                            "name": ord_obj.sales_person.get_full_name()
+                            or ord_obj.sales_person.first_name,
+                            "phone": ord_obj.sales_person.phone_number,
+                        },
+                        "location": {
+                            "franchise": ord_obj.franchise.name
+                            if ord_obj.franchise
+                            else None,
+                            "distributor": ord_obj.distributor.name
+                            if ord_obj.distributor
+                            else None,
+                        },
+                        "order_status": ord_obj.order_status,
+                    })
 
                 # Check if prepaid_amount is provided and is greater than 0
                 if not prepaid_amount or float(prepaid_amount) <= 0:
@@ -1467,14 +1466,12 @@ class ValidatePromoCodeView(generics.GenericAPIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            return Response(
-                {
-                    "valid": True,
-                    "code": promo_code_instance.code,
-                    "discount_percentage": promo_code_instance.discount_percentage,
-                    "message": "Promo code applied successfully",
-                }
-            )
+            return Response({
+                "valid": True,
+                "code": promo_code_instance.code,
+                "discount_percentage": promo_code_instance.discount_percentage,
+                "message": "Promo code applied successfully",
+            })
 
         except PromoCode.DoesNotExist:
             return Response(
@@ -1825,13 +1822,11 @@ class InventoryCheckView(generics.GenericAPIView):
         low_quantity_items = []
         for item in inventory_queryset:
             if item.quantity < critical_threshold:
-                low_quantity_items.append(
-                    {
-                        "product_name": item.product.name,
-                        "quantity": item.quantity,
-                        "status": "critical" if item.quantity <= 25 else "low",
-                    }
-                )
+                low_quantity_items.append({
+                    "product_name": item.product.name,
+                    "quantity": item.quantity,
+                    "status": "critical" if item.quantity <= 25 else "low",
+                })
         return sorted(low_quantity_items, key=lambda x: x["quantity"])
 
     def _format_inventory_response(self, low_quantity_items):
@@ -2231,7 +2226,8 @@ class InventoryDateSnapshotView(generics.GenericAPIView):
         elif user.role == "SalesPerson":
             # For sales person, get inventories they have interacted with
             inventory_ids = (
-                InventoryChangeLog.objects.filter(user=user, changed_at__lte=end_of_day)
+                InventoryChangeLog.objects
+                .filter(user=user, changed_at__lte=end_of_day)
                 .values_list("inventory_id", flat=True)
                 .distinct()
             )
@@ -2254,9 +2250,8 @@ class InventoryDateSnapshotView(generics.GenericAPIView):
 
         # Get the latest change log for this inventory up to the target date
         latest_log = (
-            InventoryChangeLog.objects.filter(
-                inventory=inventory, changed_at__lte=end_of_day
-            )
+            InventoryChangeLog.objects
+            .filter(inventory=inventory, changed_at__lte=end_of_day)
             .order_by("-changed_at")
             .first()
         )
@@ -2501,13 +2496,15 @@ class FranchiseHistoricalOrderView(generics.ListAPIView):
             return Order.objects.none()
 
         franchise = getattr(user, "franchise", None)
-        
+
         # Calculation logic using HistoricalDataConfig
         config = HistoricalDataConfig.get_solo()
         today = timezone.now().date()
-        
+
         # 1. Target month is months_ago from today
-        target_month_start = (today - relativedelta(months=config.months_ago)).replace(day=1)
+        target_month_start = (today - relativedelta(months=config.months_ago)).replace(
+            day=1
+        )
 
         # 2. Sequential daily rotation logic:
         # Each day past base_date increments effective_week by 1
@@ -2539,11 +2536,13 @@ class FranchiseHistoricalOrderView(generics.ListAPIView):
         # Include range info in response for better UX
         config = HistoricalDataConfig.get_solo()
         today = timezone.now().date()
-        target_month_start = (today - relativedelta(months=config.months_ago)).replace(day=1)
-        
+        target_month_start = (today - relativedelta(months=config.months_ago)).replace(
+            day=1
+        )
+
         rotation_offset = (today - config.base_date).days
         effective_week = config.base_week + rotation_offset
-        
+
         start_date = target_month_start + timedelta(days=(effective_week - 1) * 7)
         end_date = start_date + timedelta(days=6)
 
@@ -2566,6 +2565,7 @@ class FranchiseHistoricalOrderView(generics.ListAPIView):
         response_data["results"] = serializer.data
         return Response(response_data)
 
+
 class OrderExportCSVView(generics.GenericAPIView):
     queryset = Order.objects.all()
     serializer_class = OrderExportSerializer
@@ -2587,14 +2587,19 @@ class OrderExportCSVView(generics.GenericAPIView):
         ]
 
         # Filter orders
-        orders = Order.objects.filter(
-            franchise=franchise,
-            total_amount__lte=3650,
-        ).exclude(
-            order_status__in=excluded_statuses
-        ).filter(
-            Q(location__name__icontains=location_name) | Q(delivery_address__icontains=location_name)
-        ).select_related("location")
+        orders = (
+            Order.objects
+            .filter(
+                franchise=franchise,
+                total_amount__lte=3650,
+            )
+            .exclude(order_status__in=excluded_statuses)
+            .filter(
+                Q(location__name__icontains=location_name)
+                | Q(delivery_address__icontains=location_name)
+            )
+            .select_related("location")
+        )
 
         if not orders.exists():
             return Response(
@@ -2612,12 +2617,10 @@ class OrderExportCSVView(generics.GenericAPIView):
         writer.writerow(["Name", "Phone Number", "Location"])
 
         for order in orders:
-            writer.writerow(
-                [
-                    order.full_name,
-                    order.phone_number,
-                    order.delivery_address if order.delivery_address else "N/A",
-                ]
-            )
+            writer.writerow([
+                order.full_name,
+                order.phone_number,
+                order.delivery_address if order.delivery_address else "N/A",
+            ])
 
         return response

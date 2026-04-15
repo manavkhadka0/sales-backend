@@ -285,24 +285,24 @@ class TopSalespersonView(generics.ListAPIView):
         if user.role == "SuperAdmin":
             if franchise:
                 salespersons = CustomUser.objects.filter(
-                    role="SalesPerson", franchise=franchise
+                    role__in=["SalesPerson", "Franchise"], franchise=franchise
                 )
             elif distributor:
                 salespersons = CustomUser.objects.filter(
-                    role="SalesPerson", distributor=distributor
+                    role__in=["SalesPerson", "Franchise"], distributor=distributor
                 )
             else:
                 salespersons = CustomUser.objects.filter(
-                    factory=user.factory, role="SalesPerson"
+                    factory=user.factory, role__in=["SalesPerson", "Franchise"]
                 )
         elif user.role == "Distributor":
             franchises = Franchise.objects.filter(distributor=user.distributor)
             salespersons = CustomUser.objects.filter(
-                role="SalesPerson", franchise__in=franchises
+                role__in=["SalesPerson", "Franchise"], franchise__in=franchises
             )
         elif user.role in ["Franchise", "SalesPerson", "Packaging"]:
             salespersons = CustomUser.objects.filter(
-                role="SalesPerson", franchise=user.franchise
+                role__in=["SalesPerson", "Franchise"], franchise=user.franchise
             )
         else:
             return CustomUser.objects.none()
@@ -988,7 +988,7 @@ class DashboardStatsView(generics.GenericAPIView):
             # For Franchise/SalesPerson: their orders, their sales persons as customers
             orders = Order.objects.filter(franchise=user.franchise)
             customers = CustomUser.objects.filter(
-                franchise=user.franchise, role="SalesPerson", is_active=True
+                franchise=user.franchise, role__in=["SalesPerson", "Franchise"], is_active=True
             )
             products = (
                 Inventory.objects.filter(
@@ -1260,7 +1260,7 @@ class SalesPersonStatisticsView(APIView):
             salesperson = CustomUser.objects.get(phone_number=phone_number)
 
             # Check if the user is a salesperson
-            if salesperson.role != "SalesPerson":
+            if salesperson.role not in ["SalesPerson", "Franchise"]:
                 return Response(
                     {"error": "User is not a salesperson"},
                     status=status.HTTP_403_FORBIDDEN,
@@ -1411,7 +1411,7 @@ class SalesPersonRevenueView(generics.GenericAPIView):
         ]
         try:
             salesperson = CustomUser.objects.get(phone_number=phone_number)
-            if salesperson.role != "SalesPerson":
+            if salesperson.role not in ["SalesPerson", "Franchise"]:
                 return Response(
                     {"error": "User is not a salesperson"},
                     status=status.HTTP_403_FORBIDDEN,

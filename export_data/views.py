@@ -164,7 +164,7 @@ class SalesPersonOrderCSVExportView(generics.GenericAPIView):
         # Get sales person by phone number
         try:
             salesperson = CustomUser.objects.get(
-                phone_number=phone_number, role="SalesPerson"
+                phone_number=phone_number, role__in=["SalesPerson", "Franchise"]
             )
         except CustomUser.DoesNotExist:
             return Response(
