@@ -5,6 +5,7 @@ from .views import (
     PackagingSentToDashSummaryCSVView,
     SalesPersonOrderCSVExportView,
     SalesSummaryExportView,
+    UniqueOldOrdersExcelExportView,
     YachuFullOrderExportView,
     export_orders_csv_api,
 )
@@ -27,5 +28,10 @@ urlpatterns = [
         "yachu-full-export/",
         YachuFullOrderExportView.as_view(),
         name="yachu-full-export",
+    ),
+    path(
+        "export-unique-old-orders/",
+        UniqueOldOrdersExcelExportView.as_view(),
+        name="export-unique-old-orders",
     ),
 ]

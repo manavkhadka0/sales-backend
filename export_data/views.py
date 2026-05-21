@@ -1,6 +1,9 @@
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
+
+import openpyxl
+from openpyxl.styles import Alignment, Font, PatternFill
 
 from django.db.models import Count, Prefetch, Q, Sum
 from django.http import HttpResponse, StreamingHttpResponse
@@ -1049,3 +1052,172 @@ class YachuFullOrderExportView(APIView):
             product_values = [product_qty.get(name, 0) for name in product_names]
 
             yield self._echo_row(buf, writer, fixed_values + product_values)
+
+
+class UniqueOldOrdersExcelExportView(APIView):
+    """
+    Exports a unique list of historical orders (older than 6 months).
+    The dataset is deduplicated on both customer name and phone number.
+    Returns an Excel sheet (.xlsx) containing up to 7000 unique records.
+    No authentication required.
+    """
+    permission_classes = []  # No authentication required
+
+    def get(self, request):
+        # Calculate date/time 6 months ago
+        six_months_ago = timezone.now() - timedelta(days=180)
+        
+        # Query orders older than 6 months
+        # We prefetch related fields to avoid N+1 queries
+        orders_qs = (
+            Order.objects.filter(created_at__lt=six_months_ago)
+            .select_related("location")
+            .prefetch_related(
+                Prefetch(
+                    "order_products",
+                    queryset=OrderProduct.objects.select_related("product__product"),
+                )
+            )
+            .order_by("-id")
+        )
+        
+        unique_orders = []
+        seen_phones = set()
+        seen_names = set()
+        
+        # Iterate over base queryset to collect exactly 7000 unique entries
+        # Deduplicating on phone number and customer name
+        for order in orders_qs.iterator(chunk_size=1000):
+            if len(unique_orders) >= 7000:
+                break
+                
+            phone = order.phone_number.strip() if order.phone_number else ""
+            name = order.full_name.strip().lower() if order.full_name else ""
+            
+            # Skip if phone or name is empty
+            if not phone or not name:
+                continue
+                
+            # Deduplicate
+            if phone in seen_phones or name in seen_names:
+                continue
+                
+            seen_phones.add(phone)
+            seen_names.add(name)
+            unique_orders.append(order)
+            
+        if not unique_orders:
+            return Response(
+                {"error": "No unique orders older than 6 months found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+        # Create Excel workbook using openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Unique Orders older than 6M"
+        
+        # Set sheet view gridlines to visible
+        ws.views.sheetView[0].showGridLines = True
+        
+        # Define premium styles
+        header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid") # Dark premium blue
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        
+        data_font = Font(name="Segoe UI", size=10)
+        data_alignment = Alignment(horizontal="left", vertical="center")
+        center_alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Header Row
+        headers = [
+            "S.N.",
+            "Order Code",
+            "Order Date",
+            "Customer Name",
+            "Contact Number",
+            "Alternate Contact",
+            "Delivery Address",
+            "City",
+            "Location",
+            "Landmark",
+            "Products Ordered",
+            "Total Amount",
+            "Prepaid Amount",
+            "Payment Method",
+            "Order Status",
+            "Remarks"
+        ]
+        
+        ws.append(headers)
+        
+        # Format Header row
+        ws.row_dimensions[1].height = 28
+        for col_num in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            
+        # Write rows
+        for index, order in enumerate(unique_orders, 1):
+            # Format product details
+            products = order.order_products.all()
+            products_str = ", ".join([
+                f"{p.quantity}x {p.product.product.name}" for p in products
+            ])
+            
+            row_data = [
+                index,
+                order.order_code or "",
+                timezone.localtime(order.created_at).strftime("%Y-%m-%d %H:%M:%S") if order.created_at else "",
+                order.full_name,
+                order.phone_number,
+                order.alternate_phone_number or "",
+                order.delivery_address,
+                order.city or "",
+                order.location.name if order.location else "",
+                order.landmark or "",
+                products_str,
+                float(order.total_amount) if order.total_amount else 0.0,
+                float(order.prepaid_amount) if order.prepaid_amount else 0.0,
+                order.payment_method,
+                order.order_status,
+                order.remarks or ""
+            ]
+            
+            ws.append(row_data)
+            
+            # Style current row
+            row_num = index + 1
+            ws.row_dimensions[row_num].height = 20
+            
+            for col_num in range(1, len(headers) + 1):
+                cell = ws.cell(row=row_num, column=col_num)
+                cell.font = data_font
+                if col_num in [1, 2, 3, 5, 6, 14, 15]:
+                    cell.alignment = center_alignment
+                else:
+                    cell.alignment = data_alignment
+                    
+        # Auto-fit columns nicely
+        for col in ws.columns:
+            max_len = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                if cell.value is not None:
+                    max_len = max(max_len, len(str(cell.value)))
+            # Add padding
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 10)
+            
+        # Create response
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        # Format filename with current timestamp
+        filename = f"unique_orders_older_than_6m_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        
+        wb.save(response)
+        return response
+
