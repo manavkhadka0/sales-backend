@@ -456,6 +456,34 @@ class OrderFilter(django_filters.FilterSet):
         ]
 
 
+class FranchiseOrdersListView(generics.ListAPIView):
+    """
+    API view to list orders filtering only by Franchise ID.
+    Supports filters (such as start_date, end_date, etc.) from OrderFilter.
+    """
+    serializer_class = OrderSerializer
+    permission_classes = []
+    filterset_class = OrderFilter
+    filter_backends = [
+        DjangoFilterBackend,
+        rest_filters.SearchFilter,
+        rest_filters.OrderingFilter,
+    ]
+    search_fields = ["phone_number", "full_name", "order_code", "delivery_address"]
+    ordering_fields = ["__all__"]
+    pagination_class = CustomPagination
+
+    def get_queryset(self):
+        franchise_id = self.kwargs.get("franchise_id")
+        if not franchise_id:
+            franchise_id = self.request.query_params.get("franchise_id")
+
+        if not franchise_id:
+            return Order.objects.none()
+
+        return Order.objects.filter(franchise_id=franchise_id).order_by("-id")
+
+
 class OrderListCreateView(generics.ListCreateAPIView):
     queryset = Order.objects.all().order_by("-id")
     serializer_class = OrderSerializer

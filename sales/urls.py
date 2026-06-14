@@ -11,6 +11,7 @@ from .views import (
     FactoryInventoryUsageView,
     FranchiseHistoricalOrderView,
     FranchiseInventoryListView,
+    FranchiseOrdersListView,
     InventoryChangeLogView,
     InventoryCheckView,
     InventoryDateSnapshotView,
@@ -84,6 +85,11 @@ urlpatterns = [
     path(
         "orders/", OrderListCreateView.as_view(), name="order-create"
     ),  # URL for creating orders
+    path(
+        "orders/franchise/<int:franchise_id>/",
+        FranchiseOrdersListView.as_view(),
+        name="franchise-orders-list",
+    ),
     path(
         "orders/<int:pk>/update/", OrderDetailUpdateView.as_view(), name="order-update"
     ),
