@@ -111,7 +111,7 @@ class LatestOrdersView(generics.ListAPIView):
 class SalesStatisticsView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
-    def get_stats_for_queryset(self, queryset, today):
+    def get_stats_for_queryset(self, queryset, today, is_filtered=False):
         """Helper method to get statistics for a queryset"""
         # Define excluded statuses
         excluded_statuses = [
@@ -123,24 +123,36 @@ class SalesStatisticsView(generics.GenericAPIView):
             "Returned By PicknDrop",
         ]
 
-        # Calculate yesterday's date
-        yesterday = today - timezone.timedelta(days=1)
+        if is_filtered:
+            # When filtered by date, daily_stats represents the whole filtered range
+            daily_stats = (
+                queryset
+                .exclude(order_status__in=excluded_statuses)
+                .aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
+            )
+            yesterday_stats = {
+                "total_orders": 0,
+                "total_sales": 0,
+            }
+        else:
+            # Get today's stats - no exclusions
+            daily_stats = (
+                queryset
+                .filter(date=today)
+                .exclude(order_status__in=excluded_statuses)
+                .aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
+            )
 
-        # Get today's stats - no exclusions
-        daily_stats = (
-            queryset
-            .filter(date=today)
-            .exclude(order_status__in=excluded_statuses)
-            .aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
-        )
+            # Calculate yesterday's date
+            yesterday = today - timezone.timedelta(days=1)
 
-        # Get yesterday's stats - no exclusions
-        yesterday_stats = (
-            queryset
-            .filter(date=yesterday)
-            .exclude(order_status__in=excluded_statuses)
-            .aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
-        )
+            # Get yesterday's stats - no exclusions
+            yesterday_stats = (
+                queryset
+                .filter(date=yesterday)
+                .exclude(order_status__in=excluded_statuses)
+                .aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
+            )
 
         # Get all-time stats with status breakdown
         all_time_stats = queryset.aggregate(
@@ -257,6 +269,7 @@ class SalesStatisticsView(generics.GenericAPIView):
 
         start_date = self.request.query_params.get("start_date")
         end_date = self.request.query_params.get("end_date")
+        is_filtered = False
 
         if start_date:
             try:
@@ -267,9 +280,11 @@ class SalesStatisticsView(generics.GenericAPIView):
                         date__gte=start_date_obj, date__lte=end_date_obj
                     )
                     today = end_date_obj
+                    is_filtered = True
                 else:
                     queryset = queryset.filter(date=start_date_obj)
                     today = start_date_obj
+                    is_filtered = True
             except ValueError:
                 return Response(
                     {"detail": "Invalid date format. Use YYYY-MM-DD"},
@@ -280,13 +295,14 @@ class SalesStatisticsView(generics.GenericAPIView):
                 end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
                 queryset = queryset.filter(date__lte=end_date_obj)
                 today = end_date_obj
+                is_filtered = True
             except ValueError:
                 return Response(
                     {"detail": "Invalid date format. Use YYYY-MM-DD"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        return Response(self.get_stats_for_queryset(queryset, today))
+        return Response(self.get_stats_for_queryset(queryset, today, is_filtered=is_filtered))
 
 
 class TopSalespersonView(generics.ListAPIView):
