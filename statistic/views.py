@@ -37,7 +37,6 @@ class ReportFilter(django_filters.FilterSet):
         model = Report
         fields = ["franchise", "start_date", "end_date", "date"]
 
-
     def filter_start_date(self, queryset, name, value):
         if not value:
             return queryset
@@ -76,9 +75,7 @@ class ReportView(generics.ListCreateAPIView):
                 "-created_at"
             )
         elif user.role == "SalesPerson":
-            return Report.objects.filter(reported_by=user).order_by(
-                "-created_at"
-            )
+            return Report.objects.filter(reported_by=user).order_by("-created_at")
         return Report.objects.none()
 
     def perform_create(self, serializer):
@@ -86,16 +83,16 @@ class ReportView(generics.ListCreateAPIView):
         now = timezone.localtime(timezone.now())
 
         if now.hour >= 12:
-            raise ValidationError(
-                {"detail": "Reports can only be created before 12 PM."}
-            )
+            raise ValidationError({
+                "detail": "Reports can only be created before 12 PM."
+            })
 
         if Report.objects.filter(
             franchise=user.franchise, reported_by=user, created_at__date=now.date()
         ).exists():
-            raise ValidationError(
-                {"detail": "A report for today has already been created."}
-            )
+            raise ValidationError({
+                "detail": "A report for today has already been created."
+            })
 
         report_date = now.date() - timezone.timedelta(days=1)
         serializer.save(franchise=user.franchise, reported_by=user, date=report_date)
@@ -131,14 +128,16 @@ class SalesStatisticsView(generics.GenericAPIView):
 
         # Get today's stats - no exclusions
         daily_stats = (
-            queryset.filter(date=today)
+            queryset
+            .filter(date=today)
             .exclude(order_status__in=excluded_statuses)
             .aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
         )
 
         # Get yesterday's stats - no exclusions
         yesterday_stats = (
-            queryset.filter(date=yesterday)
+            queryset
+            .filter(date=yesterday)
             .exclude(order_status__in=excluded_statuses)
             .aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
         )
@@ -256,6 +255,37 @@ class SalesStatisticsView(generics.GenericAPIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        start_date = self.request.query_params.get("start_date")
+        end_date = self.request.query_params.get("end_date")
+
+        if start_date:
+            try:
+                start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
+                if end_date:
+                    end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+                    queryset = queryset.filter(
+                        date__gte=start_date_obj, date__lte=end_date_obj
+                    )
+                    today = end_date_obj
+                else:
+                    queryset = queryset.filter(date=start_date_obj)
+                    today = start_date_obj
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid date format. Use YYYY-MM-DD"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        elif end_date:
+            try:
+                end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+                queryset = queryset.filter(date__lte=end_date_obj)
+                today = end_date_obj
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid date format. Use YYYY-MM-DD"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         return Response(self.get_stats_for_queryset(queryset, today))
 
 
@@ -338,7 +368,8 @@ class TopSalespersonView(generics.ListAPIView):
 
         # Create base queryset with time filters
         salespersons = (
-            salespersons.annotate(
+            salespersons
+            .annotate(
                 sales_count=Count(
                     "orders",
                     filter=models.Q(**orders_filter)
@@ -423,7 +454,8 @@ class TopSalespersonView(generics.ListAPIView):
                 )
 
             product_sales = (
-                OrderProduct.objects.filter(order__in=orders_query)
+                OrderProduct.objects
+                .filter(order__in=orders_query)
                 .values("product__product__id", "product__product__name")
                 .annotate(total_quantity=Sum("quantity"))
                 .order_by("-total_quantity")
@@ -488,9 +520,8 @@ class RevenueView(generics.ListAPIView):
 
             if filter_type == "daily":
                 revenue = (
-                    base_queryset.filter(
-                        created_at__year=today.year, created_at__month=today.month
-                    )
+                    base_queryset
+                    .filter(created_at__year=today.year, created_at__month=today.month)
                     .values("date")
                     .annotate(
                         period=models.F("date"),
@@ -502,7 +533,8 @@ class RevenueView(generics.ListAPIView):
 
             elif filter_type == "weekly":
                 revenue = (
-                    base_queryset.filter(created_at__year=today.year)
+                    base_queryset
+                    .filter(created_at__year=today.year)
                     .annotate(period=TruncWeek("created_at"))
                     .values("period")
                     .annotate(
@@ -514,7 +546,8 @@ class RevenueView(generics.ListAPIView):
 
             elif filter_type == "yearly":
                 revenue = (
-                    base_queryset.annotate(period=TruncYear("created_at"))
+                    base_queryset
+                    .annotate(period=TruncYear("created_at"))
                     .values("period")
                     .annotate(
                         total_revenue=Sum("total_amount", default=0),
@@ -525,7 +558,8 @@ class RevenueView(generics.ListAPIView):
 
             else:  # Default is monthly
                 revenue = (
-                    base_queryset.annotate(period=TruncMonth("created_at"))
+                    base_queryset
+                    .annotate(period=TruncMonth("created_at"))
                     .values("period")
                     .annotate(
                         total_revenue=Sum("total_amount", default=0),
@@ -552,13 +586,11 @@ class RevenueView(generics.ListAPIView):
                 for entry in revenue
             ]
 
-            return Response(
-                {
-                    "filter_type": filter_type,
-                    "user_role": user.role,
-                    "data": response_data,
-                }
-            )
+            return Response({
+                "filter_type": filter_type,
+                "user_role": user.role,
+                "data": response_data,
+            })
 
         except Exception as e:
             return Response(
@@ -660,7 +692,8 @@ class RevenueWithCancelledView(generics.ListAPIView):
                     ).date()
                     base_queryset = base_queryset.filter(date=specific_date_obj)
                     revenue = (
-                        base_queryset.values("date")
+                        base_queryset
+                        .values("date")
                         .annotate(period=models.F("date"), **annotation_fields)
                         .order_by("date")
                     )
@@ -680,7 +713,8 @@ class RevenueWithCancelledView(generics.ListAPIView):
                         date__gte=specific_date_obj, date__lte=end_date_obj
                     )
                     revenue = (
-                        base_queryset.values("date")
+                        base_queryset
+                        .values("date")
                         .annotate(period=models.F("date"), **annotation_fields)
                         .order_by("date")
                     )
@@ -693,16 +727,16 @@ class RevenueWithCancelledView(generics.ListAPIView):
                 # Handle filter types
                 if filter_type == "daily":
                     revenue = (
-                        base_queryset.filter(
-                            date__year=today.year, date__month=today.month
-                        )
+                        base_queryset
+                        .filter(date__year=today.year, date__month=today.month)
                         .values("date")
                         .annotate(period=models.F("date"), **annotation_fields)
                         .order_by("date")
                     )
                 elif filter_type == "weekly":
                     revenue = (
-                        base_queryset.filter(date__year=today.year)
+                        base_queryset
+                        .filter(date__year=today.year)
                         .annotate(period=TruncWeek("date"))
                         .values("period")
                         .annotate(**annotation_fields)
@@ -710,14 +744,16 @@ class RevenueWithCancelledView(generics.ListAPIView):
                     )
                 elif filter_type == "monthly":
                     revenue = (
-                        base_queryset.annotate(period=TruncMonth("date"))
+                        base_queryset
+                        .annotate(period=TruncMonth("date"))
                         .values("period")
                         .annotate(**annotation_fields)
                         .order_by("period")
                     )
                 elif filter_type == "yearly":
                     revenue = (
-                        base_queryset.annotate(period=TruncYear("date"))
+                        base_queryset
+                        .annotate(period=TruncYear("date"))
                         .values("period")
                         .annotate(**annotation_fields)
                         .order_by("period")
@@ -874,14 +910,16 @@ class TopProductsView(generics.ListAPIView):
 
             # Get top products with aggregated data
             top_products = (
-                base_query.values("product__product__id", "product__product__name")
+                base_query
+                .values("product__product__id", "product__product__name")
                 .annotate(
                     total_quantity=Sum("quantity"),
                     total_amount=Sum(
                         models.F("quantity")
                         * models.F("order__total_amount")
                         / models.Subquery(
-                            OrderProduct.objects.filter(order=models.OuterRef("order"))
+                            OrderProduct.objects
+                            .filter(order=models.OuterRef("order"))
                             .values("order")
                             .annotate(total_qty=Sum("quantity"))
                             .values("total_qty")[:1]
@@ -897,16 +935,14 @@ class TopProductsView(generics.ListAPIView):
             # Format the response with percentages
             product_data = []
             for item in top_products:
-                product_data.append(
-                    {
-                        "product_id": item["product__product__id"],
-                        "product_name": item["product__product__name"],
-                        "total_quantity": item["total_quantity"],
-                        "total_amount": round(float(item["total_amount"]), 2)
-                        if item["total_amount"]
-                        else 0.0,
-                    }
-                )
+                product_data.append({
+                    "product_id": item["product__product__id"],
+                    "product_name": item["product__product__name"],
+                    "total_quantity": item["total_quantity"],
+                    "total_amount": round(float(item["total_amount"]), 2)
+                    if item["total_amount"]
+                    else 0.0,
+                })
 
             # Sort by revenue percentage in descending order
             product_data.sort(key=lambda x: x["total_amount"], reverse=True)
@@ -962,9 +998,8 @@ class DashboardStatsView(generics.GenericAPIView):
                 role__in=["Distributor", "Franchise", "SalesPerson"], is_active=True
             )
             products = (
-                Inventory.objects.filter(
-                    factory=user.factory, status="ready_to_dispatch"
-                )
+                Inventory.objects
+                .filter(factory=user.factory, status="ready_to_dispatch")
                 .values("product")
                 .distinct()
             )
@@ -977,9 +1012,8 @@ class DashboardStatsView(generics.GenericAPIView):
                 franchise__in=franchises, is_active=True
             )
             products = (
-                Inventory.objects.filter(
-                    distributor=user.distributor, status="ready_to_dispatch"
-                )
+                Inventory.objects
+                .filter(distributor=user.distributor, status="ready_to_dispatch")
                 .values("product")
                 .distinct()
             )
@@ -988,12 +1022,13 @@ class DashboardStatsView(generics.GenericAPIView):
             # For Franchise/SalesPerson: their orders, their sales persons as customers
             orders = Order.objects.filter(franchise=user.franchise)
             customers = CustomUser.objects.filter(
-                franchise=user.franchise, role__in=["SalesPerson", "Franchise"], is_active=True
+                franchise=user.franchise,
+                role__in=["SalesPerson", "Franchise"],
+                is_active=True,
             )
             products = (
-                Inventory.objects.filter(
-                    franchise=user.franchise, status="ready_to_dispatch"
-                )
+                Inventory.objects
+                .filter(franchise=user.franchise, status="ready_to_dispatch")
                 .values("product")
                 .distinct()
             )
@@ -1002,7 +1037,8 @@ class DashboardStatsView(generics.GenericAPIView):
 
         # Calculate current period stats
         current_revenue = (
-            orders.filter(
+            orders
+            .filter(
                 created_at__gte=last_month,
                 order_status__in=[
                     "Delivered",
@@ -1018,7 +1054,8 @@ class DashboardStatsView(generics.GenericAPIView):
         )
 
         current_orders = (
-            orders.filter(created_at__gte=last_month)
+            orders
+            .filter(created_at__gte=last_month)
             .exclude(order_status__in=excluded_statuses)
             .count()
         )
@@ -1028,7 +1065,8 @@ class DashboardStatsView(generics.GenericAPIView):
         # Calculate previous period stats for comparison
         previous_month = last_month - timezone.timedelta(days=30)
         previous_revenue = (
-            orders.filter(
+            orders
+            .filter(
                 created_at__gte=previous_month,
                 created_at__lt=last_month,
                 order_status__in=[
@@ -1045,7 +1083,8 @@ class DashboardStatsView(generics.GenericAPIView):
         )
 
         previous_orders = (
-            orders.filter(
+            orders
+            .filter(
                 created_at__gte=previous_month,
                 created_at__lt=last_month,
                 order_status__in=[
@@ -1065,9 +1104,8 @@ class DashboardStatsView(generics.GenericAPIView):
         ).count()
 
         previous_products = (
-            Inventory.objects.filter(
-                created_at__gte=previous_month, created_at__lt=last_month
-            )
+            Inventory.objects
+            .filter(created_at__gte=previous_month, created_at__lt=last_month)
             .values("product")
             .distinct()
             .count()
@@ -1192,14 +1230,16 @@ class RevenueByProductView(generics.GenericAPIView):
 
         # Get all order products and calculate revenue per product
         product_revenue = (
-            OrderProduct.objects.filter(order__in=orders)
+            OrderProduct.objects
+            .filter(order__in=orders)
             .values("product__product__id", "product__product__name")
             .annotate(
                 total_revenue=Sum(
                     models.F("quantity")
                     * models.F("order__total_amount")
                     / models.Subquery(
-                        OrderProduct.objects.filter(order=models.OuterRef("order"))
+                        OrderProduct.objects
+                        .filter(order=models.OuterRef("order"))
                         .values("order")
                         .annotate(total_qty=Sum("quantity"))
                         .values("total_qty")[:1]
@@ -1220,14 +1260,12 @@ class RevenueByProductView(generics.GenericAPIView):
                 if total_revenue > 0
                 else 0
             )
-            product_data.append(
-                {
-                    "product_id": item["product__product__id"],
-                    "product_name": item["product__product__name"],
-                    "revenue": round(float(item["total_revenue"]), 2),
-                    "percentage": round(percentage, 1),
-                }
-            )
+            product_data.append({
+                "product_id": item["product__product__id"],
+                "product_name": item["product__product__name"],
+                "revenue": round(float(item["total_revenue"]), 2),
+                "percentage": round(percentage, 1),
+            })
 
         # Sort by revenue percentage in descending order
         product_data.sort(key=lambda x: x["percentage"], reverse=True)
@@ -1341,9 +1379,8 @@ class SalesPersonStatisticsView(APIView):
 
             # Get product-wise sales data
             product_sales = (
-                OrderProduct.objects.filter(
-                    order__in=orders.exclude(order_status__in=excluded_statuses)
-                )
+                OrderProduct.objects
+                .filter(order__in=orders.exclude(order_status__in=excluded_statuses))
                 .values("product__product__id", "product__product__name")
                 .annotate(quantity_sold=Sum("quantity"))
                 .order_by("-quantity_sold")
@@ -1351,9 +1388,8 @@ class SalesPersonStatisticsView(APIView):
 
             # Get product-wise sales data for cancelled orders
             cancelled_product_sales = (
-                OrderProduct.objects.filter(
-                    order__in=orders.filter(order_status__in=excluded_statuses)
-                )
+                OrderProduct.objects
+                .filter(order__in=orders.filter(order_status__in=excluded_statuses))
                 .values("product__product__id", "product__product__name")
                 .annotate(quantity_sold=Sum("quantity"))
                 .order_by("-quantity_sold")
@@ -1480,7 +1516,8 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                         date_filter = {"created_at__date": specific_date}
 
                     revenue = (
-                        base_queryset.filter(**date_filter)
+                        base_queryset
+                        .filter(**date_filter)
                         .values("created_at__date")
                         .annotate(
                             period=models.F("created_at__date"), **annotation_fields
@@ -1496,7 +1533,8 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                 # Handle filter types
                 if filter_type == "daily":
                     revenue = (
-                        base_queryset.filter(
+                        base_queryset
+                        .filter(
                             created_at__year=today.year, created_at__month=today.month
                         )
                         .values("date")
@@ -1505,7 +1543,8 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                     )
                 elif filter_type == "weekly":
                     revenue = (
-                        base_queryset.filter(created_at__year=today.year)
+                        base_queryset
+                        .filter(created_at__year=today.year)
                         .annotate(period=TruncWeek("created_at"))
                         .values("period")
                         .annotate(**annotation_fields)
@@ -1513,14 +1552,16 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                     )
                 elif filter_type == "monthly":
                     revenue = (
-                        base_queryset.annotate(period=TruncMonth("created_at"))
+                        base_queryset
+                        .annotate(period=TruncMonth("created_at"))
                         .values("period")
                         .annotate(**annotation_fields)
                         .order_by("period")
                     )
                 elif filter_type == "yearly":
                     revenue = (
-                        base_queryset.annotate(period=TruncYear("created_at"))
+                        base_queryset
+                        .annotate(period=TruncYear("created_at"))
                         .values("period")
                         .annotate(**annotation_fields)
                         .order_by("period")
@@ -1559,15 +1600,13 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                 for entry in revenue
             ]
 
-            return Response(
-                {
-                    "filter_type": filter_type,
-                    "specific_date": specific_date.strftime("%Y-%m-%d")
-                    if specific_date
-                    else None,
-                    "data": response_data,
-                }
-            )
+            return Response({
+                "filter_type": filter_type,
+                "specific_date": specific_date.strftime("%Y-%m-%d")
+                if specific_date
+                else None,
+                "data": response_data,
+            })
 
         except CustomUser.DoesNotExist:
             return Response(
@@ -1650,14 +1689,12 @@ class BulkOrdersView(generics.ListAPIView):
         # Group by date and aggregate product quantities
         daily_bulk_orders = self._aggregate_bulk_orders_by_date(bulk_orders)
 
-        return Response(
-            {
-                "start_date": start_date.strftime("%Y-%m-%d"),
-                "end_date": end_date.strftime("%Y-%m-%d"),
-                "total_bulk_orders": len(bulk_orders),
-                "daily_breakdown": daily_bulk_orders,
-            }
-        )
+        return Response({
+            "start_date": start_date.strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
+            "total_bulk_orders": len(bulk_orders),
+            "daily_breakdown": daily_bulk_orders,
+        })
 
     def _get_user_orders_queryset(self, user):
         """Get orders queryset based on user role"""
@@ -1726,19 +1763,18 @@ class BulkOrdersView(generics.ListAPIView):
         for date in sorted(daily_data.keys()):
             products_data = []
             for product_name, total_quantity in daily_data[date].items():
-                products_data.append(
-                    {"product_name": product_name, "total_quantity": total_quantity}
-                )
+                products_data.append({
+                    "product_name": product_name,
+                    "total_quantity": total_quantity,
+                })
 
             # Only include dates where there are oil bottle products (bulk orders exist)
             if products_data:
-                result.append(
-                    {
-                        "date": date,
-                        "bulk_orders_count": daily_order_counts[date],
-                        "products": products_data,
-                    }
-                )
+                result.append({
+                    "date": date,
+                    "bulk_orders_count": daily_order_counts[date],
+                    "products": products_data,
+                })
 
         return result
 
