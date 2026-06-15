@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -69,39 +70,52 @@ class UserListView(APIView):
 
     def get(self, request):
         user = request.user
+        search_query = request.query_params.get("search", None)
+
         if user.role == "SuperAdmin":
             users = CustomUser.objects.filter(factory=user.factory, is_deleted=False)
-            serializer = CustomUserSerializer(users, many=True)
+            serializer_class = CustomUserSerializer
         elif user.role == "Distributor":
             users = CustomUser.objects.filter(
                 role__in=["SalesPerson", "Treatment Staff", "Packaging", "Franchise"],
                 distributor=user.distributor,
                 is_deleted=False,
             )
-            serializer = SmallUserSerializer(users, many=True)
+            serializer_class = SmallUserSerializer
         elif user.role == "Franchise":
             users = CustomUser.objects.filter(
                 role__in=["SalesPerson", "Treatment Staff", "Packaging"],
                 franchise=user.franchise,
                 is_deleted=False,
             )
-            serializer = SmallUserSerializer(users, many=True)
+            serializer_class = SmallUserSerializer
         elif user.role == "YDM_Logistics":
             users = CustomUser.objects.filter(
                 role__in=["YDM_Logistics", "YDM_Operator", "YDM_Rider"],
                 is_deleted=False,
             )
-            serializer = SmallUserSerializer(users, many=True)
+            serializer_class = SmallUserSerializer
         elif user.role == "YDM_Operator":
             users = CustomUser.objects.filter(
                 role__in=["YDM_Operator", "YDM_Rider"], is_deleted=False
             )
-            serializer = SmallUserSerializer(users, many=True)
+            serializer_class = SmallUserSerializer
         else:
             return Response(
                 {"error": "You do not have permission to view this resource."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        if search_query:
+            users = users.filter(
+                Q(first_name__icontains=search_query)
+                | Q(last_name__icontains=search_query)
+                | Q(email__icontains=search_query)
+                | Q(phone_number__icontains=search_query)
+                | Q(username__icontains=search_query)
+            )
+
+        serializer = serializer_class(users, many=True)
         return Response(serializer.data)
 
     def post(self, request):
