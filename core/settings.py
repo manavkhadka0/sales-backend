@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     "statistic",
     "pickndrop",
     "storages",
+    "daraz",
 ]
 
 MIDDLEWARE = [
@@ -102,15 +103,15 @@ WSGI_APPLICATION = "core.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-""" DATABASES = {
+DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
     }
-} """
+}
 
 
-DATABASES = {
+""" DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.getenv("DB_NAME"),
@@ -119,7 +120,7 @@ DATABASES = {
         "HOST": os.getenv("DB_HOST"),
         "PORT": os.getenv("DB_PORT"),
     }
-}
+} """
 
 """ DATABASES = {
     "default": {
@@ -206,13 +207,15 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
-    "https://silence-pens-suse-jill.trycloudflare.com",
+    "https://italia-ballet-assists-danny.trycloudflare.com",
+    "https://aside-strength-continuity-solving.trycloudflare.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
-    "https://silence-pens-suse-jill.trycloudflare.com",
+    "https://italia-ballet-assists-danny.trycloudflare.com",
+    "https://aside-strength-continuity-solving.trycloudflare.com",
 ]
 
 # Default primary key field type

@@ -33,6 +33,7 @@ urlpatterns = (
         path("api/sales/", include("export_data.urls")),
         path("api/sales/", include("statistic.urls")),
         path("api/", include("pickndrop.urls")),
+        path("api/daraz/", include("daraz.urls")),
     ]
     + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

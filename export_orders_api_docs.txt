@@ -1,0 +1,176 @@
+================================================================================
+  EXPORT ORDERS CSV API — DOCUMENTATION
+================================================================================
+
+OVERVIEW
+--------
+Exports a filtered set of orders to a downloadable CSV file.
+Accepts query filters to control which records are included.
+
+--------------------------------------------------------------------------------
+ENDPOINT
+--------
+  GET /api/sales/export-summary/
+
+--------------------------------------------------------------------------------
+AUTHENTICATION
+--------------
+  Uses @api_view(["GET"]) without explicit permission_classes.
+  Behaviour depends on DEFAULT_PERMISSION_CLASSES in settings.py.
+  Verify your project settings to confirm auth requirements.
+
+--------------------------------------------------------------------------------
+QUERY PARAMETERS (FILTERS)
+---------------------------
+All parameters are optional.
+If none provided, all orders are exported (up to 10,000 limit).
+
+
+  DATE RANGE FILTERS
+  ------------------
+  date_from           YYYY-MM-DD    Orders created ON OR AFTER this date
+                                    (filters on created_at field)
+  date_to             YYYY-MM-DD    Orders created ON OR BEFORE this date
+                                    (filters on created_at field)
+  order_date_from     YYYY-MM-DD    Filter by order's "date" field (on or after)
+  order_date_to       YYYY-MM-DD    Filter by order's "date" field (on or before)
+
+  NOTE: date_from/date_to use "created_at" (system timestamp).
+        order_date_from/order_date_to use the model's "date" field — may differ.
+
+
+  FRANCHISE FILTER
+  ----------------
+  franchise           integer (ID)  Filter orders by a specific franchise
+                                    Pass the franchise's primary key (e.g. 3)
+
+
+  AMOUNT RANGE FILTERS
+  --------------------
+  total_amount_min    number        Orders with total_amount >= value
+  total_amount_max    number        Orders with total_amount <= value
+
+
+  PRODUCT COUNT FILTERS
+  ---------------------
+  products_count_min  integer       Orders with AT LEAST N order-product lines
+  products_count_max  integer       Orders with AT MOST N order-product lines
+  more_than_3_products  boolean     Orders where max single-line qty >= 3
+                      (true/false)  OR total qty across all lines >= 3
+
+  NOTE: products_count_min/max count ORDER-PRODUCT LINE ITEMS (rows), not units.
+        more_than_3_products checks quantity values — a different metric.
+
+
+  CUSTOMER BEHAVIOUR FILTERS
+  --------------------------
+  multiple_orders_customer  boolean  Only orders from customers (by phone_number)
+                            (true/false)  who have placed MORE THAN 1 order total
+
+
+  OIL BOTTLE SPECIFIC FILTERS
+  ---------------------------
+  oil_bottle_total_min  integer     Orders where total qty of items whose name
+                                    CONTAINS "oil bottle" (case-insensitive) >= value
+  oil_bottle_only     boolean       Orders containing ONLY "oil bottle" items
+                      (true/false)  (no other product types present)
+
+--------------------------------------------------------------------------------
+LIMITS
+------
+  Maximum exportable records : 10,000
+  Result ordering            : Descending by id (newest first)
+
+--------------------------------------------------------------------------------
+RESPONSE — SUCCESS (200 OK)
+----------------------------
+  Content-Type        : text/csv
+  Content-Disposition : attachment; filename="filtered_orders_<YYYYMMDD_HHMMSS>.csv"
+
+  SECTION 1 — ORDER DATA ROWS
+  ---------------------------
+  Column               Source Field                Notes
+  ------               ------------                -----
+  Date                 order.created_at            Format: YYYY-MM-DD HH:MM:SS
+  Customer Name        order.full_name
+  Contact Number       order.phone_number
+  Alternative Number   order.alternate_phone_number  Empty string if null
+  Address              order.delivery_address
+  Product Name         OrderProduct lines          Format: "qty-ProductName"
+                                                   comma-separated
+                                                   e.g. "2-Oil Bottle 500ml,1-Cap"
+  Product Price        order.total_amount          Float as string
+  Payment Type         order.payment_method        Appends "(prepaid_amount)"
+                                                   if prepaid amount exists
+  Order Status         order.order_status          Raw status string
+  Remarks              order.remarks               Empty string if null
+
+
+  SECTION 2 — SUMMARY STATISTICS (appended after all data rows)
+  --------------------------------------------------------------
+  [blank row]
+  Summary Statistics
+  Overall Orders,         <count of all exported orders>
+  Overall Amount,         <sum of all total_amounts>
+  Total Orders,           <count excluding cancelled statuses>
+  Total Amount,           <sum excluding cancelled statuses>
+  Total Cancelled Orders, <count of cancelled statuses>
+  Total Cancelled Amount, <sum of cancelled statuses>
+
+  Statuses treated as CANCELLED (excluded from "Total" metrics):
+    - Cancelled
+    - Returned By Customer
+    - Returned By Dash
+    - Return Pending
+    - Returned By PicknDrop
+    - Returned By YDM
+
+
+  SECTION 3 — APPLIED FILTERS (appended at the end)
+  --------------------------------------------------
+  [blank row]
+  Applied Filters
+  Date From,   2024-01-01
+  Franchise,   3
+  ...
+
+  Each active query param (except "export") is listed as Title Case key + value.
+
+--------------------------------------------------------------------------------
+ERROR RESPONSES
+---------------
+  Status  Condition                                  Response Body
+  ------  ---------                                  -------------
+  404     No orders match the applied filters        {"error": "No orders found to export"}
+  400     Filtered result exceeds 10,000 records     {"error": "Too many records to export. Limit is 10000 records."}
+  500     Unexpected error during CSV generation     {"error": "Failed to export orders: <detail>"}
+
+--------------------------------------------------------------------------------
+EXAMPLE REQUESTS
+----------------
+
+  1. Export all orders for January 2024:
+     GET /api/sales/export-summary/?date_from=2024-01-01&date_to=2024-01-31
+
+  2. Export high-value orders for a specific franchise:
+     GET /api/sales/export-summary/?franchise=3&total_amount_min=2000
+
+  3. Export repeat customers with bulk orders:
+     GET /api/sales/export-summary/?multiple_orders_customer=true&more_than_3_products=true
+
+  4. Export oil-bottle-only orders above a minimum quantity:
+     GET /api/sales/export-summary/?oil_bottle_only=true&oil_bottle_total_min=5
+
+  5. Combined date range + franchise + amount range:
+     GET /api/sales/export-summary/?date_from=2024-06-01&date_to=2024-06-30
+         &franchise=2&total_amount_min=500&total_amount_max=10000
+
+--------------------------------------------------------------------------------
+SOURCE REFERENCES
+-----------------
+  Filter class  : export_data/views.py  — CustomOrderFilter  (lines 599-755)
+  View function : export_data/views.py  — export_orders_csv_api (lines 758-905)
+  URL entry     : export_data/urls.py   — line 26
+  URL prefix    : core/urls.py          — line 33  (api/sales/)
+
+================================================================================
