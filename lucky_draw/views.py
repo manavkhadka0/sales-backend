@@ -428,12 +428,19 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
             full_name=full_name,
         )
 
-        self.assign_gift(customer)
+        # If the caller sends `"random": true/1/yes` in the request body,
+        # every entry is guaranteed a random gift (capped by daily_quantity).
+        # Otherwise the original offer-condition logic runs.
+        is_random = str(request.data.get("random", "")).lower() in ("true", "1", "yes")
+        if is_random:
+            self.assign_gift_random(customer)
+        else:
+            self.assign_gift(customer)
 
         serializer = CustomerGiftSerializer(customer)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    # ---------------- GIFT ASSIGNMENT ---------------- #
+    # ---------------- GIFT ASSIGNMENT (original — unchanged) ---------------- #
     def assign_gift(self, customer):
         today_date = timezone.now().date()
         lucky_draw_system = customer.lucky_draw_system
@@ -515,13 +522,6 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
             customer.save()
             return
 
-        # Debug: Print current gift assignment status (remove this in production)
-        for gift, weight in gift_weights.items():
-            assigned_count = Customer.objects.filter(
-                date_of_purchase=today_date, gift=gift
-            ).count()
-            print(f"{gift.name}: assigned {assigned_count}/3, weight {weight}")
-
         # Step 3: Weighted random selection based on assignment percentages
         gifts = list(gift_weights.keys())
         weights = list(gift_weights.values())
@@ -531,7 +531,88 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
         customer.prize_details = f"Congratulations! You've won {selected_gift.name}"
         customer.save()
 
-    # ---------------- OFFER CHECKING (unchanged) ---------------- #
+    # ---------------- RANDOM GIFT ASSIGNMENT (new) ---------------- #
+    def assign_gift_random(self, customer):
+        """Assign a completely random gift to the customer.
+
+        Every active offer's gifts are eligible. A gift is excluded only when
+        today's assignment count for that gift has already reached the offer's
+        daily_quantity cap. One gift is then picked uniformly at random from
+        the remaining eligible pool.
+
+        Fixed offers (phone-number-linked) are still checked first and take
+        priority over random assignment.
+        """
+        today_date = timezone.now().date()
+        lucky_draw_system = customer.lucky_draw_system
+
+        # Update daily sales count
+        sales_today, _ = Sales.objects.get_or_create(
+            date=today_date,
+            lucky_draw_system=lucky_draw_system,
+            defaults={"sales_count": 0},
+        )
+        sales_today.sales_count += 1
+        sales_today.save()
+
+        phone_number = customer.full_name
+
+        # ------------------ FIXED OFFERS (always checked first) ------------------ #
+        fixed_offer = FixOffer.objects.filter(
+            lucky_draw_system=lucky_draw_system,
+            phone_number=phone_number,
+            quantity__gt=0,
+        ).first()
+
+        if fixed_offer:
+            customer.gift.set(fixed_offer.gift.all())
+            gift_names = ", ".join([gift.name for gift in fixed_offer.gift.all()])
+            customer.prize_details = f"Congratulations! You've won {gift_names}"
+            customer.save()
+            fixed_offer.quantity -= 1
+            fixed_offer.save()
+            return
+
+        # ------------------ RANDOM GIFT POOL ------------------ #
+        # Gather all active offers for this lucky draw system.
+        offers = Offer.objects.filter(
+            lucky_draw_system=lucky_draw_system,
+            start_date__lte=today_date,
+            end_date__gte=today_date,
+            daily_quantity__gt=0,
+        )
+
+        eligible_gifts = []
+        today_time = timezone.now().time()
+
+        for offer in offers:
+            # Respect optional time-window gate
+            if offer.has_time_limit:
+                if today_time < offer.start_time or today_time > offer.end_time:
+                    continue
+
+            for gift in offer.gift.all():
+                already_assigned = Customer.objects.filter(
+                    date_of_purchase=today_date, gift=gift
+                ).count()
+
+                # Include this gift only if its daily cap has not been reached
+                if already_assigned < offer.daily_quantity:
+                    eligible_gifts.append(gift)
+
+        if not eligible_gifts:
+            # All gifts have hit their daily cap for today
+            customer.prize_details = "Thank you for your purchase!"
+            customer.save()
+            return
+
+        # Pick one gift uniformly at random from the eligible pool
+        selected_gift = random.choice(eligible_gifts)
+        customer.gift.add(selected_gift)
+        customer.prize_details = f"Congratulations! You've won {selected_gift.name}"
+        customer.save()
+
+    # ---------------- OFFER CONDITION CHECK ---------------- #
 
     def check_offer_condition(self, offer, sales_count):
         today_date = timezone.now().date()

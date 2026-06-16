@@ -2,6 +2,7 @@ from django.db import models
 from django.utils import timezone
 
 from account.models import Franchise
+from core.utils.s3bucket import PublicMediaStorage
 
 
 class Organization(models.Model):
@@ -37,14 +38,20 @@ class LuckyDrawSystem(models.Model):
     )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    background_image = models.FileField(upload_to="lucky_draws/", blank=True, null=True)
-    hero_image = models.FileField(upload_to="lucky_draws/", blank=True, null=True)
+    background_image = models.FileField(
+        storage=PublicMediaStorage(), upload_to="lucky_draws/", blank=True, null=True
+    )
+    hero_image = models.FileField(
+        storage=PublicMediaStorage(), upload_to="lucky_draws/", blank=True, null=True
+    )
     main_offer_stamp_image = models.FileField(
-        upload_to="lucky_draws/", blank=True, null=True
+        storage=PublicMediaStorage(), upload_to="lucky_draws/", blank=True, null=True
     )
     hero_title = models.CharField(max_length=255, default="")
     hero_subtitle = models.CharField(max_length=255, default="")
-    qr = models.FileField(upload_to="lucky_draws/", blank=True, null=True)
+    qr = models.FileField(
+        storage=PublicMediaStorage(), upload_to="lucky_draws/", blank=True, null=True
+    )
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateField(auto_now=True)
     start_date = models.DateField()
@@ -66,7 +73,9 @@ class GiftItem(models.Model):
         LuckyDrawSystem, on_delete=models.CASCADE, related_name="gift_items"
     )
     name = models.CharField(max_length=255)
-    image = models.FileField(upload_to="gift_items/", blank=True, null=True)
+    image = models.FileField(
+        upload_to="gift_items/", storage=PublicMediaStorage(), blank=True, null=True
+    )
     category = models.CharField(
         max_length=10,
         choices=GIFT_CATEGORY_CHOICES,
