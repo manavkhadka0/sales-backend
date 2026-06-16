@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     "logistics",
     "lucky_draw",
     "sales_fest",
+    "sales_game",
     "export_data",
     "statistic",
     "pickndrop",

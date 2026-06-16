@@ -178,6 +178,7 @@ class OrderSerializer(serializers.ModelSerializer):
     ydm_rider_name = serializers.SerializerMethodField(read_only=True)
     comments = serializers.SerializerMethodField(read_only=True)
     sent_to_ydm_date = serializers.SerializerMethodField(read_only=True)
+    won_game = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Order
@@ -214,7 +215,22 @@ class OrderSerializer(serializers.ModelSerializer):
             "comments",
             "sent_to_ydm_date",
             "is_delivery_free",
+            "won_game",
         ]
+
+    def get_won_game(self, obj):
+        try:
+            from sales_game.models import GameWinner
+            winner = GameWinner.objects.filter(order=obj).first()
+            if winner:
+                return {
+                    "game_name": winner.game.name,
+                    "condition_name": winner.condition.name,
+                    "message": winner.message,
+                }
+        except Exception:
+            pass
+        return None
 
     def get_ydm_rider(self, obj):
         # Get the assigned user using select_related to optimize the query

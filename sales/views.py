@@ -461,6 +461,7 @@ class FranchiseOrdersListView(generics.ListAPIView):
     API view to list orders filtering only by Franchise ID.
     Supports filters (such as start_date, end_date, etc.) from OrderFilter.
     """
+
     serializer_class = OrderSerializer
     permission_classes = []
     filterset_class = OrderFilter
@@ -878,6 +879,13 @@ class OrderListCreateView(generics.ListCreateAPIView):
                 new_quantity=inventory_item.quantity,
                 action="order_created",
             )
+
+        try:
+            from sales_game.models import check_order_for_games
+
+            check_order_for_games(order)
+        except ImportError:
+            pass
 
         return order
 
