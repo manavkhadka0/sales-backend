@@ -27,6 +27,7 @@ admin.site.register(GiftItem, GiftItemAdmin)
 
 
 class LuckyDrawSystemAdmin(ModelAdmin):
+    list_display = ("title", "id", "is_active")
     formfield_overrides = {
         models.TextField: {
             "widget": TinyMCE,

@@ -129,15 +129,15 @@ class LuckyDrawSystemRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPI
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        
+
         # Unpack get_or_create
         fest_config, created = FestConfig.objects.get_or_create(
             franchise=instance.franchise,
         )
-        
+
         fest_config.lucky_draw_system = None
         fest_config.save()
-        
+
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -543,9 +543,8 @@ class SlotMachineListCreateView(generics.ListCreateAPIView):
 
         if offer.type_of_offer == "After every certain sale":
             todays_gift_count = (
-                Customer.objects.filter(
-                    date_of_purchase=today_date, gift__in=offer.gift.all()
-                )
+                Customer.objects
+                .filter(date_of_purchase=today_date, gift__in=offer.gift.all())
                 .distinct()
                 .count()
             )
@@ -604,24 +603,20 @@ def download_customers_detail(request):
 
         # Create a CSV writer and write the header row
         writer = csv.writer(response)
-        writer.writerow(
-            [
-                "Full Name",
-                "Gift",
-                "Date of Spin",
-            ]
-        )
+        writer.writerow([
+            "Full Name",
+            "Gift",
+            "Date of Spin",
+        ])
 
         # Write the data rows
         for customer in queryset:
-            writer.writerow(
-                [
-                    customer.full_name,
-                    ", ".join([gift.name for gift in customer.gift.all()])
-                    if customer.gift.exists()
-                    else "",
-                    customer.date_of_purchase,
-                ]
-            )
+            writer.writerow([
+                customer.full_name,
+                ", ".join([gift.name for gift in customer.gift.all()])
+                if customer.gift.exists()
+                else "",
+                customer.date_of_purchase,
+            ])
 
         return response
