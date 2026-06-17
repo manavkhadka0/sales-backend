@@ -176,3 +176,140 @@ class GameLogicTestCase(TestCase):
         assert chosen is not None
         assert chosen in [self.cond_sachet_shampoo, self.cond_bulk]
         assert self.game.active_condition == chosen
+
+    def test_game_can_only_be_won_once_globally(self):
+        # Create a second user (salesperson)
+        user2 = User.objects.create_user(
+            username="salesperson2",
+            password="password123",
+            role="SalesPerson",
+            franchise=self.franchise,
+        )
+
+        # Order 1 placed by salesperson self.user (met condition)
+        order1 = Order.objects.create(
+            sales_person=self.user,
+            franchise=self.franchise,
+            full_name="Customer One",
+            phone_number="9876543210",
+            payment_method="Cash on Delivery",
+        )
+        OrderProduct.objects.create(
+            order=order1, product=self.inv_sachet_oil, quantity=1
+        )
+        OrderProduct.objects.create(
+            order=order1, product=self.inv_shampoo_bottle, quantity=2
+        )
+        check_order_for_games(order1)
+        assert GameWinner.objects.filter(game=self.game).count() == 1
+
+        # Order 2 placed by different salesperson user2 (also met condition)
+        order2 = Order.objects.create(
+            sales_person=user2,
+            franchise=self.franchise,
+            full_name="Customer Two",
+            phone_number="9876543211",
+            payment_method="Cash on Delivery",
+        )
+        OrderProduct.objects.create(
+            order=order2, product=self.inv_sachet_oil, quantity=1
+        )
+        OrderProduct.objects.create(
+            order=order2, product=self.inv_shampoo_bottle, quantity=2
+        )
+        check_order_for_games(order2)
+
+        # Game should still only have 1 winning order in total globally
+        assert GameWinner.objects.filter(game=self.game).count() == 1
+        # Order 2 should not be registered as a winner
+        assert not GameWinner.objects.filter(order=order2).exists()
+
+    def test_game_inactive_by_default(self):
+        new_game = Game.objects.create(name="Default Game")
+        assert not new_game.is_active
+
+    def test_active_game_singleton_behavior(self):
+        # self.game is active
+        self.game.is_active = True
+        self.game.save()
+        assert self.game.is_active
+
+        game2 = Game.objects.create(name="Game 2", is_active=True)
+        # self.game should be deactivated
+        self.game.refresh_from_db()
+        assert not self.game.is_active
+        assert game2.is_active
+
+    def test_active_game_becomes_null_on_win(self):
+        # self.game is active
+        self.game.is_active = True
+        self.game.save()
+
+        order = Order.objects.create(
+            sales_person=self.user,
+            franchise=self.franchise,
+            full_name="John Doe",
+            phone_number="9876543210",
+            payment_method="Cash on Delivery",
+        )
+        OrderProduct.objects.create(
+            order=order, product=self.inv_sachet_oil, quantity=1
+        )
+        OrderProduct.objects.create(
+            order=order, product=self.inv_shampoo_bottle, quantity=2
+        )
+
+        check_order_for_games(order)
+        # The game should be deactivated (is_active = False)
+        self.game.refresh_from_db()
+        assert not self.game.is_active
+
+        # There should be no active game
+        active = Game.objects.filter(is_active=True).first()
+        assert active is None
+
+    def test_active_game_api_null_when_no_active_game(self):
+        from django.urls import reverse
+        from rest_framework.test import APIClient
+        
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+
+        # Deactivate all games
+        Game.objects.all().update(is_active=False)
+
+        url = reverse("sales_game:active-game")
+        response = client.get(url)
+        assert response.status_code == 200
+        assert response.data is None
+
+    def test_update_game_is_active_api(self):
+        from django.urls import reverse
+        from rest_framework.test import APIClient
+        
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+
+        # Create two games, both initially inactive
+        game1 = Game.objects.create(name="Game 1", is_active=False)
+        game2 = Game.objects.create(name="Game 2", is_active=False)
+
+        # Activate game1 via API
+        url = reverse("sales_game:game-detail", kwargs={"pk": game1.pk})
+        response = client.patch(url, {"is_active": True}, format="json")
+        assert response.status_code == 200
+        assert response.data["is_active"] is True
+
+        game1.refresh_from_db()
+        assert game1.is_active
+
+        # Now activate game2 via API, game1 should be deactivated automatically
+        url2 = reverse("sales_game:game-detail", kwargs={"pk": game2.pk})
+        response2 = client.patch(url2, {"is_active": True}, format="json")
+        assert response2.status_code == 200
+        assert response2.data["is_active"] is True
+
+        game1.refresh_from_db()
+        game2.refresh_from_db()
+        assert not game1.is_active
+        assert game2.is_active

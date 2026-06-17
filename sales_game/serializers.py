@@ -72,7 +72,7 @@ class GameCreateSerializer(serializers.ModelSerializer):
         conditions_data = validated_data.pop("conditions", [])
         
         # If this game is set to active, deactivate other games first
-        is_active = validated_data.get("is_active", True)
+        is_active = validated_data.get("is_active", False)
         if is_active:
             Game.objects.filter(is_active=True).update(is_active=False)
 

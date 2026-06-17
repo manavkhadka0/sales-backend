@@ -16,12 +16,20 @@ class Game(models.Model):
         related_name="+",
         help_text="The currently selected/active condition for this game",
     )
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if self.is_active:
+            # Enforce that only one game is active at a time
+            Game.objects.filter(is_active=True).exclude(pk=self.pk).update(
+                is_active=False
+            )
+        super().save(*args, **kwargs)
 
     def choose_random_condition(self):
         """
@@ -150,15 +158,20 @@ def check_order_for_games(order):
     """
     Check if the newly created order satisfies any active game's active condition.
     If so, record a GameWinner.
+    A salesperson can only win once per game.
     """
     active_game = Game.objects.filter(is_active=True).first()
     if not active_game or not active_game.active_condition:
         return
 
+    # Check if this game has already been won by anyone (once won, no one else can win)
+    if GameWinner.objects.filter(game=active_game).exists():
+        return
+
     condition = active_game.active_condition
     if condition.check_order_matches(order):
         # Record the win
-        GameWinner.objects.get_or_create(
+        winner, created = GameWinner.objects.get_or_create(
             game=active_game,
             condition=condition,
             order=order,
@@ -166,3 +179,7 @@ def check_order_for_games(order):
                 "message": f"Congratulations! You won the '{active_game.name}' game by satisfying condition: '{str(condition)}'"
             },
         )
+        if created:
+            # Once won, deactivate this game so active game becomes null/inactive
+            active_game.is_active = False
+            active_game.save(update_fields=["is_active"])
