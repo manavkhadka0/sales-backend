@@ -1,0 +1,251 @@
+API Documentation - Sales Game System
+
+All game endpoints require token-based authentication (Authorization: Bearer <your_token>).
+
+---
+
+1. List or Create Games
+Handles listing all games or creating a new game with its nested conditions and rules in a single transaction.
+
+- URL: /api/game/
+- Method: POST | GET
+- Headers: 
+  - Content-Type: application/json
+  - Authorization: Bearer <access_token>
+
+Create Game (POST) Request Payload:
+You can post a new game with multiple conditions. Each condition can have multiple rules.
+
+{
+  "name": "Weekly Combo Challenge",
+  "description": "Place orders matching condition rules to win exciting gifts!",
+  "is_active": false,
+  "conditions": [
+    {
+      "description": "Sachet Oil + Shampoo Bottle challenge",
+      "is_active": true,
+      "rules": [
+        {
+          "rule_type": "product",
+          "product": 12,
+          "min_quantity": 1
+        },
+        {
+          "rule_type": "keyword",
+          "keyword": "shampoo",
+          "min_quantity": 3
+        }
+      ]
+    },
+    {
+      "description": "Oil Bulk Combo",
+      "is_active": true,
+      "rules": [
+        {
+          "rule_type": "keyword",
+          "keyword": "oil",
+          "min_quantity": 6
+        }
+      ]
+    }
+  ]
+}
+
+Rule Types:
+- "product": Requires a specific product ID in the "product" field.
+- "keyword": Requires a partial match keyword in the "keyword" field (case-insensitive).
+
+POST Response (201 Created):
+{
+  "name": "Weekly Combo Challenge",
+  "description": "Place orders matching condition rules to win exciting gifts!",
+  "is_active": false,
+  "conditions": [
+    {
+      "description": "Sachet Oil + Shampoo Bottle challenge",
+      "is_active": true,
+      "rules": [
+        {
+          "rule_type": "product",
+          "product": 12,
+          "keyword": null,
+          "min_quantity": 1
+        },
+        {
+          "rule_type": "keyword",
+          "product": null,
+          "keyword": "shampoo",
+          "min_quantity": 3
+        }
+      ]
+    },
+    {
+      "description": "Oil Bulk Combo",
+      "is_active": true,
+      "rules": [
+        {
+          "rule_type": "keyword",
+          "product": null,
+          "keyword": "oil",
+          "min_quantity": 6
+        }
+      ]
+    }
+  ]
+}
+
+---
+
+2. Get Active Game
+Retrieve details of the currently active game session.
+
+- URL: /api/game/active/
+- Method: GET
+- Headers:
+  - Authorization: Bearer <access_token>
+
+Response (200 OK) - If active game exists:
+{
+  "id": 1,
+  "name": "Weekly Combo Challenge",
+  "description": "Place orders matching condition rules to win exciting gifts!",
+  "is_active": true,
+  "active_condition": 1,
+  "active_condition_name": "Condition: 1x Sachet Oil + 3x shampoo",
+  "conditions": [
+    {
+      "id": 1,
+      "name": "Condition: 1x Sachet Oil + 3x shampoo",
+      "description": "Sachet Oil + Shampoo Bottle challenge",
+      "is_active": true,
+      "rules": [
+        {
+          "id": 1,
+          "rule_type": "product",
+          "product": 12,
+          "product_name": "Sachet Oil",
+          "keyword": null,
+          "min_quantity": 1
+        },
+        {
+          "id": 2,
+          "rule_type": "keyword",
+          "product": null,
+          "product_name": null,
+          "keyword": "shampoo",
+          "min_quantity": 3
+        }
+      ]
+    }
+  ],
+  "created_at": "2026-06-16T17:30:00Z",
+  "updated_at": "2026-06-16T17:35:00Z"
+}
+
+Response (200 OK) - If no active game exists:
+null
+
+---
+
+3. Choose Random Condition
+Triggers a random selection of one of the active conditions for the current active game.
+
+- URL: /api/game/choose-condition/
+- Method: POST
+- Headers:
+  - Authorization: Bearer <access_token>
+
+Response (200 OK):
+{
+  "message": "Successfully activated condition: Condition: 6x oil",
+  "condition": {
+    "id": 2,
+    "name": "Condition: 6x oil",
+    "description": "Oil Bulk Combo",
+    "is_active": true,
+    "rules": [
+      {
+        "id": 3,
+        "rule_type": "keyword",
+        "product": null,
+        "product_name": null,
+        "keyword": "oil",
+        "min_quantity": 6
+      }
+    ]
+  }
+}
+
+---
+
+4. Get Game Winners
+Retrieve the history of orders that won a game challenge.
+
+- URL: /api/game/winners/
+- Method: GET
+- Headers:
+  - Authorization: Bearer <access_token>
+
+Response (200 OK):
+[
+  {
+    "id": 1,
+    "game": 1,
+    "game_name": "Weekly Combo Challenge",
+    "condition": 1,
+    "condition_name": "Condition: 1x Sachet Oil + 3x shampoo",
+    "order": 42,
+    "order_code": "ORD-E83DA91C",
+    "customer_name": "John Doe",
+    "won_at": "2026-06-16T17:40:00Z",
+    "notified": false,
+    "message": "Congratulations! You won the 'Weekly Combo Challenge' game by satisfying condition: 'Condition: 1x Sachet Oil + 3x shampoo'"
+  }
+]
+
+---
+
+5. Retrieve, Update or Delete a Game
+Allows retrieving the details of a single game, modifying its properties (such as toggling 'is_active', renaming, updating description, or changing the active condition), or deleting it.
+
+- URL: /api/game/<int:pk>/
+- Method: GET | PUT | PATCH | DELETE
+- Headers:
+  - Content-Type: application/json
+  - Authorization: Bearer <access_token>
+
+Request Payload (PATCH):
+{
+  "is_active": true
+}
+
+Response (200 OK):
+{
+  "id": 1,
+  "name": "Weekly Combo Challenge",
+  "description": "Place orders matching condition rules to win exciting gifts!",
+  "is_active": true,
+  "active_condition": 1,
+  "active_condition_name": "Condition: 1x Sachet Oil + 3x shampoo",
+  "conditions": [
+    {
+      "id": 1,
+      "name": "Condition: 1x Sachet Oil + 3x shampoo",
+      "description": "Sachet Oil + Shampoo Bottle challenge",
+      "is_active": true,
+      "rules": [
+        {
+          "id": 1,
+          "rule_type": "product",
+          "product": 12,
+          "product_name": "Sachet Oil",
+          "keyword": null,
+          "min_quantity": 1
+        }
+      ]
+    }
+  ],
+  "created_at": "2026-06-16T17:30:00Z",
+  "updated_at": "2026-06-16T17:35:00Z"
+}
+

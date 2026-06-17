@@ -8,7 +8,14 @@ class GameConditionRuleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = GameConditionRule
-        fields = ["id", "rule_type", "product", "product_name", "keyword", "min_quantity"]
+        fields = [
+            "id",
+            "rule_type",
+            "product",
+            "product_name",
+            "keyword",
+            "min_quantity",
+        ]
 
 
 class GameConditionSerializer(serializers.ModelSerializer):
@@ -47,6 +54,7 @@ class GameSerializer(serializers.ModelSerializer):
 
 # ------------------ WRITABLE NESTED SERIALIZERS ------------------ #
 
+
 class GameConditionRuleWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = GameConditionRule
@@ -70,7 +78,7 @@ class GameCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         conditions_data = validated_data.pop("conditions", [])
-        
+
         # If this game is set to active, deactivate other games first
         is_active = validated_data.get("is_active", False)
         if is_active:
@@ -81,7 +89,7 @@ class GameCreateSerializer(serializers.ModelSerializer):
         for cond_data in conditions_data:
             rules_data = cond_data.pop("rules", [])
             condition = GameCondition.objects.create(game=game, **cond_data)
-            
+
             for rule_data in rules_data:
                 GameConditionRule.objects.create(condition=condition, **rule_data)
 
@@ -96,11 +104,14 @@ class GameCreateSerializer(serializers.ModelSerializer):
 
 # ------------------ WINNER SERIALIZER ------------------ #
 
+
 class GameWinnerSerializer(serializers.ModelSerializer):
     game_name = serializers.ReadOnlyField(source="game.name")
     condition_name = serializers.SerializerMethodField()
     order_code = serializers.ReadOnlyField(source="order.order_code")
     customer_name = serializers.ReadOnlyField(source="order.full_name")
+    franchise_name = serializers.ReadOnlyField(source="order.franchise.name")
+    sales_person_name = serializers.SerializerMethodField()
 
     class Meta:
         model = GameWinner
@@ -113,6 +124,8 @@ class GameWinnerSerializer(serializers.ModelSerializer):
             "order",
             "order_code",
             "customer_name",
+            "franchise_name",
+            "sales_person_name",
             "won_at",
             "notified",
             "message",
@@ -120,3 +133,9 @@ class GameWinnerSerializer(serializers.ModelSerializer):
 
     def get_condition_name(self, obj):
         return str(obj.condition) if obj.condition else None
+
+    def get_sales_person_name(self, obj):
+        if obj.order and obj.order.sales_person:
+            full_name = f"{obj.order.sales_person.first_name} {obj.order.sales_person.last_name}".strip()
+            return full_name if full_name else obj.order.sales_person.username
+        return None
