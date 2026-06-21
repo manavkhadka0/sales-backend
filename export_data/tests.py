@@ -1,12 +1,13 @@
 from datetime import timedelta
 from io import BytesIO
-from django.utils import timezone
+
 from django.urls import reverse
+from django.utils import timezone
+from openpyxl import load_workbook
 from rest_framework import status
 from rest_framework.test import APITestCase
-from openpyxl import load_workbook
 
-from account.models import CustomUser
+from account.models import CustomUser, Factory, Franchise
 from sales.models import Order
 
 
@@ -30,6 +31,17 @@ class ExportDataViewsTests(APITestCase):
         # Newer than 6 months
         self.date_5_days_ago = now - timedelta(days=5)
 
+        # Create Factory
+        self.factory = Factory.objects.create(name="Yachu Factory", short_form="yachu")
+
+        # Create Franchise
+        self.franchise1 = Franchise.objects.create(
+            name="Franchise One", short_form="f1"
+        )
+        self.franchise2 = Franchise.objects.create(
+            name="Franchise Two", short_form="f2"
+        )
+
         # Create orders
         # 1. First unique old order (older than 6 months) -> John Doe
         self.order1 = Order.objects.create(
@@ -39,6 +51,8 @@ class ExportDataViewsTests(APITestCase):
             payment_method="Cash on Delivery",
             sales_person=self.sales_person,
             created_at=self.date_200_days_ago,
+            factory=self.factory,
+            franchise=self.franchise1,
         )
 
         # 2. Duplicate old order (same name/phone, older than 6 months) -> John Doe
@@ -49,6 +63,8 @@ class ExportDataViewsTests(APITestCase):
             payment_method="Cash on Delivery",
             sales_person=self.sales_person,
             created_at=self.date_190_days_ago,
+            factory=self.factory,
+            franchise=self.franchise1,
         )
 
         # 3. Second unique old order (older than 6 months) -> Jane Smith
@@ -59,6 +75,8 @@ class ExportDataViewsTests(APITestCase):
             payment_method="Prepaid",
             sales_person=self.sales_person,
             created_at=self.date_190_days_ago,
+            factory=self.factory,
+            franchise=self.franchise2,
         )
 
         # 4. Duplicate old order (same name/phone, older than 6 months) -> Jane Smith
@@ -69,6 +87,8 @@ class ExportDataViewsTests(APITestCase):
             payment_method="Prepaid",
             sales_person=self.sales_person,
             created_at=self.date_185_days_ago,
+            factory=self.factory,
+            franchise=self.franchise2,
         )
 
         # 5. New order (newer than 6 months) -> Alice Bob
@@ -79,6 +99,8 @@ class ExportDataViewsTests(APITestCase):
             payment_method="Cash on Delivery",
             sales_person=self.sales_person,
             created_at=self.date_5_days_ago,
+            factory=self.factory,
+            franchise=self.franchise1,
         )
 
     def test_export_unique_old_orders(self):
@@ -143,3 +165,64 @@ class ExportDataViewsTests(APITestCase):
         self.assertEqual(rows[1][6], "Address 3")
         self.assertEqual(rows[2][3], "John Doe")
         self.assertEqual(rows[2][6], "Address 1")
+
+    def test_yachu_full_export_filtering(self):
+        url = reverse("yachu-full-export")
+
+        # 1. No filters: returns all 5 orders
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("text/csv", response["Content-Type"])
+
+        content = b"".join(response.streaming_content).decode("utf-8-sig")
+        lines = [line for line in content.strip().split("\r\n") if line]
+        # Header + 5 orders
+        self.assertEqual(len(lines), 6)
+
+        # 2. Filter by start_date (e.g. date_190_days_ago)
+        # Should include orders created at: 190 days ago, 185 days ago, and 5 days ago (orders 2, 3, 4, 5)
+        start_date_str = self.date_190_days_ago.strftime("%Y-%m-%d")
+        response = self.client.get(url, {"start_date": start_date_str})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        content = b"".join(response.streaming_content).decode("utf-8-sig")
+        lines = [line for line in content.strip().split("\r\n") if line]
+        self.assertEqual(len(lines), 5)  # Header + 4 orders
+
+        # 3. Filter by end_date (e.g. date_185_days_ago)
+        # Should include orders created at: 200 days ago, 190 days ago, 185 days ago (orders 1, 2, 3, 4)
+        end_date_str = self.date_185_days_ago.strftime("%Y-%m-%d")
+        response = self.client.get(url, {"end_date": end_date_str})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        content = b"".join(response.streaming_content).decode("utf-8-sig")
+        lines = [line for line in content.strip().split("\r\n") if line]
+        self.assertEqual(len(lines), 5)  # Header + 4 orders
+
+        # 4. Filter by both start_date and end_date
+        # Should include orders created between 190 days ago and 185 days ago (orders 2, 3, 4)
+        response = self.client.get(
+            url, {"start_date": start_date_str, "end_date": end_date_str}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        content = b"".join(response.streaming_content).decode("utf-8-sig")
+        lines = [line for line in content.strip().split("\r\n") if line]
+        self.assertEqual(len(lines), 4)  # Header + 3 orders
+
+        # 5. Filter by franchise (ID)
+        # Franchise One should have orders 1, 2, 5
+        response = self.client.get(url, {"franchise": self.franchise1.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        content = b"".join(response.streaming_content).decode("utf-8-sig")
+        lines = [line for line in content.strip().split("\r\n") if line]
+        self.assertEqual(len(lines), 4)  # Header + 3 orders
+
+        # 6. Filter by franchise (Name)
+        # Franchise Two should have orders 3, 4
+        response = self.client.get(url, {"franchise": "Franchise Two"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        content = b"".join(response.streaming_content).decode("utf-8-sig")
+        lines = [line for line in content.strip().split("\r\n") if line]
+        self.assertEqual(len(lines), 3)  # Header + 2 orders
+
+        # 7. Invalid date format
+        response = self.client.get(url, {"start_date": "invalid-date"})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

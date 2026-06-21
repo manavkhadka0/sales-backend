@@ -956,9 +956,40 @@ class YachuFullOrderExportView(APIView):
             .order_by("id")
         )
 
+        # Extract and apply filter parameters
+        start_date = request.GET.get("start_date") or request.GET.get("startdate")
+        end_date = request.GET.get("end_date") or request.GET.get("enddate")
+        franchise = request.GET.get("franchise") or request.GET.get("franchise_id")
+
+        if start_date:
+            try:
+                datetime.strptime(start_date, "%Y-%m-%d")
+                base_qs = base_qs.filter(created_at__date__gte=start_date)
+            except ValueError:
+                return Response(
+                    {"error": "Invalid start_date format. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if end_date:
+            try:
+                datetime.strptime(end_date, "%Y-%m-%d")
+                base_qs = base_qs.filter(created_at__date__lte=end_date)
+            except ValueError:
+                return Response(
+                    {"error": "Invalid end_date format. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if franchise:
+            if franchise.isdigit():
+                base_qs = base_qs.filter(franchise_id=franchise)
+            else:
+                base_qs = base_qs.filter(franchise__name__icontains=franchise)
+
         if not base_qs.exists():
             return Response(
-                {"error": "No Yachu orders found."},
+                {"error": "No Yachu orders found matching the filter criteria."},
                 status=404,
             )
 
