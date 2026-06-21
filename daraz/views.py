@@ -39,15 +39,13 @@ class SendOrderToDarazView(APIView):
     POST /daraz/orders/<order_id>/send/
 
     Sends a sales order to the Daraz Open Platform EPIS Packages endpoint
-    using the bundled Lazop Python SDK.
+    using the bundled Lazop Python SDK with signature-based authentication.
 
+    Auth: HMAC-SHA256 signature (sign_method=sha256) — no access_token required.
     Credentials are read exclusively from environment variables:
         DARAZ_APPKEY   – Daraz application key
         DARAZ_SECRET   – Daraz application secret
         DARAZ_API_URL  – (optional) gateway URL, defaults to Daraz Nepal
-
-    An optional `access_token` may be supplied in the request body when
-    acting on behalf of a seller via OAuth.
     """
 
     def post(self, request, order_id):
@@ -66,34 +64,8 @@ class SendOrderToDarazView(APIView):
         # ------------------------------------------------------------------
         order = get_object_or_404(Order, id=order_id)
 
-        # ------------------------------------------------------------------
-        # 3. Retrieve the access token (check body -> DB store -> Env)
-        # ------------------------------------------------------------------
-        access_token = request.data.get("access_token")
-        if not access_token and order.franchise:
-            store_record = DarazSellerStore.objects.filter(
-                franchise=order.franchise
-            ).first()
-            if store_record:
-                access_token = store_record.access_token
-                logger.info(
-                    "Retrieved active Daraz Access Token from database for franchise: %s",
-                    order.franchise.name,
-                )
-
-        if not access_token:
-            access_token = os.getenv("DARAZ_ACCESS_TOKEN", "") or None
-
-        if not access_token:
-            return Response(
-                {
-                    "error": "This Franchise has not authorized their Daraz Seller account yet. Please connect the store first."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         logger.info(
-            "Preparing to send order %s (ID: %s) to Daraz at %s",
+            "Preparing to send order %s (ID: %s) to Daraz at %s using signature-only auth",
             order.order_code,
             order.id,
             DARAZ_API_URL,
@@ -107,6 +79,7 @@ class SendOrderToDarazView(APIView):
         # ------------------------------------------------------------------
         # 4. Items from order products
         # ------------------------------------------------------------------
+
         order_products = order.order_products.all()
 
         if not order_products.exists():
@@ -118,6 +91,14 @@ class SendOrderToDarazView(APIView):
         total_qty = sum(op.quantity for op in order_products) or 1
         subtotal = order.total_amount - (order.delivery_charge or 0)
         unit_price = max(int(subtotal / total_qty), 0)
+
+        # dimWeight is required both at top-level AND inside each item (per Daraz reference)
+        dim_weight = request.data.get("dimWeight") or {
+            "length": str(request.data.get("length", "15")),  # cm
+            "width": str(request.data.get("width", "10")),  # cm
+            "height": str(request.data.get("height", "10")),  # cm
+            "weight": str(request.data.get("weight", "500")),  # grams
+        }
 
         items_list = []
         for op in order_products:
@@ -131,20 +112,23 @@ class SendOrderToDarazView(APIView):
                 "quantity": str(op.quantity),
                 "name": product_name,
                 "paidPrice": str(unit_price),
+                "dimWeight": dim_weight,  # required per Daraz spec
             })
 
         # ------------------------------------------------------------------
         # 5. Origin / warehouse details  (configurable via env)
         # ------------------------------------------------------------------
-        origin = request.data.get("origin") or {
+        # Origin / warehouse – use ONLY the values registered with Daraz Nepal
+        origin = {
+            "name": "Yachu Kathmandu Shankhamul",
+            "phone": "9861884374",
+            "email": "yachusales@gmail.com",
             "address": {
-                "city": os.getenv("DARAZ_ORIGIN_CITY", "Kathmandu"),
-                "details": os.getenv("DARAZ_ORIGIN_DETAILS", "Kathmandu, Nepal"),
-                "id": os.getenv("DARAZ_ORIGIN_ID", "R80199317"),
+                "city": "Kathmandu Metro 10 - New Baneshwor Area",
+                "id": "RNP46",
+                "details": "Kathmandu Shankhamul",
+                "type": "work",
             },
-            "phone": os.getenv("DARAZ_ORIGIN_PHONE", "9800000000"),
-            "name": os.getenv("DARAZ_ORIGIN_NAME", "Baliyo Warehouse"),
-            "email": os.getenv("DARAZ_ORIGIN_EMAIL", "warehouse@baliyo.com"),
         }
 
         # ------------------------------------------------------------------
@@ -152,8 +136,9 @@ class SendOrderToDarazView(APIView):
         # ------------------------------------------------------------------
         destination = request.data.get("destination") or {
             "address": {
-                "city": order.city or "Kathmandu",
+                "city": "Thimi",
                 "details": order.delivery_address or "Delivery address",
+                "id": "RNP96",
             },
             "phone": order.phone_number,
             "name": order.full_name,
@@ -162,11 +147,12 @@ class SendOrderToDarazView(APIView):
         # ------------------------------------------------------------------
         # 7. Shipper / seller info
         # ------------------------------------------------------------------
-        shipper = request.data.get("shipper") or {
-            "externalSellerId": os.getenv("DARAZ_SELLER_ID", "L001231321"),
-            "platformName": os.getenv("DARAZ_PLATFORM_NAME", "Baliyo"),
-            "warehouseName": os.getenv("DARAZ_WAREHOUSE_NAME", "Main Warehouse"),
-            "externalWarehouseCode": os.getenv("DARAZ_WAREHOUSE_CODE", "WH_0001"),
+        # Shipper – use ONLY the values registered with Daraz Nepal
+        shipper = {
+            "externalSellerId": "Yachu Shankhamul 123",
+            "platformName": "Yachu Shankhamul",
+            "externalWarehouseCode": "5943",
+            "warehouseName": "Yachu Kathmandu Shankhamul",
         }
 
         # ------------------------------------------------------------------
@@ -210,19 +196,36 @@ class SendOrderToDarazView(APIView):
         iop_request.add_api_param("destination", json.dumps(destination))
         iop_request.add_api_param("payment", json.dumps(payment))
         iop_request.add_api_param("options", json.dumps(options))
+        # dimWeight is a top-level JSON object (NOT inside a 'package' wrapper)
+        iop_request.add_api_param("dimWeight", json.dumps(dim_weight))
         iop_request.add_api_param(
             "deliveryOption", request.data.get("deliveryOption", "standard")
         )
 
         # ------------------------------------------------------------------
-        # 11. Execute the request via the Lazop SDK
+        # 10b. Print/log request parameters in a nice format
         # ------------------------------------------------------------------
+        pretty_params = {}
+        for k, v in iop_request._api_params.items():
+            try:
+                # Attempt to parse values as JSON so nested objects print nicely
+                pretty_params[k] = json.loads(v)
+            except (ValueError, TypeError):
+                pretty_params[k] = v
+
         logger.info(
-            "Executing Daraz EPIS package request for order %s", order.order_code
+            "Daraz Request Parameters for %s:\n%s",
+            order.order_code,
+            json.dumps(pretty_params, indent=4, ensure_ascii=False),
+        )
+        print(
+            f"Daraz Request Parameters for {order.order_code}:\n{json.dumps(pretty_params, indent=4, ensure_ascii=False)}"
         )
 
         try:
-            iop_response = client.execute(iop_request, access_token)
+            iop_response = client.execute(
+                iop_request
+            )  # signature-only, no access_token
         except Exception as exc:  # noqa: BLE001
             logger.exception("Daraz SDK request failed for order %s", order.order_code)
             return Response(
