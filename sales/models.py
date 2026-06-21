@@ -389,6 +389,9 @@ class HistoricalDataConfig(models.Model):
         help_text="The date when base_week was last set (used for daily increment).",
     )
 
+    def __str__(self):
+        return f"Historical Config: {self.months_ago} months ago, Base Week {self.base_week} from {self.base_date}"
+
     def save(self, *args, **kwargs):
         if self.pk:
             try:
@@ -407,8 +410,10 @@ class HistoricalDataConfig(models.Model):
     @classmethod
     def get_solo(cls):
         return cls.objects.get_or_create(
-            pk=1, defaults={"months_ago": 6, "base_week": 1, "base_date": timezone.localdate()}
+            pk=1,
+            defaults={
+                "months_ago": 6,
+                "base_week": 1,
+                "base_date": timezone.localdate(),
+            },
         )[0]
-
-    def __str__(self):
-        return f"Historical Config: {self.months_ago} months ago, Base Week {self.base_week} from {self.base_date}"
