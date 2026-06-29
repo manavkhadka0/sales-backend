@@ -11,6 +11,7 @@ from core.utils.s3bucket import PublicMediaStorage
 class Location(models.Model):
     LOGISTICS_CHOICES = [
         ("YDM", "YDM"),
+        ("YDM_OLD", "YDM OLD"),
         ("DASH", "DASH"),
         ("PicknDrop", "PicknDrop"),
     ]
@@ -255,9 +256,11 @@ class Order(models.Model):
     ]
     LOGISTICS_CHOICES = [
         ("YDM", "YDM"),
+        ("YDM_OLD", "YDM OLD"),
         ("DASH", "DASH"),
         ("PicknDrop", "PicknDrop"),
         ("NCM", "NCM"),
+        ("DARAZ", "DARAZ"),
     ]
     order_code = models.CharField(
         max_length=20, default=generate_order_id, null=True, blank=True

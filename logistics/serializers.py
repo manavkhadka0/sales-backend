@@ -8,6 +8,9 @@ from .models import (
     OrderChangeLog,
     OrderComment,
     ReportInvoice,
+    RiderCommissionRate,
+    RiderPayout,
+    YdmLogisticsSetting,
 )
 
 
@@ -36,7 +39,16 @@ class OrderCommentDetailSerializer(serializers.ModelSerializer):
 class AssignOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssignOrder
-        fields = ["id", "order", "user", "assigned_at"]
+        fields = [
+            "id",
+            "order",
+            "user",
+            "assigned_at",
+            "is_rider_verified",
+            "ydm_delivery_charge",
+            "delivery_location_type",
+            "ydm_cancelled_charge",
+        ]
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
@@ -66,7 +78,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
     def get_comment_count(self, obj):
         # Count only non-null and non-empty comments related to this invoice
         return (
-            obj.report_invoices.exclude(comment__isnull=True)
+            obj.report_invoices
+            .exclude(comment__isnull=True)
             .exclude(comment__exact="")
             .count()
         )
@@ -87,3 +100,21 @@ class FranchiseStatementSerializer(serializers.Serializer):
     delivery_charge = serializers.FloatField()
     payment = serializers.FloatField()
     balance = serializers.FloatField()
+
+
+class RiderPayoutSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RiderPayout
+        fields = ["id", "rider", "amount", "paid_at", "remarks"]
+
+
+class RiderCommissionRateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RiderCommissionRate
+        fields = ["id", "order_min_amount", "order_max_amount", "commission_amount"]
+
+
+class YdmLogisticsSettingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = YdmLogisticsSetting
+        fields = ["id", "inside_ringroad_charge", "outside_ringroad_charge", "cancelled_charge"]

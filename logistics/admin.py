@@ -7,6 +7,9 @@ from .models import (
     OrderChangeLog,
     OrderComment,
     ReportInvoice,
+    RiderCommissionRate,
+    RiderPayout,
+    YdmLogisticsSetting,
 )
 
 # Register your models here.
@@ -95,3 +98,34 @@ class ReportInvoiceAdmin(ModelAdmin):
 
 
 admin.site.register(ReportInvoice, ReportInvoiceAdmin)
+
+
+class RiderCommissionRateAdmin(ModelAdmin):
+    list_display = ("order_min_amount", "order_max_amount", "commission_amount")
+    ordering = ("order_min_amount",)
+
+
+class RiderPayoutAdmin(ModelAdmin):
+    list_display = ("rider", "amount", "paid_at", "remarks")
+    list_filter = ("rider", "paid_at")
+    search_fields = ("rider__username", "remarks")
+    ordering = ("-paid_at",)
+
+
+admin.site.register(RiderCommissionRate, RiderCommissionRateAdmin)
+admin.site.register(RiderPayout, RiderPayoutAdmin)
+
+
+class YdmLogisticsSettingAdmin(ModelAdmin):
+    list_display = ("inside_ringroad_charge", "outside_ringroad_charge", "cancelled_charge")
+
+    def has_add_permission(self, request):
+        # Only allow adding if no record exists yet
+        return not YdmLogisticsSetting.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        # Prevent deletion of the singleton
+        return False
+
+
+admin.site.register(YdmLogisticsSetting, YdmLogisticsSettingAdmin)

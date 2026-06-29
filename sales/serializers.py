@@ -176,6 +176,7 @@ class OrderSerializer(serializers.ModelSerializer):
     location_name = serializers.SerializerMethodField(read_only=True)
     ydm_rider = serializers.SerializerMethodField(read_only=True)
     ydm_rider_name = serializers.SerializerMethodField(read_only=True)
+    is_rider_verified = serializers.SerializerMethodField(read_only=True)
     comments = serializers.SerializerMethodField(read_only=True)
     sent_to_ydm_date = serializers.SerializerMethodField(read_only=True)
     won_game = serializers.SerializerMethodField(read_only=True)
@@ -215,6 +216,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "comments",
             "sent_to_ydm_date",
             "is_delivery_free",
+            "is_rider_verified",
             "won_game",
         ]
 
@@ -238,8 +240,12 @@ class OrderSerializer(serializers.ModelSerializer):
         return assignment.user.phone_number if assignment and assignment.user else None
 
     def get_ydm_rider_name(self, obj):
-        assignment = obj.assign_orders.select_related("user").first()
-        return assignment.user.first_name if assignment and assignment.user else None
+      assignment = obj.assign_orders.select_related("user").first()
+      return assignment.user.first_name if assignment and assignment.user else None
+
+    def get_is_rider_verified(self, obj):
+        assignment = obj.assign_orders.first()
+        return assignment.is_rider_verified if assignment else False
 
     def get_location_name(self, obj):
         return obj.location.name if obj.location else None

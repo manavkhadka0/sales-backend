@@ -403,6 +403,50 @@ class OrderFilter(django_filters.FilterSet):
         method="filter_by_assigned_status", label="Filter by assignment status"
     )
     is_bulk_order = django_filters.BooleanFilter(method="filter_bulk_orders")
+    ydm_start_date = django_filters.DateFilter(
+        method="filter_ydm_start_date", label="YDM Sent Start Date"
+    )
+    ydm_end_date = django_filters.DateFilter(
+        method="filter_ydm_end_date", label="YDM Sent End Date"
+    )
+
+    def filter_ydm_start_date(self, queryset, name, value):
+        if value:
+            from django.db.models import OuterRef, Subquery
+            from django.db.models.functions import TruncDate
+
+            from logistics.models import OrderChangeLog
+
+            first_ydm_change = Subquery(
+                OrderChangeLog.objects
+                .filter(order_id=OuterRef("pk"), new_status="Sent to YDM")
+                .annotate(change_date=TruncDate("changed_at"))
+                .order_by("changed_at")
+                .values("change_date")[:1]
+            )
+            return queryset.annotate(first_ydm_date=first_ydm_change).filter(
+                first_ydm_date__gte=value
+            )
+        return queryset
+
+    def filter_ydm_end_date(self, queryset, name, value):
+        if value:
+            from django.db.models import OuterRef, Subquery
+            from django.db.models.functions import TruncDate
+
+            from logistics.models import OrderChangeLog
+
+            first_ydm_change = Subquery(
+                OrderChangeLog.objects
+                .filter(order_id=OuterRef("pk"), new_status="Sent to YDM")
+                .annotate(change_date=TruncDate("changed_at"))
+                .order_by("changed_at")
+                .values("change_date")[:1]
+            )
+            return queryset.annotate(first_ydm_date=first_ydm_change).filter(
+                first_ydm_date__lte=value
+            )
+        return queryset
 
     def filter_by_assigned_status(self, queryset, name, value):
         if value is not None:
@@ -453,6 +497,8 @@ class OrderFilter(django_filters.FilterSet):
             "franchise",
             "is_assigned",
             "is_bulk_order",
+            "ydm_start_date",
+            "ydm_end_date",
         ]
 
 
@@ -499,6 +545,49 @@ class OrderListCreateView(generics.ListCreateAPIView):
     ordering_fields = ["__all__"]
     pagination_class = CustomPagination
     parser_classes = (JSONParser, FormParser, MultiPartParser)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            serializer_data = serializer.data
+
+            status_filter = request.query_params.get("order_status")
+            if status_filter:
+                from logistics.models import OrderChangeLog
+
+                order_ids = [order["id"] for order in serializer_data]
+                logs = OrderChangeLog.objects.filter(
+                    order_id__in=order_ids, new_status__icontains=status_filter
+                ).order_by("changed_at")
+                latest_comments = {log.order_id: log.comment for log in logs}
+                for order_data in serializer_data:
+                    order_data["status_change_comment"] = latest_comments.get(
+                        order_data["id"], None
+                    )
+
+            return self.get_paginated_response(serializer_data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        serializer_data = serializer.data
+
+        status_filter = request.query_params.get("order_status")
+        if status_filter:
+            from logistics.models import OrderChangeLog
+
+            order_ids = [order["id"] for order in serializer_data]
+            logs = OrderChangeLog.objects.filter(
+                order_id__in=order_ids, new_status__icontains=status_filter
+            ).order_by("changed_at")
+            latest_comments = {log.order_id: log.comment for log in logs}
+            for order_data in serializer_data:
+                order_data["status_change_comment"] = latest_comments.get(
+                    order_data["id"], None
+                )
+
+        return Response(serializer_data)
 
     def create(self, request, *args, **kwargs):
         try:
@@ -963,6 +1052,31 @@ class OrderUpdateView(generics.UpdateAPIView):
             create_order_log(
                 order, previous_status, new_status, user=request.user, comment=comment
             )
+            # If logistics is YDM, manage the cancelled charge on AssignOrder based on status transitions
+            if order.logistics == "YDM":
+                cancelled_statuses = [
+                    "Cancelled",
+                    "Return Pending",
+                    "Returned By Customer",
+                    "Returned By YDM",
+                ]
+                if (
+                    new_status in cancelled_statuses
+                    and previous_status not in cancelled_statuses
+                ):
+                    from logistics.models import YdmLogisticsSetting
+
+                    setting = YdmLogisticsSetting.load()
+                    for assignment in order.assign_orders.all():
+                        assignment.ydm_cancelled_charge = setting.cancelled_charge
+                        assignment.save()
+                elif (
+                    previous_status in cancelled_statuses
+                    and new_status not in cancelled_statuses
+                ):
+                    for assignment in order.assign_orders.all():
+                        assignment.ydm_cancelled_charge = None
+                        assignment.save()
 
         # -----------------------------------------
         # 6️⃣ HANDLE ORDER CANCELLATION / RETURNS

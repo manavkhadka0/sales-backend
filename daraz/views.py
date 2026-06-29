@@ -251,6 +251,20 @@ class SendOrderToDarazView(APIView):
             iop_response.request_id,
         )
 
+        if success:
+            order.logistics = "DARAZ"
+            update_fields = ["logistics"]
+            tracking_number = response_body.get("data", {}).get("trackingNumber")
+            if tracking_number:
+                order.tracking_code = tracking_number
+                update_fields.append("tracking_code")
+                logger.info(
+                    "Successfully saved Daraz tracking number %s to order %s",
+                    tracking_number,
+                    order.order_code,
+                )
+            order.save(update_fields=update_fields)
+
         http_status = status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST
 
         return Response(

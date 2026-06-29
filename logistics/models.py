@@ -58,6 +58,35 @@ class AssignOrder(models.Model):
         CustomUser, on_delete=models.CASCADE, null=True, blank=True
     )
     assigned_at = models.DateTimeField(auto_now_add=True)
+    is_rider_verified = models.BooleanField(default=False)
+    ydm_delivery_charge = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Logistics delivery charge set by the rider based on delivery address (separate from franchise delivery_charge)",
+    )
+
+    DELIVERY_LOCATION_CHOICES = (
+        ("Inside Ringroad", "Inside Ringroad"),
+        ("Outside Ringroad", "Outside Ringroad"),
+    )
+    delivery_location_type = models.CharField(
+        max_length=50,
+        choices=DELIVERY_LOCATION_CHOICES,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Delivery location type selected by the rider (Inside Ringroad or Outside Ringroad).",
+    )
+
+    ydm_cancelled_charge = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Logistics cancelled charge set when the order is assigned or updated (separate from franchise delivery_charge)",
+    )
 
     class Meta:
         ordering = ["-assigned_at"]
@@ -68,6 +97,8 @@ class AssignOrder(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.order.order_code}"
+
+
 
 
 class Invoice(models.Model):
@@ -122,6 +153,9 @@ class Invoice(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return f"{self.invoice_code}"
+
 
 class ReportInvoice(models.Model):
     invoice = models.ForeignKey(
@@ -147,3 +181,85 @@ class ReportInvoice(models.Model):
 
     def __str__(self):
         return f"{self.invoice.invoice_code} - {self.reported_by.username}"
+
+
+class RiderCommissionRate(models.Model):
+    order_min_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    order_max_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    commission_amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        ordering = ["order_min_amount"]
+
+    def __str__(self):
+        max_str = (
+            f"{self.order_max_amount}" if self.order_max_amount is not None else "Above"
+        )
+        return f"Order Amount {self.order_min_amount} - {max_str} : Commission {self.commission_amount}"
+
+
+class RiderPayout(models.Model):
+    rider = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="rider_payouts",
+        limit_choices_to={"role": "YDM_Rider"},
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    paid_at = models.DateTimeField(auto_now_add=True)
+    remarks = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-paid_at"]
+
+    def __str__(self):
+        return f"{self.rider.username} - {self.amount} on {self.paid_at.date()}"
+
+
+class YdmLogisticsSetting(models.Model):
+    inside_ringroad_charge = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=100.00,
+        help_text="YDM delivery charge for inside ringroad deliveries.",
+    )
+    outside_ringroad_charge = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=150.00,
+        help_text="YDM delivery charge for outside ringroad deliveries.",
+    )
+    cancelled_charge = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        help_text="YDM charge for cancelled / returned deliveries.",
+    )
+
+    class Meta:
+        verbose_name = "YDM Logistics Setting"
+        verbose_name_plural = "YDM Logistics Settings"
+
+    def __str__(self):
+        return f"Inside: {self.inside_ringroad_charge}, Outside: {self.outside_ringroad_charge}, Cancelled: {self.cancelled_charge}"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        pass  # Prevent deletion of the singleton instance
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                "inside_ringroad_charge": 100.00,
+                "outside_ringroad_charge": 150.00,
+                "cancelled_charge": 0.00,
+            },
+        )
+        return obj
