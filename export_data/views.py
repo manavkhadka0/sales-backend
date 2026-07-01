@@ -960,6 +960,7 @@ class YachuFullOrderExportView(APIView):
         start_date = request.GET.get("start_date") or request.GET.get("startdate")
         end_date = request.GET.get("end_date") or request.GET.get("enddate")
         franchise = request.GET.get("franchise") or request.GET.get("franchise_id")
+        location = request.GET.get("location") or request.GET.get("location_name")
 
         if start_date:
             try:
@@ -986,6 +987,13 @@ class YachuFullOrderExportView(APIView):
                 base_qs = base_qs.filter(franchise_id=franchise)
             else:
                 base_qs = base_qs.filter(franchise__name__icontains=franchise)
+
+        if location:
+            base_qs = base_qs.filter(
+                Q(delivery_address__icontains=location)
+                | Q(landmark__icontains=location)
+                | Q(city__icontains=location)
+            )
 
         if not base_qs.exists():
             return Response(

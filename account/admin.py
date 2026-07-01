@@ -38,6 +38,7 @@ class CustomUserAdmin(ModelAdmin):
         "franchise__name",
         "role",
         "total_orders",
+        "id",
     )  # Add other fields as necessary
     list_filter = ("role", "franchise__name")
     search_fields = ("first_name", "phone_number")
@@ -49,9 +50,11 @@ class CustomUserAdmin(ModelAdmin):
     total_orders.short_description = "Total Orders"
 
     def save_model(self, request, obj, form, change):
-        if obj.password and not obj.password.startswith(
-            ("pbkdf2_sha256$", "bcrypt$", "argon2")
-        ):
+        if obj.password and not obj.password.startswith((
+            "pbkdf2_sha256$",
+            "bcrypt$",
+            "argon2",
+        )):
             obj.password = make_password(obj.password)
         super().save_model(request, obj, form, change)
 

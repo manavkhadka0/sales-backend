@@ -1,19 +1,23 @@
-import datetime
 import json
 import logging
 import os
 
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import status
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import generics, status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from sales.models import Order
 
+from .filters import DarazLocationFilter
 from .iop import IopClient, IopRequest
-from .models import DarazSellerStore
+from .models import DarazLocation, DarazSellerStore
+from .serializers import DarazLocationImportSerializer, DarazLocationSerializer
+from .services.location_service import import_locations_from_csv
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +52,8 @@ class SendOrderToDarazView(APIView):
         DARAZ_API_URL  – (optional) gateway URL, defaults to Daraz Nepal
     """
 
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, order_id):
         # ------------------------------------------------------------------
         # 1. Build the SDK client from env credentials
@@ -60,9 +66,35 @@ class SendOrderToDarazView(APIView):
             )
 
         # ------------------------------------------------------------------
-        # 2. Retrieve the order
+        # 2. Retrieve the order & fetch Daraz seller configuration
         # ------------------------------------------------------------------
-        order = get_object_or_404(Order, id=order_id)
+        order = get_object_or_404(
+            Order.objects.select_related("franchise"), id=order_id
+        )
+
+        user = request.user
+        user_franchise = getattr(user, "franchise", None)
+        if not user_franchise:
+            return Response(
+                {"error": "Your user account is not associated with any Franchise."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not order.franchise or order.franchise != user_franchise:
+            return Response(
+                {"error": "You can only send orders belonging to your own franchise."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            store_config = DarazSellerStore.objects.get(franchise=user_franchise)
+        except DarazSellerStore.DoesNotExist:
+            return Response(
+                {
+                    "error": f"No Daraz store configuration found for franchise '{user_franchise.name}'."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         logger.info(
             "Preparing to send order %s (ID: %s) to Daraz at %s using signature-only auth",
@@ -116,43 +148,65 @@ class SendOrderToDarazView(APIView):
             })
 
         # ------------------------------------------------------------------
-        # 5. Origin / warehouse details  (configurable via env)
+        # 5. Origin / warehouse details (dynamic from store config)
         # ------------------------------------------------------------------
-        # Origin / warehouse – use ONLY the values registered with Daraz Nepal
         origin = {
-            "name": "Yachu Kathmandu Shankhamul",
-            "phone": "9861884374",
-            "email": "yachusales@gmail.com",
+            "name": store_config.origin_name,
+            "phone": store_config.origin_phone,
+            "email": store_config.origin_email,
             "address": {
-                "city": "Kathmandu Metro 10 - New Baneshwor Area",
-                "id": "RNP46",
-                "details": "Kathmandu Shankhamul",
-                "type": "work",
+                "city": store_config.origin_address_city,
+                "id": store_config.origin_address_id,
+                "details": store_config.origin_address_details,
+                "type": store_config.origin_address_type,
             },
         }
 
         # ------------------------------------------------------------------
         # 6. Destination / customer details (derived from order)
         # ------------------------------------------------------------------
-        destination = request.data.get("destination") or {
-            "address": {
-                "city": "Thimi",
-                "details": order.delivery_address or "Delivery address",
-                "id": "RNP96",
-            },
-            "phone": order.phone_number,
-            "name": order.full_name,
-        }
+        location_id = request.data.get("location_id") or request.data.get("location")
+        if not location_id:
+            return Response(
+                {"error": "location_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            daraz_location = DarazLocation.objects.get(id=location_id)
+            dest_city = daraz_location.city
+            dest_id = daraz_location.l4_id
+        except DarazLocation.DoesNotExist:
+            return Response(
+                {"error": f"DarazLocation with ID {location_id} not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        destination = request.data.get("destination")
+        if not destination:
+            destination = {
+                "address": {
+                    "city": dest_city,
+                    "details": order.delivery_address or "Delivery address",
+                    "id": dest_id,
+                },
+                "phone": order.phone_number,
+                "name": order.full_name,
+            }
+        else:
+            if "address" not in destination:
+                destination["address"] = {}
+            destination["address"]["city"] = dest_city
+            destination["address"]["id"] = dest_id
 
         # ------------------------------------------------------------------
-        # 7. Shipper / seller info
+        # 7. Shipper / seller info (dynamic from store config)
         # ------------------------------------------------------------------
-        # Shipper – use ONLY the values registered with Daraz Nepal
         shipper = {
-            "externalSellerId": "Yachu Shankhamul 123",
-            "platformName": "Yachu Shankhamul",
-            "externalWarehouseCode": "5943",
-            "warehouseName": "Yachu Kathmandu Shankhamul",
+            "externalSellerId": store_config.shipper_seller_id,
+            "platformName": store_config.shipper_platform_name,
+            "externalWarehouseCode": store_config.shipper_external_warehouse_code,
+            "warehouseName": store_config.shipper_warehouse_name,
         }
 
         # ------------------------------------------------------------------
@@ -281,97 +335,6 @@ class SendOrderToDarazView(APIView):
         )
 
 
-class SaveDarazTokenView(APIView):
-    """
-    POST /api/daraz/save-token/
-    Exchanges the authorization code from the frontend for seller tokens and saves them.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        code = request.data.get("code")
-        if not code:
-            return Response(
-                {"error": "Authorization code not provided."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        user = request.user
-        if not user.franchise:
-            return Response(
-                {"error": "Your account is not associated with any Franchise."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        franchise = user.franchise
-
-        # Request tokens using global Daraz auth REST gateway
-        app_key = os.getenv("DARAZ_APPKEY", "")
-        app_secret = os.getenv("DARAZ_SECRET", "")
-        if not app_key or not app_secret:
-            return Response(
-                {
-                    "error": "DARAZ_APPKEY and DARAZ_SECRET must be set in the environment."
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-        client = IopClient("https://api.daraz.com.np/rest", app_key, app_secret)
-
-        iop_request = IopRequest("/auth/token/create", "POST")
-        iop_request.add_api_param("code", code)
-
-        try:
-            iop_response = client.execute(iop_request)
-            response_data = (
-                iop_response.body if isinstance(iop_response.body, dict) else {}
-            )
-
-            if "access_token" not in response_data:
-                return Response(
-                    {
-                        "error": "Failed to retrieve access token.",
-                        "details": response_data,
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            access_token = response_data.get("access_token")
-            refresh_token = response_data.get("refresh_token")
-            expires_in = int(response_data.get("expires_in", 2592000))
-            refresh_expires_in = int(response_data.get("refresh_expires_in", 31536000))
-
-            now = timezone.now()
-            access_expiry = now + datetime.timedelta(seconds=expires_in)
-            refresh_expiry = now + datetime.timedelta(seconds=refresh_expires_in)
-
-            # Map the tokens to the specific Franchise model instance
-            store_record, created = DarazSellerStore.objects.update_or_create(
-                franchise=franchise,
-                defaults={
-                    "access_token": access_token,
-                    "refresh_token": refresh_token,
-                    "access_token_expires_at": access_expiry,
-                    "refresh_token_expires_at": refresh_expiry,
-                },
-            )
-
-            return Response(
-                {
-                    "success": True,
-                    "message": "Successfully linked your Franchise store to Daraz!",
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        except Exception as e:
-            return Response(
-                {"error": "Internal error processing tokens.", "detail": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-
 class GetDarazConfigView(APIView):
     """
     GET /api/daraz/config/
@@ -397,4 +360,162 @@ class GetDarazConfigView(APIView):
                 "connected": connected,
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class DarazLocationListView(generics.ListAPIView):
+    """
+    GET /api/daraz/locations/
+    Retrieves the list of Daraz locations. Supports searching by city or area.
+    """
+
+    queryset = DarazLocation.objects.all()
+    serializer_class = DarazLocationSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = DarazLocationFilter
+    # permission_classes = [IsAuthenticated]
+
+
+class DarazLocationImportView(APIView):
+    """
+    POST /api/daraz/locations/import/
+    Imports Daraz locations from a CSV file.
+    """
+
+    # permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    serializer_class = DarazLocationImportSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        file_obj = serializer.validated_data["file"]
+        try:
+            count = import_locations_from_csv(file_obj)
+            return Response(
+                {"message": "Locations imported successfully.", "count": count},
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to import CSV: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class CancelDarazOrderView(APIView):
+    """
+    POST /api/daraz/orders/<order_id>/cancel/
+    Cancels a package/order on Daraz.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, order_id):
+        order = get_object_or_404(
+            Order.objects.select_related("franchise"), id=order_id
+        )
+
+        user = request.user
+        user_franchise = getattr(user, "franchise", None)
+        if not user_franchise:
+            return Response(
+                {"error": "Your user account is not associated with any Franchise."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not order.franchise or order.franchise != user_franchise:
+            return Response(
+                {
+                    "error": "You can only cancel orders belonging to your own franchise."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        package_code = order.tracking_code
+        if not package_code:
+            return Response(
+                {"error": "Package code is required to cancel this order on Daraz."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = request.data.get("reason") or "User trigger cancel"
+
+        try:
+            client = _get_client()
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        iop_request = IopRequest("/logistics/epis/packages/cancel", "POST")
+        iop_request.add_api_param("packageCode", str(package_code))
+        iop_request.add_api_param("reason", str(reason))
+
+        # Print and log API payload
+        pretty_params = {}
+        for k, v in iop_request._api_params.items():
+            try:
+                pretty_params[k] = json.loads(v)
+            except (ValueError, TypeError):
+                pretty_params[k] = v
+
+        logger.info(
+            "Daraz Cancel Request Parameters for %s:\n%s",
+            order.order_code,
+            json.dumps(pretty_params, indent=4, ensure_ascii=False),
+        )
+        print(
+            f"Daraz Cancel Request Parameters for {order.order_code}:\n{json.dumps(pretty_params, indent=4, ensure_ascii=False)}"
+        )
+
+        logger.info(
+            "Sending cancel request to Daraz for package %s, reason: %s",
+            package_code,
+            reason,
+        )
+
+        try:
+            iop_response = client.execute(iop_request)
+        except Exception as exc:
+            logger.exception(
+                "Daraz cancel SDK request failed for order %s", order.order_code
+            )
+            return Response(
+                {"error": "Failed to reach Daraz API.", "detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        response_body = iop_response.body if isinstance(iop_response.body, dict) else {}
+
+        # Print and log API response
+        logger.info(
+            "Daraz Cancel Response for order %s:\n%s",
+            order.order_code,
+            json.dumps(response_body, indent=4, ensure_ascii=False),
+        )
+        print(
+            f"Daraz Cancel Response for order {order.order_code}:\n{json.dumps(response_body, indent=4, ensure_ascii=False)}"
+        )
+
+        daraz_code = str(iop_response.code) if iop_response.code is not None else ""
+        success = daraz_code == "0"
+
+        if success:
+            order.order_status = "Cancelled"
+            order.save(update_fields=["order_status"])
+
+        http_status = status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST
+
+        return Response(
+            {
+                "success": success,
+                "daraz_code": iop_response.code,
+                "daraz_message": iop_response.message,
+                "daraz_request_id": iop_response.request_id,
+                "body": response_body,
+            },
+            status=http_status,
         )
