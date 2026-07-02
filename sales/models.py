@@ -238,6 +238,7 @@ class Order(models.Model):
         ("Verified", "Verified"),
         ("Sent to Dash", "Sent to Dash"),
         ("Sent to YDM", "Sent to YDM"),
+        ("Sent to Daraz", "Sent to Daraz"),
         ("Sent to PicknDrop", "Sent to PicknDrop"),
         ("Delivered", "Delivered"),
         ("Indrive", "Indrive"),
@@ -246,6 +247,7 @@ class Order(models.Model):
         ("Returned By Dash", "Returned By Dash"),
         ("Returned By YDM", "Returned By YDM"),
         ("Returned By PicknDrop", "Returned By PicknDrop"),
+        ("Returned By Daraz", "Returned By Daraz"),
         ("Return Pending", "Return Pending"),
         ("Out For Delivery", "Out For Delivery"),
         ("Rescheduled", "Rescheduled"),
@@ -260,7 +262,7 @@ class Order(models.Model):
         ("DASH", "DASH"),
         ("PicknDrop", "PicknDrop"),
         ("NCM", "NCM"),
-        ("DARAZ", "DARAZ"),
+        ("Daraz", "Daraz"),
     ]
     order_code = models.CharField(
         max_length=20, default=generate_order_id, null=True, blank=True
@@ -293,6 +295,13 @@ class Order(models.Model):
         "sales.Location",
         on_delete=models.CASCADE,
         related_name="orders",
+        null=True,
+        blank=True,
+    )
+    daraz_location = models.ForeignKey(
+        "daraz.DarazLocation",
+        on_delete=models.CASCADE,
+        related_name="daraz_orders",
         null=True,
         blank=True,
     )

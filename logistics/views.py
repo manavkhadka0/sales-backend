@@ -158,10 +158,12 @@ def get_franchise_order_stats(request, franchise_id):
                 "Pending",
                 "Processing",
                 "Sent to Dash",
+                "Sent to Daraz",
                 "Indrive",
                 "Returned By PicknDrop",
                 "Sent to PicknDrop",
                 "Returned By Dash",
+                "Returned By Daraz",
             ]
         )
 
@@ -246,10 +248,12 @@ def get_complete_dashboard_stats(request, franchise_id):
             "Pending",
             "Processing",
             "Sent to Dash",
+            "Sent to Daraz",
             "Indrive",
             "Returned By PicknDrop",
             "Sent to PicknDrop",
             "Returned By Dash",
+            "Returned By Daraz",
         ]
 
         # Parse optional date range filters
@@ -522,10 +526,12 @@ def get_total_pending_cod(request, franchise_id):
             "Pending",
             "Processing",
             "Sent to Dash",
+            "Sent to Daraz",
             "Indrive",
             "Returned By PicknDrop",
             "Sent to PicknDrop",
             "Returned By Dash",
+            "Returned By Daraz",
         ]
 
         orders = Order.objects.filter(
@@ -930,10 +936,12 @@ def daily_delivered_orders(request, franchise_id):
         "Pending",
         "Processing",
         "Sent to Dash",
+        "Sent to Daraz",
         "Indrive",
         "Returned By PicknDrop",
         "Sent to PicknDrop",
         "Returned By Dash",
+        "Returned By Daraz",
     ]
     base_orders = Order.objects.filter(
         franchise_id=franchise_id, logistics="YDM"
@@ -2238,10 +2246,12 @@ def calculate_dashboard_pending_cod(franchise_id):
         "Pending",
         "Processing",
         "Sent to Dash",
+        "Sent to Daraz",
         "Indrive",
         "Returned By PicknDrop",
         "Sent to PicknDrop",
         "Returned By Dash",
+        "Returned By Daraz",
     ]
 
     assign_order_qs = AssignOrder.objects.filter(

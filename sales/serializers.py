@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from account.models import CustomUser, Franchise
 from account.serializers import SmallUserSerializer, UserSmallSerializer
+from daraz.models import DarazLocation
 from logistics.serializers import OrderCommentSerializer
 
 from .models import (
@@ -173,6 +174,12 @@ class OrderSerializer(serializers.ModelSerializer):
         allow_null=True,
         write_only=True,
     )
+    daraz_location = serializers.PrimaryKeyRelatedField(
+        queryset=DarazLocation.objects.all(),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
     location_name = serializers.SerializerMethodField(read_only=True)
     ydm_rider = serializers.SerializerMethodField(read_only=True)
     ydm_rider_name = serializers.SerializerMethodField(read_only=True)
@@ -193,6 +200,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "landmark",
             "country_code",
             "phone_number",
+            "daraz_location",
             "alternate_phone_number",
             "payment_method",
             "location",
@@ -223,6 +231,7 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_won_game(self, obj):
         try:
             from sales_game.models import GameWinner
+
             winner = GameWinner.objects.filter(order=obj).first()
             if winner:
                 return {
@@ -240,15 +249,19 @@ class OrderSerializer(serializers.ModelSerializer):
         return assignment.user.phone_number if assignment and assignment.user else None
 
     def get_ydm_rider_name(self, obj):
-      assignment = obj.assign_orders.select_related("user").first()
-      return assignment.user.first_name if assignment and assignment.user else None
+        assignment = obj.assign_orders.select_related("user").first()
+        return assignment.user.first_name if assignment and assignment.user else None
 
     def get_is_rider_verified(self, obj):
         assignment = obj.assign_orders.first()
         return assignment.is_rider_verified if assignment else False
 
     def get_location_name(self, obj):
-        return obj.location.name if obj.location else None
+        if obj.location:
+            return obj.location.name
+        if obj.daraz_location:
+            return obj.daraz_location.area
+        return None
 
     def get_comments(self, obj):
         latest_comment = obj.comments.order_by("-id").first()
@@ -258,7 +271,8 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_sent_to_ydm_date(self, obj):
         sent_to_ydm_log = (
-            obj.change_logs.filter(new_status="Sent to YDM")
+            obj.change_logs
+            .filter(new_status="Sent to YDM")
             .order_by("changed_at")
             .first()
         )

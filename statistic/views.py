@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from account.models import CustomUser, Franchise
+from sales.constants import ACTIVE_ORDER_STATUSES, EXCLUDED_STATUSES
 from sales.models import Inventory, Order, OrderProduct
 from sales.serializers import (
     OrderSerializer,
@@ -114,22 +115,13 @@ class SalesStatisticsView(generics.GenericAPIView):
     def get_stats_for_queryset(self, queryset, today, is_filtered=False):
         """Helper method to get statistics for a queryset"""
         # Define excluded statuses
-        excluded_statuses = [
-            "Cancelled",
-            "Returned By Customer",
-            "Returned By Dash",
-            "Returned By YDM",
-            "Return Pending",
-            "Returned By PicknDrop",
-        ]
+        excluded_statuses = EXCLUDED_STATUSES
 
         if is_filtered:
             # When filtered by date, daily_stats represents the whole filtered range
-            daily_stats = (
-                queryset
-                .exclude(order_status__in=excluded_statuses)
-                .aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
-            )
+            daily_stats = queryset.exclude(
+                order_status__in=excluded_statuses
+            ).aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
             yesterday_stats = {
                 "total_orders": 0,
                 "total_sales": 0,
@@ -199,6 +191,12 @@ class SalesStatisticsView(generics.GenericAPIView):
                 filter=Q(order_status="Returned By PicknDrop"),
                 default=0,
             ),
+            returned_by_daraz_count=Count(
+                "id", filter=Q(order_status="Returned By Daraz")
+            ),
+            returned_by_daraz_amount=Sum(
+                "total_amount", filter=Q(order_status="Returned By Daraz"), default=0
+            ),
             return_pending_count=Count("id", filter=Q(order_status="Return Pending")),
             return_pending_amount=Sum(
                 "total_amount", filter=Q(order_status="Return Pending"), default=0
@@ -221,6 +219,7 @@ class SalesStatisticsView(generics.GenericAPIView):
                 "return_pending": all_time_stats["return_pending_count"] or 0,
                 "returned_by_pickndrop": all_time_stats["returned_by_pickndrop_count"]
                 or 0,
+                "returned_by_daraz": all_time_stats["returned_by_daraz_count"] or 0,
             },
             "all_time_sales": float(all_time_stats["all_time_sales"] or 0),
             "all_time_cancelled_sales": float(
@@ -237,6 +236,9 @@ class SalesStatisticsView(generics.GenericAPIView):
                 "return_pending": float(all_time_stats["return_pending_amount"] or 0),
                 "returned_by_pickndrop": float(
                     all_time_stats["returned_by_pickndrop_amount"] or 0
+                ),
+                "returned_by_daraz": float(
+                    all_time_stats["returned_by_daraz_amount"] or 0
                 ),
             },
         }
@@ -302,7 +304,9 @@ class SalesStatisticsView(generics.GenericAPIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        return Response(self.get_stats_for_queryset(queryset, today, is_filtered=is_filtered))
+        return Response(
+            self.get_stats_for_queryset(queryset, today, is_filtered=is_filtered)
+        )
 
 
 class TopSalespersonView(generics.ListAPIView):
@@ -319,14 +323,7 @@ class TopSalespersonView(generics.ListAPIView):
         current_date = timezone.now()
 
         # Define excluded statuses
-        excluded_statuses = [
-            "Cancelled",
-            "Returned By Customer",
-            "Returned By Dash",
-            "Return Pending",
-            "Returned By PicknDrop",
-            "Returned By YDM",
-        ]
+        excluded_statuses = EXCLUDED_STATUSES
 
         if user.role == "SuperAdmin":
             if franchise:
@@ -414,14 +411,7 @@ class TopSalespersonView(generics.ListAPIView):
         current_date = timezone.now()
 
         # Define excluded statuses
-        excluded_statuses = [
-            "Cancelled",
-            "Returned By Customer",
-            "Returned By Dash",
-            "Return Pending",
-            "Returned By PicknDrop",
-            "Returned By YDM",
-        ]
+        excluded_statuses = EXCLUDED_STATUSES
 
         for index, item in enumerate(data):
             salesperson = queryset[index]
@@ -503,14 +493,7 @@ class RevenueView(generics.ListAPIView):
         today = timezone.now().date()
 
         # Define excluded statuses
-        excluded_statuses = [
-            "Cancelled",
-            "Returned By Customer",
-            "Returned By Dash",
-            "Return Pending",
-            "Returned By PicknDrop",
-            "Returned By YDM",
-        ]
+        excluded_statuses = EXCLUDED_STATUSES
 
         try:
             # Base queryset based on user role
@@ -628,14 +611,7 @@ class RevenueWithCancelledView(generics.ListAPIView):
         today = timezone.now().date()
 
         # Define active order statuses
-        excluded_statuses = [
-            "Cancelled",
-            "Returned By Customer",
-            "Returned By Dash",
-            "Return Pending",
-            "Returned By PicknDrop",
-            "Returned By YDM",
-        ]
+        excluded_statuses = EXCLUDED_STATUSES
 
         try:
             # Base queryset based on user role
@@ -828,83 +804,40 @@ class TopProductsView(generics.ListAPIView):
             current_date = timezone.now()
 
             # Define excluded statuses
-            excluded_statuses = [
-                "Cancelled",
-                "Returned By Customer",
-                "Returned By Dash",
-                "Return Pending",
-                "Returned By PicknDrop",
-                "Returned By YDM",
-            ]
+            excluded_statuses = EXCLUDED_STATUSES
 
             # Base query for order products based on user role
             if user.role == "SuperAdmin":
                 if franchise:
                     base_query = OrderProduct.objects.filter(
                         order__franchise=franchise,
-                        order__order_status__in=[
-                            "Delivered",
-                            "Pending",
-                            "Indrive",
-                            "Sent to Dash",
-                            "Processing",
-                        ],
+                        order__order_status__in=ACTIVE_ORDER_STATUSES,
                     ).exclude(order__order_status__in=excluded_statuses)
                 elif distributor:
                     base_query = OrderProduct.objects.filter(
                         order__distributor=distributor,
-                        order__order_status__in=[
-                            "Delivered",
-                            "Pending",
-                            "Indrive",
-                            "Sent to Dash",
-                            "Processing",
-                        ],
+                        order__order_status__in=ACTIVE_ORDER_STATUSES,
                     ).exclude(order__order_status__in=excluded_statuses)
                 else:
                     base_query = OrderProduct.objects.filter(
                         order__factory=user.factory,
-                        order__order_status__in=[
-                            "Delivered",
-                            "Pending",
-                            "Indrive",
-                            "Sent to Dash",
-                            "Processing",
-                        ],
+                        order__order_status__in=ACTIVE_ORDER_STATUSES,
                     ).exclude(order__order_status__in=excluded_statuses)
             elif user.role == "Distributor":
                 franchises = Franchise.objects.filter(distributor=user.distributor)
                 base_query = OrderProduct.objects.filter(
                     order__franchise__in=franchises,
-                    order__order_status__in=[
-                        "Delivered",
-                        "Pending",
-                        "Indrive",
-                        "Sent to Dash",
-                        "Processing",
-                    ],
+                    order__order_status__in=ACTIVE_ORDER_STATUSES,
                 ).exclude(order__order_status__in=excluded_statuses)
             elif user.role in ["Franchise", "Packaging"]:
                 base_query = OrderProduct.objects.filter(
                     order__franchise=user.franchise,
-                    order__order_status__in=[
-                        "Delivered",
-                        "Pending",
-                        "Indrive",
-                        "Sent to Dash",
-                        "Processing",
-                    ],
+                    order__order_status__in=ACTIVE_ORDER_STATUSES,
                 ).exclude(order__order_status__in=excluded_statuses)
             elif user.role == "SalesPerson":
                 base_query = OrderProduct.objects.filter(
                     order__sales_person=user,
-                    order__order_status__in=[
-                        "Delivered",
-                        "Pending",
-                        "Indrive",
-                        "Sent to Dash",
-                        "Processing",
-                    ],
+                    order__order_status__in=ACTIVE_ORDER_STATUSES,
                 ).exclude(order__order_status__in=excluded_statuses)
             else:
                 return Response(
@@ -992,14 +925,7 @@ class DashboardStatsView(generics.GenericAPIView):
         last_month = current_date - timezone.timedelta(days=30)
 
         # Define excluded statuses
-        excluded_statuses = [
-            "Cancelled",
-            "Returned By Customer",
-            "Returned By Dash",
-            "Return Pending",
-            "Returned By PicknDrop",
-            "Returned By YDM",
-        ]
+        excluded_statuses = EXCLUDED_STATUSES
 
         # Base queryset filters based on user role
         if user.role == "SuperAdmin":
@@ -1056,13 +982,7 @@ class DashboardStatsView(generics.GenericAPIView):
             orders
             .filter(
                 created_at__gte=last_month,
-                order_status__in=[
-                    "Delivered",
-                    "Pending",
-                    "Indrive",
-                    "Processing",
-                    "Sent to Dash",
-                ],
+                order_status__in=ACTIVE_ORDER_STATUSES,
             )
             .exclude(order_status__in=excluded_statuses)
             .aggregate(total=Sum("total_amount"))["total"]
@@ -1085,13 +1005,7 @@ class DashboardStatsView(generics.GenericAPIView):
             .filter(
                 created_at__gte=previous_month,
                 created_at__lt=last_month,
-                order_status__in=[
-                    "Delivered",
-                    "Pending",
-                    "Indrive",
-                    "Processing",
-                    "Sent to Dash",
-                ],
+                order_status__in=ACTIVE_ORDER_STATUSES,
             )
             .exclude(order_status__in=excluded_statuses)
             .aggregate(total=Sum("total_amount"))["total"]
@@ -1103,13 +1017,7 @@ class DashboardStatsView(generics.GenericAPIView):
             .filter(
                 created_at__gte=previous_month,
                 created_at__lt=last_month,
-                order_status__in=[
-                    "Delivered",
-                    "Pending",
-                    "Indrive",
-                    "Processing",
-                    "Sent to Dash",
-                ],
+                order_status__in=ACTIVE_ORDER_STATUSES,
             )
             .exclude(order_status__in=excluded_statuses)
             .count()
@@ -1180,14 +1088,7 @@ class RevenueByProductView(generics.GenericAPIView):
         current_date = timezone.now()
 
         # Define excluded statuses
-        excluded_statuses = [
-            "Cancelled",
-            "Returned By Customer",
-            "Returned By Dash",
-            "Return Pending",
-            "Returned By PicknDrop",
-            "Returned By YDM",
-        ]
+        excluded_statuses = EXCLUDED_STATUSES
 
         # Filter orders based on user role
         if user.role == "SuperAdmin":
@@ -1197,36 +1098,18 @@ class RevenueByProductView(generics.GenericAPIView):
                 orders = Order.objects.filter(distributor=distributor)
             else:
                 orders = Order.objects.filter(
-                    order_status__in=[
-                        "Delivered",
-                        "Pending",
-                        "Indrive",
-                        "Sent to Dash",
-                        "Processing",
-                    ]
+                    order_status__in=ACTIVE_ORDER_STATUSES
                 ).exclude(order_status__in=excluded_statuses)
         elif user.role == "Distributor":
             franchises = Franchise.objects.filter(distributor=user.distributor)
             orders = Order.objects.filter(
                 franchise__in=franchises,
-                order_status__in=[
-                    "Delivered",
-                    "Pending",
-                    "Indrive",
-                    "Sent to Dash",
-                    "Processing",
-                ],
+                order_status__in=ACTIVE_ORDER_STATUSES,
             ).exclude(order_status__in=excluded_statuses)
         elif user.role in ["Franchise", "SalesPerson", "Packaging"]:
             orders = Order.objects.filter(
                 franchise=user.franchise,
-                order_status__in=[
-                    "Delivered",
-                    "Pending",
-                    "Indrive",
-                    "Sent to Dash",
-                    "Processing",
-                ],
+                order_status__in=ACTIVE_ORDER_STATUSES,
             ).exclude(order_status__in=excluded_statuses)
         else:
             return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
@@ -1300,14 +1183,7 @@ class RevenueByProductView(generics.GenericAPIView):
 
 class SalesPersonStatisticsView(APIView):
     def get(self, request, phone_number):
-        excluded_statuses = [
-            "Cancelled",
-            "Returned By Customer",
-            "Returned By Dash",
-            "Return Pending",
-            "Returned By PicknDrop",
-            "Returned By YDM",
-        ]
+        excluded_statuses = EXCLUDED_STATUSES
 
         try:
             # Get the salesperson
@@ -1453,14 +1329,7 @@ class SalesPersonStatisticsView(APIView):
 
 class SalesPersonRevenueView(generics.GenericAPIView):
     def get(self, request, phone_number):
-        excluded_statuses = [
-            "Cancelled",
-            "Returned By Customer",
-            "Returned By Dash",
-            "Return Pending",
-            "Returned By PicknDrop",
-            "Returned By YDM",
-        ]
+        excluded_statuses = EXCLUDED_STATUSES
         try:
             salesperson = CustomUser.objects.get(phone_number=phone_number)
             if salesperson.role not in ["SalesPerson", "Franchise"]:
@@ -1515,6 +1384,9 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                 ),
                 "returned_by_ydm_count": Count(
                     "id", filter=Q(order_status="Returned By YDM")
+                ),
+                "returned_by_daraz_count": Count(
+                    "id", filter=Q(order_status="Returned By Daraz")
                 ),
             }
 
@@ -1611,6 +1483,7 @@ class SalesPersonRevenueView(generics.GenericAPIView):
                         "return_pending": entry["return_pending_count"],
                         "returned_by_pickndrop": entry["returned_by_pickndrop_count"],
                         "returned_by_ydm": entry["returned_by_ydm_count"],
+                        "returned_by_daraz": entry["returned_by_daraz_count"],
                     },
                 }
                 for entry in revenue

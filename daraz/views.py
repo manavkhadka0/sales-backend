@@ -126,9 +126,9 @@ class SendOrderToDarazView(APIView):
 
         # dimWeight is required both at top-level AND inside each item (per Daraz reference)
         dim_weight = request.data.get("dimWeight") or {
-            "length": str(request.data.get("length", "15")),  # cm
-            "width": str(request.data.get("width", "10")),  # cm
-            "height": str(request.data.get("height", "10")),  # cm
+            "length": str(request.data.get("length", "1")),  # cm
+            "width": str(request.data.get("width", "1")),  # cm
+            "height": str(request.data.get("height", "1")),  # cm
             "weight": str(request.data.get("weight", "500")),  # grams
         }
 
@@ -224,11 +224,14 @@ class SendOrderToDarazView(APIView):
         # ------------------------------------------------------------------
         # 9. Delivery options
         # ------------------------------------------------------------------
-        options = request.data.get("options") or {
-            "deliveryNote": order.remarks or "",
-            "partnerOrderId": order.order_code,
-            "directReturnToMerchant": "true",
-        }
+        options = request.data.get("options")
+        if not options:
+            options = {
+                "deliveryNote": order.remarks or "",
+                "partnerOrderId": order.order_code,
+                "directReturnToMerchant": "true",
+            }
+        options["vasFdStorageOption"] = "true"
 
         # ------------------------------------------------------------------
         # 10. Populate API parameters on the request object
@@ -306,8 +309,9 @@ class SendOrderToDarazView(APIView):
         )
 
         if success:
-            order.logistics = "DARAZ"
-            update_fields = ["logistics"]
+            order.logistics = "Daraz"
+            order.daraz_location = daraz_location
+            update_fields = ["logistics", "daraz_location"]
             tracking_number = response_body.get("data", {}).get("trackingNumber")
             if tracking_number:
                 order.tracking_code = tracking_number

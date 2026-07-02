@@ -28,6 +28,7 @@ from core.middleware import get_current_db_name, set_current_db_name
 from logistics.models import AssignOrder
 from logistics.utils import create_order_log
 
+from .constants import EXCLUDED_STATUSES
 from .models import (
     Commission,
     DatabaseMode,
@@ -55,6 +56,19 @@ from .serializers import (
     PromoCodeSerializer,
     RawMaterialSerializer,
 )
+from .utils import (
+    append_order_status_comments,
+    deduct_order_inventory,
+    deduct_single_inventory_item,
+    format_inventory_list,
+    format_product_inventory_list,
+    get_inventory_by_user_role,
+    get_owner_by_role,
+    handle_free_delivery_toggle,
+    parse_order_products,
+    resolve_order_logistics_and_status,
+    restore_order_inventory,
+)
 
 # Create your views here.
 
@@ -65,16 +79,9 @@ class InventoryListCreateView(generics.ListCreateAPIView):
 
     def _format_inventory_data(self, inventory_queryset):
         """Helper method to format inventory data consistently"""
-        return [
-            {
-                "id": inventory.id,
-                "product_id": inventory.product.id,
-                "product": inventory.product.name,
-                "quantity": inventory.quantity,
-                "status": inventory.status,
-            }
-            for inventory in inventory_queryset.filter(status="ready_to_dispatch")
-        ]
+        return format_inventory_list(
+            inventory_queryset, filter_ready=True, include_status=True
+        )
 
     def _get_franchise_data(self, franchise):
         """Helper method to get franchise inventory data"""
@@ -143,20 +150,11 @@ class InventoryListCreateView(generics.ListCreateAPIView):
         quantity = serializer.validated_data["quantity"]
         status = serializer.validated_data.get("status", None)
 
-        def get_inventory_owner():
-            """Helper method to determine inventory owner based on user role"""
-            if user.role == "SuperAdmin":
-                # SuperAdmin can only add inventory to their own factory
-                return user.factory, "factory"
-
-            elif user.role == "Distributor":
-                # Distributor can only add inventory to their own distributor account
-                return user.distributor, "distributor"
-
-            elif user.role in ["Franchise", "Packaging"]:
-                # Franchise and Packaging can only add inventory to their own franchise
-                return user.franchise, "franchise"
-
+        owner, owner_type = get_owner_by_role(user)
+        if (
+            user.role not in ["SuperAdmin", "Distributor", "Franchise", "Packaging"]
+            or not owner
+        ):
             raise serializers.ValidationError(
                 "User does not have permission to create inventory"
             )
@@ -195,8 +193,6 @@ class InventoryListCreateView(generics.ListCreateAPIView):
                 )
                 return inventory
 
-        # Get inventory owner and type, then update or create inventory
-        owner, owner_type = get_inventory_owner()
         return update_or_create_inventory(owner, owner_type)
 
 
@@ -223,16 +219,9 @@ class FactoryInventoryListView(generics.ListAPIView):
             )
             return Response({
                 "factory": user.factory.name,
-                "inventory": [
-                    {
-                        "id": inventory.id,
-                        "product_id": inventory.product.id,
-                        "product": inventory.product.name,
-                        "quantity": inventory.quantity,
-                        "status": inventory.status,
-                    }
-                    for inventory in inventory_queryset
-                ],
+                "inventory": format_inventory_list(
+                    inventory_queryset, filter_ready=False, include_status=True
+                ),
             })
 
         return Response(
@@ -247,16 +236,9 @@ class DistributorInventoryListView(generics.ListAPIView):
 
     def _format_inventory_data(self, inventory_queryset):
         """Helper method to format inventory data consistently"""
-        return [
-            {
-                "id": inventory.id,
-                "product_id": inventory.product.id,
-                "product": inventory.product.name,
-                "quantity": inventory.quantity,
-                "status": inventory.status,
-            }
-            for inventory in inventory_queryset
-        ]
+        return format_inventory_list(
+            inventory_queryset, filter_ready=False, include_status=True
+        )
 
     def _get_distributor_data(self, distributor):
         """Helper method to get distributor inventory data"""
@@ -301,15 +283,9 @@ class FranchiseInventoryListView(generics.ListAPIView):
 
     def _format_inventory_data(self, inventory_queryset):
         """Helper method to format inventory data consistently"""
-        return [
-            {
-                "id": inventory.id,
-                "product_id": inventory.product.id,
-                "product": inventory.product.name,
-                "quantity": inventory.quantity,
-            }
-            for inventory in inventory_queryset.filter(status="ready_to_dispatch")
-        ]
+        return format_inventory_list(
+            inventory_queryset, filter_ready=True, include_status=False
+        )
 
     def list(self, request, *args, **kwargs):
         user = self.request.user
@@ -548,70 +524,26 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
+        status_filter = request.query_params.get("order_status")
 
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
-            serializer_data = serializer.data
-
-            status_filter = request.query_params.get("order_status")
-            if status_filter:
-                from logistics.models import OrderChangeLog
-
-                order_ids = [order["id"] for order in serializer_data]
-                logs = OrderChangeLog.objects.filter(
-                    order_id__in=order_ids, new_status__icontains=status_filter
-                ).order_by("changed_at")
-                latest_comments = {log.order_id: log.comment for log in logs}
-                for order_data in serializer_data:
-                    order_data["status_change_comment"] = latest_comments.get(
-                        order_data["id"], None
-                    )
-
+            serializer_data = append_order_status_comments(
+                serializer.data, status_filter
+            )
             return self.get_paginated_response(serializer_data)
 
         serializer = self.get_serializer(queryset, many=True)
-        serializer_data = serializer.data
-
-        status_filter = request.query_params.get("order_status")
-        if status_filter:
-            from logistics.models import OrderChangeLog
-
-            order_ids = [order["id"] for order in serializer_data]
-            logs = OrderChangeLog.objects.filter(
-                order_id__in=order_ids, new_status__icontains=status_filter
-            ).order_by("changed_at")
-            latest_comments = {log.order_id: log.comment for log in logs}
-            for order_data in serializer_data:
-                order_data["status_change_comment"] = latest_comments.get(
-                    order_data["id"], None
-                )
-
+        serializer_data = append_order_status_comments(serializer.data, status_filter)
         return Response(serializer_data)
 
     def create(self, request, *args, **kwargs):
         try:
             # Handle both form-data and raw JSON formats
-            order_products = []
-
-            # Check if order_products is already a list (JSON payload)
-            if isinstance(request.data.get("order_products"), list):
-                order_products = request.data.get("order_products")
-            # Check if it's form-data format
-            elif hasattr(request.data, "getlist"):
-                # Get the order_products string and convert it to list
-                order_products_str = request.data.get("order_products")
-                if order_products_str:
-                    try:
-                        # Handle string format "[{"product_id": 39, "quantity": 1}]"
-                        import json
-
-                        order_products = json.loads(order_products_str)
-                    except json.JSONDecodeError:
-                        return Response(
-                            {"error": "Invalid order_products format"},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
+            order_products, error_response = parse_order_products(request.data)
+            if error_response:
+                return Response(error_response, status=status.HTTP_400_BAD_REQUEST)
 
             # Validate order products
             if not order_products:
@@ -706,7 +638,11 @@ class OrderListCreateView(generics.ListCreateAPIView):
                         "Processing",
                         "Sent to Dash",
                         "Indrive",
+                        "Returned By PicknDrop",
+                        "Sent to Daraz",
+                        "Sent to PicknDrop",
                         "Return By Dash",
+                        "Returned By Daraz",
                     ]
                 )
             )
@@ -721,7 +657,11 @@ class OrderListCreateView(generics.ListCreateAPIView):
                         "Processing",
                         "Sent to Dash",
                         "Indrive",
+                        "Returned By PicknDrop",
+                        "Sent to Daraz",
+                        "Sent to PicknDrop",
                         "Return By Dash",
+                        "Returned By Daraz",
                     ]
                 )
             )
@@ -790,14 +730,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
             # ---------------------------------------------------------
             # 2. Check for Cancelled/Returned Orders (Only if no Active Order)
             # ---------------------------------------------------------
-            cancelled_statuses = [
-                "Cancelled",
-                "Returned By Customer",
-                "Returned By Dash",
-                "Return Pending",
-                "Returned By PicknDrop",
-                "Returned By YDM",
-            ]
+            cancelled_statuses = EXCLUDED_STATUSES
             delivered_statuses = ["Delivered", "Indrive"]
 
             previous_orders = Order.objects.filter(phone_number=phone_number)
@@ -863,9 +796,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     raise serializers.ValidationError(error_details)
 
             # Use empty set as described in previous logic (Active orders loop logic was redundant/empty)
-            recent_product_ids = set()
         else:
-            recent_product_ids = set()
+            pass
 
         # Validate all products exist in inventory before proceeding
         for order_product_data in order_products_data:
@@ -879,18 +811,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
             try:
                 # Get the inventory item based on user role
-                if salesperson.role in ["Franchise", "SalesPerson", "Packaging"]:
-                    inventory_item = Inventory.objects.get(
-                        id=product_id, franchise=salesperson.franchise
-                    )
-                elif salesperson.role == "Distributor":
-                    inventory_item = Inventory.objects.get(
-                        id=product_id, distributor=salesperson.distributor
-                    )
-                elif salesperson.role == "SuperAdmin":
-                    inventory_item = Inventory.objects.get(
-                        id=product_id, factory=salesperson.factory
-                    )
+                inventory_item = get_inventory_by_user_role(
+                    salesperson, product_id
+                ).get()
 
                 # Check if there's enough quantity
                 if inventory_item.quantity < quantity:
@@ -942,18 +865,7 @@ class OrderListCreateView(generics.ListCreateAPIView):
             quantity = int(order_product_data.get("quantity"))
 
             # Get the inventory item again
-            if salesperson.role in ["Franchise", "SalesPerson", "Packaging"]:
-                inventory_item = Inventory.objects.get(
-                    id=product_id, franchise=salesperson.franchise
-                )
-            elif salesperson.role == "Distributor":
-                inventory_item = Inventory.objects.get(
-                    id=product_id, distributor=salesperson.distributor
-                )
-            elif salesperson.role == "SuperAdmin":
-                inventory_item = Inventory.objects.get(
-                    id=product_id, factory=salesperson.factory
-                )
+            inventory_item = get_inventory_by_user_role(salesperson, product_id).get()
 
             # Update inventory
             old_quantity = inventory_item.quantity
@@ -995,47 +907,21 @@ class OrderUpdateView(generics.UpdateAPIView):
         # 1️⃣ HANDLE FREE DELIVERY TOGGLE (+/- 100)
         # -----------------------------------------
         new_is_delivery_free = request.data.get("is_delivery_free", None)
-
         if new_is_delivery_free is not None:
-            # Convert "true"/"false" → boolean
-            new_is_delivery_free = str(new_is_delivery_free).lower() in [
-                "true",
-                "1",
-                "yes",
-            ]
-
-            # Toggle ON (False → True)
-            if new_is_delivery_free and not order.is_delivery_free:
-                order.total_amount = order.total_amount - 100
-
-            # Toggle OFF (True → False)
-            if not new_is_delivery_free and order.is_delivery_free:
-                order.total_amount = order.total_amount + 100
-
-            order.is_delivery_free = new_is_delivery_free
+            handle_free_delivery_toggle(order, new_is_delivery_free)
             order.save()
 
         # -----------------------------------------
-        # 2️⃣ LOGISTICS CHANGE LOGIC
+        # 2️⃣ LOGISTICS CHANGE LOGIC & ORDER STATUS SHORTCUTS
         # -----------------------------------------
-        if logistics:
-            order.logistics = logistics
-            if logistics == "YDM":
-                order.order_status = "Sent to YDM"
-            elif logistics == "DASH" and previous_status == "Sent to YDM":
-                order.order_status = "Pending"
-            order.save()
-
-        # -----------------------------------------
-        # 3️⃣ ORDER STATUS SHORTCUTS
-        # -----------------------------------------
-        if order_status == "Sent to YDM":
-            order.order_status = order_status
-            order.logistics = "YDM"
-            order.save()
-        elif order_status == "Sent to Dash":
-            order.order_status = order_status
-            order.logistics = "DASH"
+        if logistics or order_status:
+            resolved_logistics, resolved_status = resolve_order_logistics_and_status(
+                logistics or order.logistics,
+                order_status or order.order_status,
+                previous_status,
+            )
+            order.logistics = resolved_logistics
+            order.order_status = resolved_status
             order.save()
 
         # -----------------------------------------
@@ -1095,48 +981,11 @@ class OrderUpdateView(generics.UpdateAPIView):
         if is_returning != was_returning:
             with transaction.atomic():
                 if is_returning:
-                    # Moving TO Return/Cancelled -> Increase Stock
-                    for order_product in order.order_products.all():
-                        try:
-                            inv = order_product.product
-                            old_qty = inv.quantity
-                            inv.quantity += order_product.quantity
-                            inv.save()
-
-                            InventoryChangeLog.objects.create(
-                                inventory=inv,
-                                user=request.user,
-                                old_quantity=old_qty,
-                                new_quantity=inv.quantity,
-                                action="order_cancelled",
-                            )
-                        except Exception as e:
-                            print(f"Error restoring inventory: {e}")
-
+                    restore_order_inventory(order, request.user)
                 else:
-                    # Moving FROM Return/Cancelled to Any Other Stage -> Decrease Stock
-                    for order_product in order.order_products.all():
-                        try:
-                            inv = order_product.product
-                            old_qty = inv.quantity
+                    deduct_order_inventory(order, request.user)
 
-                            if inv.quantity < order_product.quantity:
-                                raise Exception(
-                                    f"Insufficient inventory for {inv.product.name} to restore order."
-                                )
-
-                            inv.quantity -= order_product.quantity
-                            inv.save()
-
-                            InventoryChangeLog.objects.create(
-                                inventory=inv,
-                                user=request.user,
-                                old_quantity=old_qty,
-                                new_quantity=inv.quantity,
-                                action="order_created",
-                            )
-                        except Exception as e:
-                            raise e
+        return response
 
         return response
 
@@ -1197,54 +1046,15 @@ class CommissionPaymentView(generics.UpdateAPIView):
 class ProductListView(generics.ListAPIView):
     serializer_class = ProductSerializer
 
-    def _format_inventory_data(self, inventory_queryset, include_status=False):
-        """Helper method to format inventory data consistently"""
-        base_fields = {
-            "id",
-            "product",
-            "product__id",  # Add this to get the actual product ID
-            "product__name",
-            "quantity",
-        }
-
-        if include_status:
-            base_fields.add("status")
-
-        inventory_data = inventory_queryset.values(*base_fields)
-
-        product_list = []
-        for inv in inventory_data:
-            product_dict = {
-                "inventory_id": inv["id"],
-                "product_id": inv["product__id"],  # Use the actual product ID
-                "product_name": inv["product__name"],
-                "quantity": inv["quantity"],
-            }
-            if include_status:
-                product_dict["status"] = inv["status"]
-            product_list.append(product_dict)
-
-        return product_list
-
     def get_queryset(self):
         user = self.request.user
-
-        if user.role in ["Franchise", "SalesPerson"]:
-            return self._format_inventory_data(
-                Inventory.objects.filter(franchise=user.franchise)
+        if user.role in ["Franchise", "SalesPerson", "Distributor", "SuperAdmin"]:
+            include_status = user.role == "SuperAdmin"
+            inventory_qs = get_inventory_by_user_role(user)
+            return format_product_inventory_list(
+                inventory_qs, include_status=include_status
             )
-
-        elif user.role == "Distributor":
-            return self._format_inventory_data(
-                Inventory.objects.filter(distributor=user.distributor)
-            )
-
-        elif user.role == "SuperAdmin":
-            return self._format_inventory_data(
-                Inventory.objects.filter(factory=user.factory), include_status=True
-            )
-
-        return Product.objects.none()  # Return empty queryset for other roles
+        return Product.objects.none()
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
@@ -1259,14 +1069,7 @@ class InventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     # permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        if user.role == "SuperAdmin":
-            return Inventory.objects.filter(factory=user.factory)
-        elif user.role == "Distributor":
-            return Inventory.objects.filter(distributor=user.distributor)
-        elif user.role in ["Franchise", "SalesPerson", "Packaging"]:
-            return Inventory.objects.filter(franchise=user.franchise)
-        return Inventory.objects.none()
+        return get_inventory_by_user_role(self.request.user)
 
     def perform_update(self, serializer):
         inventory_item = self.get_object()
@@ -1513,32 +1316,20 @@ class UserInventoryLogs(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
 
-        if user.role == "SuperAdmin":
-            # Get logs for factory inventory
-            # return InventoryChangeLog.objects.filter(
-            #     inventory__factory=user.factory
-            # ).order_by('-id')
-            return InventoryChangeLog.objects.filter(
-                inventory__factory=user.factory
-            ).order_by("-id")
-
-        elif user.role == "Distributor":
-            # Get logs for distributor inventory
-            return InventoryChangeLog.objects.filter(
-                inventory__distributor=user.distributor
-            ).order_by("-id")
-
-        elif user.role == "Franchise":
-            # Get logs for franchise inventory
-            return InventoryChangeLog.objects.filter(
-                inventory__franchise=user.franchise
-            ).order_by("-id")
-
-        elif user.role == "SalesPerson":
-            # Get logs where the user is the one who made the change
+        if user.role == "SalesPerson":
             return InventoryChangeLog.objects.filter(user=user).order_by("-id")
 
-        # Return empty queryset for unknown roles
+        owner = get_owner_by_role(user)
+        if owner:
+            filter_kwargs = {}
+            if user.role == "SuperAdmin":
+                filter_kwargs["inventory__factory"] = owner
+            elif user.role == "Distributor":
+                filter_kwargs["inventory__distributor"] = owner
+            elif user.role == "Franchise":
+                filter_kwargs["inventory__franchise"] = owner
+            return InventoryChangeLog.objects.filter(**filter_kwargs).order_by("-id")
+
         return InventoryChangeLog.objects.none()
 
 
@@ -1660,62 +1451,33 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
             # Handle order products separately
             order_products = None
 
-            if "logistics" in request.data:
-                modified_data["logistics"] = request.data.get("logistics")
-
-            if "order_status" in request.data:
-                modified_data["order_status"] = request.data.get("order_status")
-
-            if modified_data.get("logistics") == "YDM":
-                modified_data["order_status"] = "Sent to YDM"
-
-            if (
-                modified_data.get("logistics") == "DASH"
-                and instance.order_status == "Sent to YDM"
-            ):
-                modified_data["order_status"] = "Pending"
-
-            if modified_data.get("order_status") == "Sent to YDM":
-                modified_data["logistics"] = "YDM"
-
-            if modified_data.get("order_status") == "Sent to Dash":
-                modified_data["logistics"] = "DASH"
+            logistics = request.data.get("logistics", None)
+            order_status = request.data.get("order_status", None)
+            if logistics is not None or order_status is not None:
+                resolved_logistics, resolved_status = (
+                    resolve_order_logistics_and_status(
+                        logistics or instance.logistics,
+                        order_status or instance.order_status,
+                        instance.order_status,
+                    )
+                )
+                modified_data["logistics"] = resolved_logistics
+                modified_data["order_status"] = resolved_status
 
             # Check if order_products is provided and parse it
             if "order_products" in request.data:
-                if isinstance(request.data.get("order_products"), list):
-                    order_products = request.data.get("order_products")
-                elif hasattr(request.data, "getlist"):
-                    order_products_str = request.data.get("order_products")
-                    if order_products_str:
-                        try:
-                            import json
-
-                            order_products = json.loads(order_products_str)
-                        except json.JSONDecodeError:
-                            return Response(
-                                {"error": "Invalid order_products format"},
-                                status=status.HTTP_400_BAD_REQUEST,
-                            )
+                order_products, error_resp = parse_order_products(request.data)
+                if error_resp:
+                    return Response(error_resp, status=status.HTTP_400_BAD_REQUEST)
 
             # ----------------------------
             # 2️⃣ Handle free delivery toggle
             # ----------------------------
             if "is_delivery_free" in request.data:
-                new_is_delivery_free = str(
-                    request.data.get("is_delivery_free")
-                ).lower() in ["true", "1", "yes"]
-
-                # Deduct 100 if turned ON
-                if new_is_delivery_free and not instance.is_delivery_free:
-                    instance.total_amount -= 100
-
-                # Add 100 if turned OFF
-                if not new_is_delivery_free and instance.is_delivery_free:
-                    instance.total_amount += 100
-
-                modified_data["is_delivery_free"] = new_is_delivery_free
-                instance.is_delivery_free = new_is_delivery_free
+                handle_free_delivery_toggle(
+                    instance, request.data.get("is_delivery_free")
+                )
+                modified_data["is_delivery_free"] = instance.is_delivery_free
 
             # Only include fields that are actually provided in the request
             fields_to_check = [
@@ -1777,9 +1539,6 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Status update is now allowed for cancellation and restoration
-            # Removed the block that prevented order_status updates
-
             # Update the instance with only the modified fields
             serializer = self.get_serializer(instance, data=modified_data, partial=True)
             serializer.is_valid(raise_exception=True)
@@ -1799,6 +1558,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 "Verified",
                 "Sent to Dash",
                 "Sent to YDM",
+                "Sent to Daraz",
                 "Sent to PicknDrop",
                 "Delivered",
                 "Indrive",
@@ -1812,39 +1572,26 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 "Returned By Dash",
                 "Returned By YDM",
                 "Returned By PicknDrop",
+                "Returned By Daraz",
             ]
 
-            old_status = instance.order_status
-            new_status = modified_data.get("order_status", old_status)
+            old_status_sync = instance.order_status
+            new_status_sync = modified_data.get("order_status", old_status_sync)
 
-            was_active = old_status in inventoried_statuses
-            is_active = new_status in inventoried_statuses
+            was_active = old_status_sync in inventoried_statuses
+            is_active = new_status_sync in inventoried_statuses
 
-            is_returning = new_status in return_statuses
-            was_returning = old_status in return_statuses
+            is_returning = new_status_sync in return_statuses
+            was_returning = old_status_sync in return_statuses
 
             products_updated = order_products is not None
-            status_changed = new_status != old_status
+            status_changed = new_status_sync != old_status_sync
 
             with transaction.atomic():
                 if products_updated:
                     # If it was active, restore the OLD products back to stock
                     if was_active:
-                        for old_op in instance.order_products.all():
-                            try:
-                                inv = old_op.product
-                                old_qty = inv.quantity
-                                inv.quantity += old_op.quantity
-                                inv.save()
-                                InventoryChangeLog.objects.create(
-                                    inventory=inv,
-                                    user=request.user,
-                                    old_quantity=old_qty,
-                                    new_quantity=inv.quantity,
-                                    action="order_cancelled",
-                                )
-                            except Exception as e:
-                                print(f"Error restoring inventory: {e}")
+                        restore_order_inventory(instance, request.user)
 
                     # Delete existing products
                     instance.order_products.all().delete()
@@ -1859,83 +1606,47 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                         )
 
                         if is_active:
-                            try:
-                                # Organizational lookup for inventory (priority: franchise > distributor > factory)
-                                if instance.franchise:
-                                    inv = Inventory.objects.get(
-                                        id=inv_id, franchise=instance.franchise
-                                    )
-                                elif instance.distributor:
-                                    inv = Inventory.objects.get(
-                                        id=inv_id, distributor=instance.distributor
-                                    )
-                                elif instance.factory:
-                                    inv = Inventory.objects.get(
-                                        id=inv_id, factory=instance.factory
-                                    )
-                                else:
-                                    inv = Inventory.objects.get(id=inv_id)
-
-                                old_qty = inv.quantity
-                                inv.quantity -= qty
-                                inv.save()
-                                InventoryChangeLog.objects.create(
-                                    inventory=inv,
-                                    user=request.user,
-                                    old_quantity=old_qty,
-                                    new_quantity=inv.quantity,
-                                    action="order_created",
-                                )
-                            except Inventory.DoesNotExist:
-                                raise Exception(
-                                    f"Inventory ID {inv_id} not found for this organization."
-                                )
+                            deduct_single_inventory_item(
+                                request.user, instance, inv_id, qty
+                            )
 
                 elif status_changed:
                     # Scenario: Products didn't change, but status moved
                     if was_active and is_returning:
                         # Moving from Active -> Return/Cancelled
                         # Restore CURRENT products to stock
-                        for current_op in instance.order_products.all():
-                            try:
-                                inv = current_op.product
-                                old_qty = inv.quantity
-                                inv.quantity += current_op.quantity
-                                inv.save()
-                                InventoryChangeLog.objects.create(
-                                    inventory=inv,
-                                    user=request.user,
-                                    old_quantity=old_qty,
-                                    new_quantity=inv.quantity,
-                                    action="order_cancelled",
-                                )
-                            except Exception as e:
-                                print(f"Error restoring inventory: {e}")
+                        restore_order_inventory(instance, request.user)
 
                     elif was_returning and not is_returning:
                         # Moving from Return/Cancelled -> Any other stage
                         # Deduct CURRENT products from stock
-                        for current_op in instance.order_products.all():
-                            try:
-                                inv = current_op.product
-                                old_qty = inv.quantity
+                        deduct_order_inventory(order, request.user)
 
-                                if inv.quantity < current_op.quantity:
-                                    raise Exception(
-                                        f"Insufficient inventory for {inv.product.name} to restore order."
-                                    )
+            # Update promo code usage if changed and provided
+            if (
+                "promo_code" in modified_data
+                and instance.promo_code != promo_code_instance
+            ):
+                if instance.promo_code:
+                    # Decrease usage count of old promo code
+                    instance.promo_code.times_used -= 1
+                    instance.promo_code.save()
 
-                                inv.quantity -= current_op.quantity
-                                inv.save()
-                                InventoryChangeLog.objects.create(
-                                    inventory=inv,
-                                    user=request.user,
-                                    old_quantity=old_qty,
-                                    new_quantity=inv.quantity,
-                                    action="order_created",
-                                )
-                            except Exception as e:
-                                raise e
+                # Increase usage count of new promo code
+                promo_code_instance.times_used += 1
+                promo_code_instance.save()
+
+                # Update order's promo code
+                instance.promo_code = promo_code_instance
+                instance.save()
+
+            return Response(serializer.data)
+
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to update order: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
             # Update promo code usage if changed and provided
             if (
@@ -2727,14 +2438,7 @@ class OrderExportCSVView(generics.GenericAPIView):
         franchise = serializer.validated_data["franchise"]
         location_name = serializer.validated_data["location_name"]
 
-        excluded_statuses = [
-            "Cancelled",
-            "Returned By Customer",
-            "Returned By Dash",
-            "Return Pending",
-            "Returned By PicknDrop",
-            "Returned By YDM",
-        ]
+        excluded_statuses = EXCLUDED_STATUSES
 
         # Filter orders
         orders = (
