@@ -219,6 +219,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "logistics",
             "location_name",
             "tracking_code",
+            "package_code",
             "ydm_rider",
             "ydm_rider_name",
             "comments",

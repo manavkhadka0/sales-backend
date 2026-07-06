@@ -346,6 +346,7 @@ class Order(models.Model):
         max_length=255, choices=LOGISTICS_CHOICES, default="YDM", null=True, blank=True
     )
     tracking_code = models.CharField(max_length=255, blank=True, null=True)
+    package_code = models.CharField(max_length=255, blank=True, null=True)
     is_delivery_free = models.BooleanField(default=False)
 
     def __str__(self):

@@ -321,6 +321,15 @@ class SendOrderToDarazView(APIView):
                     tracking_number,
                     order.order_code,
                 )
+            package_code = response_body.get("data", {}).get("packageCode")
+            if package_code:
+                order.package_code = package_code
+                update_fields.append("package_code")
+                logger.info(
+                    "Successfully saved Daraz package code %s to order %s",
+                    package_code,
+                    order.order_code,
+                )
             order.save(update_fields=update_fields)
 
         http_status = status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST
@@ -438,7 +447,7 @@ class CancelDarazOrderView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        package_code = order.tracking_code
+        package_code = order.package_code
         if not package_code:
             return Response(
                 {"error": "Package code is required to cancel this order on Daraz."},
