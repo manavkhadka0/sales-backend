@@ -680,118 +680,149 @@ class DarazWebhookView(APIView):
             f"{json.dumps(payload, indent=4, ensure_ascii=False)}"
         )
 
-        order_status = payload.get("order_status")
-        trade_order_id = payload.get("trade_order_id")
-        trade_order_line_id = payload.get("trade_order_line_id")
-
-        if not order_status or (not trade_order_id and not trade_order_line_id):
-            return Response(
-                {
-                    "error": "Missing required fields (order_status, trade_order_id/trade_order_line_id)"
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Build Q filter to find the order by trade_order_id or trade_order_line_id
-        # across order_code, tracking_code, and package_code.
-        query = Q()
-        if trade_order_id:
-            query |= Q(order_code=trade_order_id)
-            query |= Q(tracking_code=trade_order_id)
-            query |= Q(package_code=trade_order_id)
-        if trade_order_line_id:
-            query |= Q(order_code=trade_order_line_id)
-            query |= Q(tracking_code=trade_order_line_id)
-            query |= Q(package_code=trade_order_line_id)
-
         try:
+            if not isinstance(payload, dict):
+                return Response(
+                    {"status": "ignored", "error": "Invalid payload format"},
+                    status=status.HTTP_200_OK,
+                )
+
+            order_status = payload.get("order_status")
+            trade_order_id = payload.get("trade_order_id")
+            trade_order_line_id = payload.get("trade_order_line_id")
+
+            if not order_status or (not trade_order_id and not trade_order_line_id):
+                return Response(
+                    {
+                        "status": "ignored",
+                        "error": "Missing required fields (order_status, trade_order_id/trade_order_line_id)",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            # Build Q filter to find the order by trade_order_id or trade_order_line_id
+            # across order_code, tracking_code, and package_code.
+            query = Q()
+            if trade_order_id:
+                query |= Q(order_code=trade_order_id)
+                query |= Q(tracking_code=trade_order_id)
+                query |= Q(package_code=trade_order_id)
+            if trade_order_line_id:
+                query |= Q(order_code=trade_order_line_id)
+                query |= Q(tracking_code=trade_order_line_id)
+                query |= Q(package_code=trade_order_line_id)
+
             order = Order.objects.filter(query).first()
             if not order:
                 return Response(
                     {
+                        "status": "ignored",
                         "error": (
                             f"Order not found for trade_order_id '{trade_order_id}' "
                             f"or trade_order_line_id '{trade_order_line_id}'"
-                        )
+                        ),
                     },
-                    status=status.HTTP_404_NOT_FOUND,
+                    status=status.HTTP_200_OK,
                 )
-        except Exception as exc:
-            logger.exception("Error searching for order in Daraz webhook")
-            return Response(
-                {
-                    "error": "Internal database error searching for order",
-                    "details": str(exc),
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+
+            previous_status = order.order_status
+
+            # Map Daraz order status to internal status
+            DARAZ_STATUS_MAP = {
+                # Standard / Existing
+                "unpaid": "Pending",
+                "pending": "Pending",
+                "ready_to_ship": "Out For Delivery",
+                "shipped": "Out For Delivery",
+                "delivered": "Delivered",
+                "canceled": "Cancelled",
+                "cancelled": "Cancelled",
+                "returned": "Returned By Daraz",
+                # LOP (from image)
+                "waiting_for_linehaul": "Sent to Daraz",
+                "linehaul_packed": "Sent to Daraz",
+                "in_linehaul": "Sent to Daraz",
+                "waiting_for_delivery": "Out For Delivery",
+                "planned_for_delivery": "Out For Delivery",
+                "in_delivery": "Out For Delivery",
+                "on_the_way_to_customer": "Out For Delivery",
+                "delivery_attempt_successful": "Delivered",
+                "delivery_attempt_failed": "Rescheduled",
+                "delivery_failed": "Out For Delivery",
+                "waiting_for_return": "Return Pending",
+                "planned_for_return": "Return Pending",
+                "returned_to_sender": "Returned By Daraz",
+            }
+
+            status_key = str(order_status).lower().strip() if order_status else ""
+            mapped_status = DARAZ_STATUS_MAP.get(status_key)
+            if not mapped_status:
+                logger.warning(
+                    "Unknown Daraz status received in webhook: %s", order_status
+                )
+                return Response(
+                    {
+                        "status": "ignored",
+                        "message": f"Unknown status received: {order_status}",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            # Update order status
+            order.order_status = mapped_status
+            order.save(update_fields=["order_status"])
+            logger.info(
+                "Updated order %s status from %s to %s via Daraz webhook",
+                order.order_code,
+                previous_status,
+                mapped_status,
             )
 
-        previous_status = order.order_status
+            # Restock inventory if cancelled or returned
+            CANCEL_RETURN_STATUSES = ["Cancelled", "Returned By Daraz"]
+            if (
+                mapped_status in CANCEL_RETURN_STATUSES
+                and previous_status != mapped_status
+            ):
+                order_products = OrderProduct.objects.filter(
+                    order=order
+                ).select_related("product__product")
+                for op in order_products:
+                    try:
+                        inventory = Inventory.objects.get(
+                            product__id=op.product.product.id,
+                            franchise=order.franchise,
+                        )
+                        inventory.quantity += op.quantity
+                        inventory.save()
+                        logger.info(
+                            "Restocked %s unit(s) of %s for order %s",
+                            op.quantity,
+                            op.product.product.name,
+                            order.order_code,
+                        )
+                    except Inventory.DoesNotExist:
+                        logger.warning(
+                            "Inventory record not found for product %s, franchise %s",
+                            op.product.product.name,
+                            order.franchise,
+                        )
 
-        # Map Daraz order status to internal status
-        DARAZ_STATUS_MAP = {
-            "unpaid": "Pending",
-            "pending": "Pending",
-            "ready_to_ship": "Out For Delivery",
-            "shipped": "Out For Delivery",
-            "delivered": "Delivered",
-            "canceled": "Cancelled",
-            "cancelled": "Cancelled",
-            "returned": "Returned By Daraz",
-        }
-
-        mapped_status = DARAZ_STATUS_MAP.get(order_status.lower().strip())
-        if not mapped_status:
-            logger.warning("Unknown Daraz status received in webhook: %s", order_status)
             return Response(
                 {
-                    "status": "ignored",
-                    "message": f"Unknown status received: {order_status}",
+                    "status": "success",
+                    "message": f"Order status updated from {previous_status} to {mapped_status}",
                 },
                 status=status.HTTP_200_OK,
             )
 
-        # Update order status
-        order.order_status = mapped_status
-        order.save(update_fields=["order_status"])
-        logger.info(
-            "Updated order %s status from %s to %s via Daraz webhook",
-            order.order_code,
-            previous_status,
-            mapped_status,
-        )
-
-        # Restock inventory if cancelled or returned
-        CANCEL_RETURN_STATUSES = ["Cancelled", "Returned By Daraz"]
-        if mapped_status in CANCEL_RETURN_STATUSES and previous_status != mapped_status:
-            order_products = OrderProduct.objects.filter(order=order).select_related(
-                "product__product"
+        except Exception as exc:
+            logger.exception("Error processing Daraz webhook")
+            return Response(
+                {
+                    "status": "error",
+                    "message": "An error occurred during webhook processing",
+                    "details": str(exc),
+                },
+                status=status.HTTP_200_OK,
             )
-            for op in order_products:
-                try:
-                    inventory = Inventory.objects.get(
-                        product__id=op.product.product.id,
-                        franchise=order.franchise,
-                    )
-                    inventory.quantity += op.quantity
-                    inventory.save()
-                    logger.info(
-                        "Restocked %s unit(s) of %s for order %s",
-                        op.quantity,
-                        op.product.product.name,
-                        order.order_code,
-                    )
-                except Inventory.DoesNotExist:
-                    logger.warning(
-                        "Inventory record not found for product %s, franchise %s",
-                        op.product.product.name,
-                        order.franchise,
-                    )
-
-        return Response(
-            {
-                "status": "success",
-                "message": f"Order status updated from {previous_status} to {mapped_status}",
-            },
-            status=status.HTTP_200_OK,
-        )
