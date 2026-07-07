@@ -532,3 +532,98 @@ class CancelDarazOrderView(APIView):
             },
             status=http_status,
         )
+
+
+class CancelDarazOrderByPackageCodeView(APIView):
+    """
+    POST /api/daraz/orders/cancel/
+    Cancels a Daraz package directly using a packageCode provided in the request body.
+    Does not require an internal order record.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        package_code = request.data.get("package_code")
+        if not package_code:
+            return Response(
+                {"error": "package_code is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = request.data.get("reason") or "User trigger cancel"
+
+        try:
+            client = _get_client()
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        iop_request = IopRequest("/logistics/epis/packages/cancel", "POST")
+        iop_request.add_api_param("packageCode", str(package_code))
+        iop_request.add_api_param("reason", str(reason))
+
+        # Log API payload
+        pretty_params = {}
+        for k, v in iop_request._api_params.items():
+            try:
+                pretty_params[k] = json.loads(v)
+            except (ValueError, TypeError):
+                pretty_params[k] = v
+
+        logger.info(
+            "Daraz Cancel Request Parameters for package %s:\n%s",
+            package_code,
+            json.dumps(pretty_params, indent=4, ensure_ascii=False),
+        )
+        print(
+            f"Daraz Cancel Request Parameters for package {package_code}:\n"
+            f"{json.dumps(pretty_params, indent=4, ensure_ascii=False)}"
+        )
+
+        logger.info(
+            "Sending cancel request to Daraz for package %s, reason: %s",
+            package_code,
+            reason,
+        )
+
+        try:
+            iop_response = client.execute(iop_request)
+        except Exception as exc:
+            logger.exception(
+                "Daraz cancel SDK request failed for package %s", package_code
+            )
+            return Response(
+                {"error": "Failed to reach Daraz API.", "detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        response_body = iop_response.body if isinstance(iop_response.body, dict) else {}
+
+        # Log API response
+        logger.info(
+            "Daraz Cancel Response for package %s:\n%s",
+            package_code,
+            json.dumps(response_body, indent=4, ensure_ascii=False),
+        )
+        print(
+            f"Daraz Cancel Response for package {package_code}:\n"
+            f"{json.dumps(response_body, indent=4, ensure_ascii=False)}"
+        )
+
+        daraz_code = str(iop_response.code) if iop_response.code is not None else ""
+        success = daraz_code == "0"
+
+        http_status = status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST
+
+        return Response(
+            {
+                "success": success,
+                "daraz_code": iop_response.code,
+                "daraz_message": iop_response.message,
+                "daraz_request_id": iop_response.request_id,
+                "body": response_body,
+            },
+            status=http_status,
+        )

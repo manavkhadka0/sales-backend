@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    CancelDarazOrderByPackageCodeView,
     CancelDarazOrderView,
     DarazLocationImportView,
     DarazLocationListView,
@@ -18,6 +19,11 @@ urlpatterns = [
         "orders/<int:order_id>/cancel/",
         CancelDarazOrderView.as_view(),
         name="daraz-cancel-order",
+    ),
+    path(
+        "orders/cancel/",
+        CancelDarazOrderByPackageCodeView.as_view(),
+        name="daraz-cancel-order-by-package-code",
     ),
     path(
         "config/",
