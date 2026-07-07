@@ -132,6 +132,24 @@ class SendOrderToDarazView(APIView):
             "weight": str(request.data.get("weight", "500")),  # grams
         }
 
+        # Pricing map for specific products:
+        # Yachu Hair Oil - 2500
+        # Hairfall Case Oil - 2500
+        # Dandruff Case Oil - 2500
+        # Baldness Case Oil - 2500
+        # Shampoo Bottle - 1000
+        # sachet oil - 990
+        # sachet shampoo - 100
+        PRICE_MAP = {
+            "yachu hair oil": 2500,
+            "hairfall case oil": 2500,
+            "dandruff case oil": 2500,
+            "baldness case oil": 2500,
+            "shampoo bottle": 1000,
+            "sachet oil": 990,
+            "sachet shampoo": 100,
+        }
+
         items_list = []
         for op in order_products:
             product_name = (
@@ -139,11 +157,23 @@ class SendOrderToDarazView(APIView):
                 if op.product and op.product.product
                 else "Unknown Product"
             )
+
+            # Find item unit price from PRICE_MAP based on substring match or exact match
+            name_lower = product_name.lower().strip()
+            item_unit_price = None
+            for key, val in PRICE_MAP.items():
+                if key in name_lower:
+                    item_unit_price = val
+                    break
+
+            if item_unit_price is None:
+                item_unit_price = unit_price
+
             items_list.append({
-                "unitPrice": str(unit_price),
+                "unitPrice": str(item_unit_price),
                 "quantity": str(op.quantity),
                 "name": product_name,
-                "paidPrice": str(unit_price),
+                "paidPrice": str(item_unit_price),
                 "dimWeight": dim_weight,  # required per Daraz spec
             })
 
