@@ -142,12 +142,12 @@ class SendOrderToDarazView(APIView):
         # sachet shampoo - 100
         PRICE_MAP = {
             "yachu hair oil": 2500,
-            "hairfall case oil": 2500,
-            "dandruff case oil": 2500,
-            "baldness case oil": 2500,
+            "hairfall oil bottle": 2500,
+            "dandruff oil bottle": 2500,
+            "baldness oil bottle": 2500,
             "shampoo bottle": 1000,
-            "sachet oil": 990,
-            "sachet shampoo": 100,
+            "hair oil sachet": 990,
+            "shampoo sachet": 100,
         }
 
         items_list = []
