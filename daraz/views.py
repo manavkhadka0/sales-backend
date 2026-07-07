@@ -2,16 +2,17 @@ import json
 import logging
 import os
 
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
 from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from sales.models import Order
+from sales.models import Inventory, Order, OrderProduct
 
 from .filters import DarazLocationFilter
 from .iop import IopClient, IopRequest
@@ -656,4 +657,141 @@ class CancelDarazOrderByPackageCodeView(APIView):
                 "body": response_body,
             },
             status=http_status,
+        )
+
+
+class DarazWebhookView(APIView):
+    """
+    POST /api/daraz/webhook/
+    Webhook endpoint to receive orders/updates from Daraz.
+    Updates the internal Order status based on Daraz order_status.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        payload = request.data
+        logger.info(
+            "Received Daraz webhook payload: %s",
+            json.dumps(payload, indent=4, ensure_ascii=False),
+        )
+        print(
+            f"Received Daraz webhook payload:\n"
+            f"{json.dumps(payload, indent=4, ensure_ascii=False)}"
+        )
+
+        order_status = payload.get("order_status")
+        trade_order_id = payload.get("trade_order_id")
+        trade_order_line_id = payload.get("trade_order_line_id")
+
+        if not order_status or (not trade_order_id and not trade_order_line_id):
+            return Response(
+                {
+                    "error": "Missing required fields (order_status, trade_order_id/trade_order_line_id)"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Build Q filter to find the order by trade_order_id or trade_order_line_id
+        # across order_code, tracking_code, and package_code.
+        query = Q()
+        if trade_order_id:
+            query |= Q(order_code=trade_order_id)
+            query |= Q(tracking_code=trade_order_id)
+            query |= Q(package_code=trade_order_id)
+        if trade_order_line_id:
+            query |= Q(order_code=trade_order_line_id)
+            query |= Q(tracking_code=trade_order_line_id)
+            query |= Q(package_code=trade_order_line_id)
+
+        try:
+            order = Order.objects.filter(query).first()
+            if not order:
+                return Response(
+                    {
+                        "error": (
+                            f"Order not found for trade_order_id '{trade_order_id}' "
+                            f"or trade_order_line_id '{trade_order_line_id}'"
+                        )
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        except Exception as exc:
+            logger.exception("Error searching for order in Daraz webhook")
+            return Response(
+                {
+                    "error": "Internal database error searching for order",
+                    "details": str(exc),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        previous_status = order.order_status
+
+        # Map Daraz order status to internal status
+        DARAZ_STATUS_MAP = {
+            "unpaid": "Pending",
+            "pending": "Pending",
+            "ready_to_ship": "Out For Delivery",
+            "shipped": "Out For Delivery",
+            "delivered": "Delivered",
+            "canceled": "Cancelled",
+            "cancelled": "Cancelled",
+            "returned": "Returned By Daraz",
+        }
+
+        mapped_status = DARAZ_STATUS_MAP.get(order_status.lower().strip())
+        if not mapped_status:
+            logger.warning("Unknown Daraz status received in webhook: %s", order_status)
+            return Response(
+                {
+                    "status": "ignored",
+                    "message": f"Unknown status received: {order_status}",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # Update order status
+        order.order_status = mapped_status
+        order.save(update_fields=["order_status"])
+        logger.info(
+            "Updated order %s status from %s to %s via Daraz webhook",
+            order.order_code,
+            previous_status,
+            mapped_status,
+        )
+
+        # Restock inventory if cancelled or returned
+        CANCEL_RETURN_STATUSES = ["Cancelled", "Returned By Daraz"]
+        if mapped_status in CANCEL_RETURN_STATUSES and previous_status != mapped_status:
+            order_products = OrderProduct.objects.filter(order=order).select_related(
+                "product__product"
+            )
+            for op in order_products:
+                try:
+                    inventory = Inventory.objects.get(
+                        product__id=op.product.product.id,
+                        franchise=order.franchise,
+                    )
+                    inventory.quantity += op.quantity
+                    inventory.save()
+                    logger.info(
+                        "Restocked %s unit(s) of %s for order %s",
+                        op.quantity,
+                        op.product.product.name,
+                        order.order_code,
+                    )
+                except Inventory.DoesNotExist:
+                    logger.warning(
+                        "Inventory record not found for product %s, franchise %s",
+                        op.product.product.name,
+                        order.franchise,
+                    )
+
+        return Response(
+            {
+                "status": "success",
+                "message": f"Order status updated from {previous_status} to {mapped_status}",
+            },
+            status=status.HTTP_200_OK,
         )

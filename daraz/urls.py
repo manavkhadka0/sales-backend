@@ -5,6 +5,7 @@ from .views import (
     CancelDarazOrderView,
     DarazLocationImportView,
     DarazLocationListView,
+    DarazWebhookView,
     GetDarazConfigView,
     SendOrderToDarazView,
 )
@@ -39,5 +40,10 @@ urlpatterns = [
         "locations/import/",
         DarazLocationImportView.as_view(),
         name="daraz-location-import",
+    ),
+    path(
+        "webhook/",
+        DarazWebhookView.as_view(),
+        name="daraz-webhook",
     ),
 ]
