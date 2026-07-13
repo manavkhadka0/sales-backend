@@ -973,6 +973,7 @@ class OrderUpdateView(generics.UpdateAPIView):
             "Returned By Dash",
             "Returned By YDM",
             "Returned By PicknDrop",
+            "Returned By Daraz",
         ]
 
         is_returning = new_status in return_statuses
