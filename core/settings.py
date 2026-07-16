@@ -14,9 +14,9 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 
-# load_dotenv()
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     "pickndrop",
     "storages",
     "daraz",
+    "ydm",
 ]
 
 MIDDLEWARE = [
@@ -104,15 +105,15 @@ WSGI_APPLICATION = "core.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-""" DATABASES = {
+DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
     }
-} """
+}
 
 
-DATABASES = {
+""" DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.getenv("DB_NAME"),
@@ -121,7 +122,7 @@ DATABASES = {
         "HOST": os.getenv("DB_HOST"),
         "PORT": os.getenv("DB_PORT"),
     }
-}
+} """
 
 """ DATABASES = {
     "default": {
@@ -208,13 +209,15 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
-    "https://lines-rubber-bass-occasionally.trycloudflare.com",
+    "https://ending-ann-extremely-cycle.trycloudflare.com",
+    "https://medications-scenes-looking-comparable.trycloudflare.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
-    "https://lines-rubber-bass-occasionally.trycloudflare.com",
+    "https://ending-ann-extremely-cycle.trycloudflare.com",
+    "https://medications-scenes-looking-comparable.trycloudflare.com",
 ]
 
 # Default primary key field type
@@ -298,3 +301,6 @@ DEFAULT_FILE_STORAGE = "core.utils.s3bucket.PublicMediaStorage"
 PUBLIC_MEDIA_LOCATION = "public/media"
 # Base media URL served from the custom domain
 MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/"
+
+# Third-party logistics
+YDM_BASE_URL = os.getenv("YDM_BASE_URL", "")

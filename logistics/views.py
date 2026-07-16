@@ -3039,23 +3039,3 @@ class YdmLogisticsSettingView(APIView):
         serializer.save()
         return Response(serializer.data)
 
-
-class YDMWebhookAPIView(APIView):
-    """
-    Receive webhook notifications from YDM.
-    """
-
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        payload = request.data
-        print("Received YDM Webhook Payload:")
-        print(f"Event: {payload.get('event')}")
-        print(f"Timestamp: {payload.get('timestamp')}")
-
-        data = payload.get("data", {})
-        print(f"Tracking Number: {data.get('tracking_number')}")
-        print(f"External Order Code: {data.get('external_order_code')}")
-        print(f"New Status: {data.get('new_status')}")
-
-        return Response({"status": "received"}, status=status.HTTP_200_OK)

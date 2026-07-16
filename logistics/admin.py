@@ -117,7 +117,11 @@ admin.site.register(RiderPayout, RiderPayoutAdmin)
 
 
 class YdmLogisticsSettingAdmin(ModelAdmin):
-    list_display = ("inside_ringroad_charge", "outside_ringroad_charge", "cancelled_charge")
+    list_display = (
+        "inside_ringroad_charge",
+        "outside_ringroad_charge",
+        "cancelled_charge",
+    )
 
     def has_add_permission(self, request):
         # Only allow adding if no record exists yet

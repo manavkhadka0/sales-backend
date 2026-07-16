@@ -35,6 +35,7 @@ urlpatterns = (
         path("api/game/", include("sales_game.urls")),
         path("api/", include("pickndrop.urls")),
         path("api/daraz/", include("daraz.urls")),
+        path("api/", include("ydm.urls")),
     ]
     + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

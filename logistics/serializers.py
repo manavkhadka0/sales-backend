@@ -117,4 +117,9 @@ class RiderCommissionRateSerializer(serializers.ModelSerializer):
 class YdmLogisticsSettingSerializer(serializers.ModelSerializer):
     class Meta:
         model = YdmLogisticsSetting
-        fields = ["id", "inside_ringroad_charge", "outside_ringroad_charge", "cancelled_charge"]
+        fields = [
+            "id",
+            "inside_ringroad_charge",
+            "outside_ringroad_charge",
+            "cancelled_charge",
+        ]

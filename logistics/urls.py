@@ -23,7 +23,6 @@ from .views import (
     SentToYDMCSVExportView,
     UpdateOrderStatusView,
     YdmLogisticsSettingView,
-    YDMWebhookAPIView,
     daily_orders_by_franchise,
     get_complete_dashboard_stats,
     get_franchise_order_stats,
@@ -152,10 +151,5 @@ urlpatterns = [
         "logistics/export-sent-to-ydm/",
         SentToYDMCSVExportView.as_view(),
         name="export-sent-to-ydm",
-    ),
-    path(
-        "ydm/webhook/",
-        YDMWebhookAPIView.as_view(),
-        name="ydm-webhook",
     ),
 ]

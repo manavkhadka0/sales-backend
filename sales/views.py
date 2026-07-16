@@ -922,6 +922,21 @@ class OrderUpdateView(generics.UpdateAPIView):
             )
             order.logistics = resolved_logistics
             order.order_status = resolved_status
+
+            # Push to YDM BEFORE saving — status is only persisted on success
+            if (
+                resolved_status == "Sent to YDM"
+                and previous_status != "Sent to YDM"
+                and resolved_logistics == "YDM"
+            ):
+                from ydm.services.ydm_service import push_order_to_ydm
+
+                print(
+                    f"[YDM] Pushing order pk={order.pk} to YDM before saving status..."
+                )
+                push_order_to_ydm(order)  # raises ValidationError on failure
+                print("[YDM] Push successful — saving order status 'Sent to YDM'.")
+
             order.save()
 
         # -----------------------------------------
@@ -940,6 +955,8 @@ class OrderUpdateView(generics.UpdateAPIView):
             )
             # If logistics is YDM, manage the cancelled charge on AssignOrder based on status transitions
             if order.logistics == "YDM":
+                # 5a. YDM push already succeeded before save — nothing to do here
+
                 cancelled_statuses = [
                     "Cancelled",
                     "Return Pending",
