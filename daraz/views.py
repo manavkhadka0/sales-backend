@@ -243,11 +243,15 @@ class SendOrderToDarazView(APIView):
         # ------------------------------------------------------------------
         # 8. Payment info
         # ------------------------------------------------------------------
-        payment_type = (
-            "COD" if order.payment_method == "Cash on Delivery" else "NON-COD"
-        )
+        prepaid_amount = order.prepaid_amount or 0
+        net_amount = order.total_amount - prepaid_amount
+
+        # NON-COD only when the order is fully prepaid (net_amount == 0).
+        # Any outstanding balance is always treated as COD.
+        payment_type = "NON-COD" if net_amount == 0 else "COD"
+
         payment = request.data.get("payment") or {
-            "totalAmount": str(order.total_amount),
+            "totalAmount": str(net_amount),
             "currency": os.getenv("DARAZ_CURRENCY", "NPR"),
             "paymentType": payment_type,
         }

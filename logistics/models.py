@@ -99,8 +99,6 @@ class AssignOrder(models.Model):
         return f"{self.user.username} - {self.order.order_code}"
 
 
-
-
 class Invoice(models.Model):
     STATUS = (
         ("Draft", "Draft"),
