@@ -75,10 +75,14 @@ def push_order_to_ydm(order) -> dict:
             f"[YDM] Config found — franchise='{franchise}', api_key={ydm_config.api_key!r}"
         )
     except YDMLogistics.DoesNotExist:
-        raise ValidationError(
-            f"No YDM Logistics configuration found for franchise '{franchise}'. "
-            "Please set up the YDM API key before sending orders."
+        logger.info(
+            "No YDM Logistics configuration found for franchise '%s'. Skipping YDM push.",
+            franchise,
         )
+        print(
+            f"[YDM] No YDM Logistics configuration found for franchise '{franchise}'. Skipping YDM push."
+        )
+        return {}
 
     payload = _build_order_payload(order)
     print(f"[YDM] Payload: {payload}")
