@@ -1337,15 +1337,9 @@ class UserInventoryLogs(generics.ListAPIView):
         if user.role == "SalesPerson":
             return InventoryChangeLog.objects.filter(user=user).order_by("-id")
 
-        owner = get_owner_by_role(user)
-        if owner:
-            filter_kwargs = {}
-            if user.role == "SuperAdmin":
-                filter_kwargs["inventory__factory"] = owner
-            elif user.role == "Distributor":
-                filter_kwargs["inventory__distributor"] = owner
-            elif user.role == "Franchise":
-                filter_kwargs["inventory__franchise"] = owner
+        owner, owner_field = get_owner_by_role(user)
+        if owner and owner_field:
+            filter_kwargs = {f"inventory__{owner_field}": owner}
             return InventoryChangeLog.objects.filter(**filter_kwargs).order_by("-id")
 
         return InventoryChangeLog.objects.none()
