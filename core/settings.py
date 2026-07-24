@@ -124,16 +124,6 @@ DATABASES = {
     }
 }
 
-""" DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "salesdb", 
-        "USER": "salesuser",  
-        "PASSWORD": "salespass", 
-        "HOST": "localhost",  
-        "PORT": "5432",  
-    }
-} """
 
 """ DATABASES = {
     "default": {
@@ -210,14 +200,14 @@ CORS_ALLOWED_ORIGINS = [
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
     "https://ending-ann-extremely-cycle.trycloudflare.com",
-    "https://satisfaction-ind-quarters-claire.trycloudflare.com",
+    "https://preservation-radar-preliminary-outsourcing.trycloudflare.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
     "https://ending-ann-extremely-cycle.trycloudflare.com",
-    "https://satisfaction-ind-quarters-claire.trycloudflare.com",
+    "https://preservation-radar-preliminary-outsourcing.trycloudflare.com",
 ]
 
 # Default primary key field type

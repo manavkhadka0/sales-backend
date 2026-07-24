@@ -7,6 +7,7 @@ from .views import (
     CommissionPaymentView,
     CurrentDatabaseModeView,
     DistributorInventoryListView,
+    ExportPaymentScreenshotsView,
     FactoryInventoryListView,
     FactoryInventoryUsageView,
     FranchiseHistoricalOrderView,
@@ -134,5 +135,10 @@ urlpatterns = [
         "export-orders-csv/",
         OrderExportCSVView.as_view(),
         name="export-orders-csv",
+    ),
+    path(
+        "export-payment-screenshots/",
+        ExportPaymentScreenshotsView.as_view(),
+        name="export-payment-screenshots",
     ),
 ]

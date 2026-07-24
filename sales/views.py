@@ -1,7 +1,10 @@
 import csv
 import io
 import json
-from datetime import datetime, time, timedelta
+import os
+import urllib.request
+import zipfile
+from datetime import date, datetime, time, timedelta
 
 import openpyxl
 from dateutil.relativedelta import relativedelta
@@ -44,6 +47,7 @@ from .models import (
 )
 from .serializers import (
     BulkOrderDateUpdateSerializer,
+    ExportPaymentScreenshotsSerializer,
     FileUploadSerializer,
     InventoryChangeLogSerializer,
     InventoryRequestSerializer,
@@ -2489,4 +2493,134 @@ class OrderExportCSVView(generics.GenericAPIView):
                 order.delivery_address if order.delivery_address else "N/A",
             ])
 
+        return response
+
+
+class ExportPaymentScreenshotsView(generics.GenericAPIView):
+    serializer_class = ExportPaymentScreenshotsSerializer
+
+    def get(self, request, *args, **kwargs):
+        return self._export_screenshots(request.query_params)
+
+    def post(self, request, *args, **kwargs):
+        return self._export_screenshots(request.data)
+
+    def _export_screenshots(self, data):
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+
+        franchise = serializer.validated_data.get("franchise")
+        franchise_id = franchise.id if franchise else None
+
+        if not franchise_id:
+            raw_id = data.get("franchise_id") or data.get("franchise")
+            if raw_id:
+                try:
+                    franchise_id = int(raw_id)
+                except (ValueError, TypeError):
+                    pass
+
+        if not franchise_id:
+            if hasattr(self.request.user, "franchise") and self.request.user.franchise:
+                franchise_id = self.request.user.franchise.id
+            else:
+                return Response(
+                    {"detail": "franchise is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        start_date = serializer.validated_data.get("start_date") or date(2025, 9, 25)
+        end_date = serializer.validated_data.get("end_date") or timezone.localdate()
+
+        orders = (
+            Order.objects.filter(franchise_id=franchise_id)
+            .filter(
+                Q(created_at__date__gte=start_date, created_at__date__lte=end_date)
+                | Q(date__gte=start_date, date__lte=end_date)
+            )
+            .exclude(Q(payment_screenshot="") | Q(payment_screenshot__isnull=True))
+            .only("id", "order_code", "payment_screenshot", "created_at", "date")
+            .order_by("id")
+        )
+
+        if not orders.exists():
+            return Response(
+                {
+                    "detail": f"No payment screenshots found for franchise ID {franchise_id} between {start_date} and {end_date}."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        buffer = io.BytesIO()
+        folder_name = f"payment_screenshots_franchise_{franchise_id}"
+        added_files = 0
+        date_file_counts = {}
+
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            for order in orders:
+                if not order.payment_screenshot:
+                    continue
+
+                try:
+                    orig_basename = os.path.basename(order.payment_screenshot.name)
+                    ext = os.path.splitext(orig_basename)[1]
+                    if not ext or len(ext) > 5:
+                        ext = ".jpg"
+
+                    # Format date as YYYY-MM-DD (date only, no time)
+                    if order.created_at:
+                        date_str = order.created_at.strftime("%Y-%m-%d")
+                    elif order.date:
+                        date_str = order.date.strftime("%Y-%m-%d")
+                    else:
+                        date_str = "unknown_date"
+
+                    # Ensure unique filename if multiple orders exist on the same date
+                    if date_str in date_file_counts:
+                        date_file_counts[date_str] += 1
+                        image_name = f"{date_str}_{date_file_counts[date_str]}{ext}"
+                    else:
+                        date_file_counts[date_str] = 0
+                        image_name = f"{date_str}{ext}"
+
+                    archive_path = f"{folder_name}/{image_name}"
+
+                    file_data = None
+                    try:
+                        file_obj = order.payment_screenshot.open("rb")
+                        file_data = file_obj.read()
+                        file_obj.close()
+                    except Exception:
+                        if (
+                            hasattr(order.payment_screenshot, "url")
+                            and order.payment_screenshot.url
+                        ):
+                            url = order.payment_screenshot.url
+                            if not url.startswith("http"):
+                                url = self.request.build_absolute_uri(url)
+                            req = urllib.request.Request(
+                                url, headers={"User-Agent": "Mozilla/5.0"}
+                            )
+                            with urllib.request.urlopen(req, timeout=10) as resp:
+                                file_data = resp.read()
+
+                    if file_data:
+                        zf.writestr(archive_path, file_data)
+                        added_files += 1
+
+                except Exception:
+                    continue
+
+        if added_files == 0:
+            return Response(
+                {
+                    "detail": "Could not retrieve image data for any of the payment screenshots."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        buffer.seek(0)
+        zip_filename = f"payment_screenshots_franchise_{franchise_id}_{start_date}_to_{end_date}.zip"
+        response = HttpResponse(buffer.getvalue(), content_type="application/zip")
+        response["Content-Disposition"] = f'attachment; filename="{zip_filename}"'
         return response

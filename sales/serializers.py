@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -497,3 +499,31 @@ class OrderExportSerializer(serializers.Serializer):
         queryset=Franchise.objects.all(), required=True
     )
     location_name = serializers.CharField(required=True)
+
+
+class ExportPaymentScreenshotsSerializer(serializers.Serializer):
+    franchise = serializers.PrimaryKeyRelatedField(
+        queryset=Franchise.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text="Select franchise to filter payment screenshots for.",
+    )
+    start_date = serializers.DateField(
+        required=False,
+        default=date(2025, 9, 25),
+        help_text="Start date for filtering orders (YYYY-MM-DD). Defaults to 2025-09-25.",
+    )
+    end_date = serializers.DateField(
+        required=False,
+        default=timezone.localdate,
+        help_text="End date for filtering orders (YYYY-MM-DD). Defaults to today.",
+    )
+
+    def validate(self, attrs):
+        start_date = attrs.get("start_date")
+        end_date = attrs.get("end_date")
+        if start_date and end_date and start_date > end_date:
+            raise serializers.ValidationError(
+                {"start_date": "start_date cannot be after end_date."}
+            )
+        return attrs
