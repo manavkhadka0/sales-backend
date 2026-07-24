@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import io
 import json
@@ -2496,6 +2497,26 @@ class OrderExportCSVView(generics.GenericAPIView):
         return response
 
 
+def _fetch_single_payment_screenshot(item):
+    archive_path, screenshot_field, abs_url = item
+    file_data = None
+    try:
+        file_obj = screenshot_field.open("rb")
+        file_data = file_obj.read()
+        file_obj.close()
+    except Exception:
+        if abs_url:
+            try:
+                req = urllib.request.Request(
+                    abs_url, headers={"User-Agent": "Mozilla/5.0"}
+                )
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    file_data = resp.read()
+            except Exception:
+                pass
+    return archive_path, file_data
+
+
 class ExportPaymentScreenshotsView(generics.GenericAPIView):
     serializer_class = ExportPaymentScreenshotsSerializer
 
@@ -2551,65 +2572,68 @@ class ExportPaymentScreenshotsView(generics.GenericAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        buffer = io.BytesIO()
         folder_name = f"payment_screenshots_franchise_{franchise_id}"
-        added_files = 0
         date_file_counts = {}
+        task_list = []
 
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            for order in orders:
-                if not order.payment_screenshot:
-                    continue
+        for order in orders:
+            if not order.payment_screenshot:
+                continue
 
-                try:
-                    orig_basename = os.path.basename(order.payment_screenshot.name)
-                    ext = os.path.splitext(orig_basename)[1]
-                    if not ext or len(ext) > 5:
-                        ext = ".jpg"
+            orig_basename = os.path.basename(order.payment_screenshot.name)
+            ext = os.path.splitext(orig_basename)[1]
+            if not ext or len(ext) > 5:
+                ext = ".jpg"
 
-                    # Format date as YYYY-MM-DD (date only, no time)
-                    if order.created_at:
-                        date_str = order.created_at.strftime("%Y-%m-%d")
-                    elif order.date:
-                        date_str = order.date.strftime("%Y-%m-%d")
-                    else:
-                        date_str = "unknown_date"
+            if order.created_at:
+                date_str = order.created_at.strftime("%Y-%m-%d")
+            elif order.date:
+                date_str = order.date.strftime("%Y-%m-%d")
+            else:
+                date_str = "unknown_date"
 
-                    # Ensure unique filename if multiple orders exist on the same date
-                    if date_str in date_file_counts:
-                        date_file_counts[date_str] += 1
-                        image_name = f"{date_str}_{date_file_counts[date_str]}{ext}"
-                    else:
-                        date_file_counts[date_str] = 0
-                        image_name = f"{date_str}{ext}"
+            if date_str in date_file_counts:
+                date_file_counts[date_str] += 1
+                image_name = f"{date_str}_{date_file_counts[date_str]}{ext}"
+            else:
+                date_file_counts[date_str] = 0
+                image_name = f"{date_str}{ext}"
 
-                    archive_path = f"{folder_name}/{image_name}"
+            archive_path = f"{folder_name}/{image_name}"
 
-                    file_data = None
+            abs_url = None
+            if hasattr(order.payment_screenshot, "url") and order.payment_screenshot.url:
+                url = order.payment_screenshot.url
+                if not url.startswith("http"):
+                    abs_url = self.request.build_absolute_uri(url)
+                else:
+                    abs_url = url
+
+            task_list.append((archive_path, order.payment_screenshot, abs_url))
+
+        if not task_list:
+            return Response(
+                {"detail": "No valid payment screenshot files found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        buffer = io.BytesIO()
+        added_files = 0
+
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as zf:
+            with ThreadPoolExecutor(max_workers=20) as executor:
+                futures = [
+                    executor.submit(_fetch_single_payment_screenshot, item)
+                    for item in task_list
+                ]
+                for future in as_completed(futures):
                     try:
-                        file_obj = order.payment_screenshot.open("rb")
-                        file_data = file_obj.read()
-                        file_obj.close()
+                        arc_path, data = future.result()
+                        if data:
+                            zf.writestr(arc_path, data)
+                            added_files += 1
                     except Exception:
-                        if (
-                            hasattr(order.payment_screenshot, "url")
-                            and order.payment_screenshot.url
-                        ):
-                            url = order.payment_screenshot.url
-                            if not url.startswith("http"):
-                                url = self.request.build_absolute_uri(url)
-                            req = urllib.request.Request(
-                                url, headers={"User-Agent": "Mozilla/5.0"}
-                            )
-                            with urllib.request.urlopen(req, timeout=10) as resp:
-                                file_data = resp.read()
-
-                    if file_data:
-                        zf.writestr(archive_path, file_data)
-                        added_files += 1
-
-                except Exception:
-                    continue
+                        continue
 
         if added_files == 0:
             return Response(
