@@ -9,6 +9,7 @@ from datetime import date, datetime, time, timedelta
 
 import openpyxl
 from dateutil.relativedelta import relativedelta
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Q, Sum
@@ -2500,20 +2501,52 @@ class OrderExportCSVView(generics.GenericAPIView):
 def _fetch_single_payment_screenshot(item):
     archive_path, screenshot_field, abs_url = item
     file_data = None
+
+    # 1. Try reading via Storage / S3 API
     try:
         file_obj = screenshot_field.open("rb")
         file_data = file_obj.read()
         file_obj.close()
     except Exception:
-        if abs_url:
-            try:
-                req = urllib.request.Request(
-                    abs_url, headers={"User-Agent": "Mozilla/5.0"}
-                )
-                with urllib.request.urlopen(req, timeout=5) as resp:
-                    file_data = resp.read()
-            except Exception:
-                pass
+        file_data = None
+
+    # 2. Fallback: If S3 / Storage failed or file is missing, search in local media folder
+    if not file_data and screenshot_field.name:
+        clean_name = str(screenshot_field.name).lstrip("/")
+        clean_relative_name = clean_name.replace("public/yachuSales/", "").replace("yachuSales/", "")
+        file_basename = os.path.basename(clean_name)
+
+        possible_local_paths = [
+            os.path.join(settings.MEDIA_ROOT, clean_name),
+            os.path.join(settings.MEDIA_ROOT, clean_relative_name),
+            os.path.join(settings.MEDIA_ROOT, "payment_screenshots", file_basename),
+            os.path.join(settings.BASE_DIR, "media", clean_name),
+            os.path.join(settings.BASE_DIR, "media", clean_relative_name),
+            os.path.join(settings.BASE_DIR, "media", "payment_screenshots", file_basename),
+            os.path.join(settings.BASE_DIR, clean_name),
+        ]
+
+        for path in possible_local_paths:
+            if os.path.exists(path) and os.path.isfile(path):
+                try:
+                    with open(path, "rb") as f:
+                        file_data = f.read()
+                    if file_data:
+                        break
+                except Exception:
+                    continue
+
+    # 3. Fallback: Try downloading via HTTP URL if local media search also failed
+    if not file_data and abs_url:
+        try:
+            req = urllib.request.Request(
+                abs_url, headers={"User-Agent": "Mozilla/5.0"}
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                file_data = resp.read()
+        except Exception:
+            pass
+
     return archive_path, file_data
 
 
