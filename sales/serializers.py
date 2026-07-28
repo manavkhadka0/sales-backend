@@ -523,7 +523,7 @@ class ExportPaymentScreenshotsSerializer(serializers.Serializer):
         start_date = attrs.get("start_date")
         end_date = attrs.get("end_date")
         if start_date and end_date and start_date > end_date:
-            raise serializers.ValidationError(
-                {"start_date": "start_date cannot be after end_date."}
-            )
+            raise serializers.ValidationError({
+                "start_date": "start_date cannot be after end_date."
+            })
         return attrs

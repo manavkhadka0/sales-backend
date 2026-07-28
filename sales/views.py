@@ -1,10 +1,10 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import io
 import json
 import os
 import urllib.request
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, time, timedelta
 
 import openpyxl
@@ -1324,10 +1324,11 @@ class UserInventoryLogFilter(django_filters.FilterSet):
     changed_at = django_filters.CharFilter(
         field_name="changed_at", lookup_expr="icontains"
     )
+    action = django_filters.CharFilter(field_name="action", lookup_expr="icontains")
 
     class Meta:
         model = InventoryChangeLog
-        fields = ["changed_at"]
+        fields = ["changed_at", "action"]
 
 
 class UserInventoryLogs(generics.ListAPIView):
@@ -2513,7 +2514,9 @@ def _fetch_single_payment_screenshot(item):
     # 2. Fallback: If S3 / Storage failed or file is missing, search in local media folder
     if not file_data and screenshot_field.name:
         clean_name = str(screenshot_field.name).lstrip("/")
-        clean_relative_name = clean_name.replace("public/yachuSales/", "").replace("yachuSales/", "")
+        clean_relative_name = clean_name.replace("public/yachuSales/", "").replace(
+            "yachuSales/", ""
+        )
         file_basename = os.path.basename(clean_name)
 
         possible_local_paths = [
@@ -2522,7 +2525,9 @@ def _fetch_single_payment_screenshot(item):
             os.path.join(settings.MEDIA_ROOT, "payment_screenshots", file_basename),
             os.path.join(settings.BASE_DIR, "media", clean_name),
             os.path.join(settings.BASE_DIR, "media", clean_relative_name),
-            os.path.join(settings.BASE_DIR, "media", "payment_screenshots", file_basename),
+            os.path.join(
+                settings.BASE_DIR, "media", "payment_screenshots", file_basename
+            ),
             os.path.join(settings.BASE_DIR, clean_name),
         ]
 
@@ -2539,9 +2544,7 @@ def _fetch_single_payment_screenshot(item):
     # 3. Fallback: Try downloading via HTTP URL if local media search also failed
     if not file_data and abs_url:
         try:
-            req = urllib.request.Request(
-                abs_url, headers={"User-Agent": "Mozilla/5.0"}
-            )
+            req = urllib.request.Request(abs_url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=5) as resp:
                 file_data = resp.read()
         except Exception:
@@ -2587,7 +2590,8 @@ class ExportPaymentScreenshotsView(generics.GenericAPIView):
         end_date = serializer.validated_data.get("end_date") or timezone.localdate()
 
         orders = (
-            Order.objects.filter(franchise_id=franchise_id)
+            Order.objects
+            .filter(franchise_id=franchise_id)
             .filter(
                 Q(created_at__date__gte=start_date, created_at__date__lte=end_date)
                 | Q(date__gte=start_date, date__lte=end_date)
@@ -2635,7 +2639,10 @@ class ExportPaymentScreenshotsView(generics.GenericAPIView):
             archive_path = f"{folder_name}/{image_name}"
 
             abs_url = None
-            if hasattr(order.payment_screenshot, "url") and order.payment_screenshot.url:
+            if (
+                hasattr(order.payment_screenshot, "url")
+                and order.payment_screenshot.url
+            ):
                 url = order.payment_screenshot.url
                 if not url.startswith("http"):
                     abs_url = self.request.build_absolute_uri(url)
