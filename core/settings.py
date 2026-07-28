@@ -33,6 +33,11 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
+# Trust the X-Forwarded-Proto header from Nginx reverse proxy so Django
+# generates https:// URLs in pagination links instead of http://
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 
 # Application definition
 
