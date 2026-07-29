@@ -2049,7 +2049,7 @@ class InventoryDateSnapshotView(generics.GenericAPIView):
             )
 
         # Set end of day for the target date (23:59:59)
-        end_of_day = datetime.combine(target_date, time.max)
+        end_of_day = timezone.make_aware(datetime.combine(target_date, time.max))
 
         user = request.user
         snapshot_data = []
