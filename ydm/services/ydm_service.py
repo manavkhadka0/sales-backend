@@ -96,11 +96,17 @@ def push_order_to_ydm(order) -> dict:
 
     try:
         response = client.create_order(payload)
-        print(f"[YDM] ✅ Success — tracking: {response.get('tracking_number')}")
+        tracking_number = response.get("tracking_number") or response.get(
+            "tracking_code"
+        )
+        if tracking_number:
+            order.tracking_code = tracking_number
+            order.save(update_fields=["tracking_code"])
+        print(f"[YDM] ✅ Success — tracking: {tracking_number}")
         logger.info(
             "Order pk=%s pushed to YDM. Tracking: %s",
             order.pk,
-            response.get("tracking_number"),
+            tracking_number,
         )
         return response
     except YDMValidationError as exc:
