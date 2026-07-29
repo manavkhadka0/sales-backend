@@ -10,7 +10,9 @@ logger = logging.getLogger(__name__)
 # Maps sales Order.payment_method values to YDM API payment_type codes.
 PAYMENT_TYPE_MAP: dict[str, str] = {
     "Cash on Delivery": "COD",
-    "Prepaid": "Prepaid",
+    "Prepaid": "PREPAID",
+    "COD": "COD",
+    "PREPAID": "PREPAID",
 }
 
 
@@ -26,7 +28,10 @@ def _build_order_payload(order) -> dict:
         for op in order.order_products.select_related("product__product").all()
     ]
 
-    payment_type = PAYMENT_TYPE_MAP.get(order.payment_method, order.payment_method)
+    payment_type = PAYMENT_TYPE_MAP.get(
+        order.payment_method,
+        order.payment_method.upper() if order.payment_method else "COD",
+    )
 
     return {
         "external_order_code": order.order_code or "",
