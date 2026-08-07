@@ -191,6 +191,48 @@ class LoginView(APIView):
             )
 
 
+class FranchiseTokenView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        franchise_id = request.data.get("franchise_id")
+
+        if not franchise_id:
+            return Response(
+                {"error": "franchise_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = CustomUser.objects.filter(
+                franchise_id=franchise_id,
+                role="Franchise",
+                is_active=True,
+                is_deleted=False,
+            ).first()
+
+            if not user:
+                return Response(
+                    {
+                        "error": "No active Franchise user found for the given franchise_id"
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            refresh = RefreshToken.for_user(user)
+            user_serializer = CustomUserSerializer(user)
+            return Response(
+                {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                    "user": user_serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 class UserProfileView(APIView):
     def get(self, request):
         user = request.user

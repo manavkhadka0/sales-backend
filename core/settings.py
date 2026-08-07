@@ -43,6 +43,7 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 INSTALLED_APPS = [
     "unfold",
+    "unfold.contrib.import_export",  # Overrides import/export templates
     "account",
     "sales",
     "django.contrib.admin",
@@ -69,6 +70,7 @@ INSTALLED_APPS = [
     "storages",
     "daraz",
     "ydm",
+    "import_export",
 ]
 
 MIDDLEWARE = [

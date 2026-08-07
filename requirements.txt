@@ -12,10 +12,12 @@ click==8.1.8
 colorama==0.4.6
 cryptography==44.0.0
 cssselect2==0.7.0
+diff-match-patch==20241021
 Django==5.1.4
 django-admin-rangefilter==0.13.2
 django-cors-headers==4.6.0
 django-filter==25.1
+django-import-export==4.4.1
 django-solo==2.4.0
 django-storages==1.14.6
 django-tinymce==4.1.0
@@ -52,6 +54,7 @@ setuptools==80.9.0
 six==1.17.0
 sqlparse==0.5.2
 svglib==1.5.1
+tablib==3.10.0
 tinycss2==1.4.0
 tinyhtml5==2.0.0
 tzdata==2024.2

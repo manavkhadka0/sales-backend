@@ -9,6 +9,7 @@ from .views import (
     FactoryListCreateView,
     FranchiseByDistributorView,
     FranchiseListCreateView,
+    FranchiseTokenView,
     LoginView,
     LogisticsDetailView,
     LogisticsListCreateView,
@@ -29,6 +30,7 @@ urlpatterns = [
         name="user-detail",
     ),  # New URL for PATCH and DELETE
     path("login/", LoginView.as_view(), name="login"),  # New login URL
+    path("franchise-token/", FranchiseTokenView.as_view(), name="franchise-token"),
     path("profile/", UserProfileView.as_view(), name="user-profile"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("factories/", FactoryListCreateView.as_view(), name="factory-list-create"),
