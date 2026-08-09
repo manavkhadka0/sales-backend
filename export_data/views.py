@@ -141,6 +141,7 @@ class SalesPersonOrderCSVExportView(generics.GenericAPIView):
             "Return Pending",
             "Returned By PicknDrop",
             "Returned By YDM",
+            "Returned By Daraz",
         ]
 
         # Get date range from query parameters
@@ -310,6 +311,7 @@ class SalesSummaryExportView(APIView):
             "Return Pending",
             "Returned By PicknDrop",
             "Returned By YDM",
+            "Returned By Daraz",
         ]
 
         # Filter orders in date range
@@ -674,6 +676,41 @@ class CustomOrderFilter(django_filters.FilterSet):
         help_text="Filter orders by salesperson phone number (partial match supported)",
     )
 
+    # Salesperson ID filter
+    sales_person = django_filters.ModelChoiceFilter(
+        queryset=CustomUser.objects.all(),
+        field_name="sales_person",
+        help_text="Filter orders by salesperson ID",
+    )
+
+    # Order status filter
+    order_status = django_filters.ChoiceFilter(
+        choices=Order.ORDER_STATUS_CHOICES,
+        field_name="order_status",
+        help_text="Filter orders by order status",
+    )
+
+    # Payment method filter
+    payment_method = django_filters.ChoiceFilter(
+        choices=Order.PAYMENT_CHOICES,
+        field_name="payment_method",
+        help_text="Filter orders by payment method",
+    )
+
+    # Delivery type filter
+    delivery_type = django_filters.ChoiceFilter(
+        choices=Order.DELIVERY_ADDRESS_CHOICES,
+        field_name="delivery_type",
+        help_text="Filter orders by delivery type",
+    )
+
+    # Logistics filter
+    logistics = django_filters.ChoiceFilter(
+        choices=Order.LOGISTICS_CHOICES,
+        field_name="logistics",
+        help_text="Filter orders by logistics provider",
+    )
+
     class Meta:
         model = Order
         fields = []
@@ -835,6 +872,7 @@ def export_orders_csv_api(request):
             "Return Pending",
             "Returned By PicknDrop",
             "Returned By YDM",
+            "Returned By Daraz",
         ]
 
         # Initialize summary variables
