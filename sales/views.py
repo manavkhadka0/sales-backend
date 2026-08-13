@@ -30,7 +30,7 @@ from rest_framework.views import APIView
 
 from account.models import CustomUser, Distributor, Factory, Franchise
 from core.middleware import get_current_db_name, set_current_db_name
-from logistics.models import AssignOrder
+from logistics.models import AssignOrder, OrderChangeLog
 from logistics.utils import create_order_log
 
 from .constants import EXCLUDED_STATUSES
@@ -929,11 +929,16 @@ class OrderUpdateView(generics.UpdateAPIView):
             order.logistics = resolved_logistics
             order.order_status = resolved_status
 
+            already_sent_to_ydm = OrderChangeLog.objects.filter(
+                order=order, new_status="Sent to YDM"
+            ).exists()
+
             # Push to YDM BEFORE saving — status is only persisted on success
             if (
                 resolved_status == "Sent to YDM"
                 and previous_status != "Sent to YDM"
                 and resolved_logistics == "YDM"
+                and not already_sent_to_ydm
             ):
                 from ydm.services.ydm_service import push_order_to_ydm
 
