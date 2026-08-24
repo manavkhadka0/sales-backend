@@ -618,7 +618,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
         if user.role == "Distributor":
             return Order.objects.filter(distributor=user.distributor).order_by("-id")
         elif user.role == "SalesPerson":
-            return Order.objects.filter(sales_person=user).order_by("-id")
+            two_weeks_ago = timezone.now() - timedelta(days=14)
+            return Order.objects.filter(
+                sales_person=user, created_at__gte=two_weeks_ago
+            ).order_by("-id")
         elif user.role == "Franchise":
             return Order.objects.filter(franchise=user.franchise).order_by("-id")
         elif user.role == "SuperAdmin":
