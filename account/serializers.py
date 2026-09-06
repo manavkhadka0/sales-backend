@@ -1,5 +1,9 @@
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 
+from account.utils import get_password_changed_time, get_password_fingerprint
 from sales.models import Order
 
 from .models import CustomUser, Distributor, Factory, Franchise, Logistics
@@ -133,9 +137,9 @@ class CustomUserSerializer(serializers.ModelSerializer):
 
         # Check if user with this phone number already exists
         if CustomUser.objects.filter(phone_number=phone_number).exists():
-            raise serializers.ValidationError(
-                {"phone_number": "A user with this phone number already exists."}
-            )
+            raise serializers.ValidationError({
+                "phone_number": "A user with this phone number already exists."
+            })
 
         validated_data["username"] = phone_number
 
@@ -249,22 +253,66 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(required=True, write_only=True)
 
 
-class ChangePasswordSerializer(serializers.ModelSerializer):
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True, write_only=True)
+    new_password = serializers.CharField(required=True, write_only=True)
+
+    def validate_old_password(self, value):
+        user = self.context["request"].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Old password is incorrect")
+        return value
+
+
+class ChangePasswordByPhoneNumberSerializer(serializers.Serializer):
     phone_number = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True, write_only=True)
 
-    class Meta:
-        model = CustomUser
-        fields = ["phone_number", "new_password"]
+    def validate_phone_number(self, value):
+        if not CustomUser.objects.filter(phone_number=value).exists():
+            raise serializers.ValidationError(
+                "User with this phone number does not exist."
+            )
+        return value
 
 
-class ChangePasswordByPhoneNumberSerializer(serializers.ModelSerializer):
-    phone_number = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True)
+class CustomTokenRefreshSerializer(TokenRefreshSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        try:
+            refresh = RefreshToken(attrs["refresh"])
+            user_id = refresh.get("user_id")
+            token_pass_hash = refresh.get("pass_hash")
+            token_iat = refresh.get("iat")
+            if user_id:
+                user = CustomUser.objects.get(id=user_id)
+                current_pass_hash = get_password_fingerprint(user.password)
 
-    class Meta:
-        model = CustomUser
-        fields = ["phone_number", "new_password"]
+                if token_pass_hash is not None:
+                    if token_pass_hash != current_pass_hash:
+                        raise AuthenticationFailed(
+                            "Password has been changed. Please log in again.",
+                            code="password_changed",
+                        )
+                else:
+                    # Legacy token check
+                    pwd_changed_at = get_password_changed_time(user.id)
+                    if (
+                        pwd_changed_at is not None
+                        and token_iat is not None
+                        and token_iat < pwd_changed_at
+                    ):
+                        raise AuthenticationFailed(
+                            "Password has been changed. Please log in again.",
+                            code="password_changed",
+                        )
+
+                access = refresh.access_token
+                access["pass_hash"] = current_pass_hash
+                data["access"] = str(access)
+        except CustomUser.DoesNotExist:
+            pass
+        return data
 
 
 class LogisticsSerializer(serializers.ModelSerializer):

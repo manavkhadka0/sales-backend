@@ -4,12 +4,16 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
+
+from account.services.auth_service import change_user_password
+from account.utils import get_tokens_for_user
 
 from .models import CustomUser, Distributor, Factory, Franchise, Logistics
 from .serializers import (
     ChangePasswordByPhoneNumberSerializer,
     ChangePasswordSerializer,
+    CustomTokenRefreshSerializer,
     CustomUserSerializer,
     DistributorSerializer,
     FactorySerializer,
@@ -172,7 +176,9 @@ class LoginView(APIView):
         try:
             user = CustomUser.objects.get(phone_number=phone_number)
             if user.check_password(password):  # Check if the password is correct
-                refresh = RefreshToken.for_user(user)  # Create JWT tokens
+                refresh = get_tokens_for_user(
+                    user
+                )  # Create JWT tokens with password fingerprint
                 user_serializer = CustomUserSerializer(user)  # Serialize user data
                 return Response(
                     {
@@ -219,7 +225,7 @@ class FranchiseTokenView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            refresh = RefreshToken.for_user(user)
+            refresh = get_tokens_for_user(user)
             user_serializer = CustomUserSerializer(user)
             return Response(
                 {
@@ -312,19 +318,11 @@ class ChangePassword(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        user = request.user
-        phone_number = user.phone_number
-        old_password = request.data.get("old_password")
-        new_password = request.data.get("new_password")
-
-        user = CustomUser.objects.get(phone_number=phone_number)
-        if not user.check_password(old_password):
-            return Response(
-                {"error": "Old password is incorrect"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        user.set_password(new_password)
-        user.save()
+        serializer = self.get_serializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        change_user_password(request.user, serializer.validated_data["new_password"])
         return Response(
             {"message": "Password changed successfully"}, status=status.HTTP_200_OK
         )
@@ -334,15 +332,25 @@ class ChangePasswordByPhoneNumber(generics.GenericAPIView):
     serializer_class = ChangePasswordByPhoneNumberSerializer
 
     def post(self, request):
-        phone_number = request.data.get("phone_number")
-        new_password = request.data.get("new_password")
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone_number = serializer.validated_data["phone_number"]
+        new_password = serializer.validated_data["new_password"]
 
-        user = CustomUser.objects.get(phone_number=phone_number)
-        user.set_password(new_password)
-        user.save()
-        return Response(
-            {"message": "Password changed successfully"}, status=status.HTTP_200_OK
-        )
+        try:
+            user = CustomUser.objects.get(phone_number=phone_number)
+            change_user_password(user, new_password)
+            return Response(
+                {"message": "Password changed successfully"}, status=status.HTTP_200_OK
+            )
+        except CustomUser.DoesNotExist:
+            return Response(
+                {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class CustomTokenRefreshView(TokenRefreshView):
+    serializer_class = CustomTokenRefreshSerializer
 
 
 class UserFranchiseListView(APIView):
