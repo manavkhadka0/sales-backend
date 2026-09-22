@@ -112,15 +112,15 @@ WSGI_APPLICATION = "core.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-""" DATABASES = {
+DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
     }
-} """
+}
 
 
-DATABASES = {
+""" DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.getenv("DB_NAME"),
@@ -129,7 +129,7 @@ DATABASES = {
         "HOST": os.getenv("DB_HOST"),
         "PORT": os.getenv("DB_PORT"),
     }
-}
+} """
 
 
 """ DATABASES = {
@@ -207,14 +207,14 @@ CORS_ALLOWED_ORIGINS = [
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
     "https://ending-ann-extremely-cycle.trycloudflare.com",
-    "https://preservation-radar-preliminary-outsourcing.trycloudflare.com",
+    "https://shipped-exciting-corrections-alan.trycloudflare.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
     "https://ending-ann-extremely-cycle.trycloudflare.com",
-    "https://preservation-radar-preliminary-outsourcing.trycloudflare.com",
+    "https://shipped-exciting-corrections-alan.trycloudflare.com",
 ]
 
 # Default primary key field type
