@@ -17,6 +17,9 @@ from rest_framework.views import APIView
 from account.models import CustomUser, Franchise
 from sales.models import Order, OrderProduct
 
+from .serializers import OrderSelectedExportSerializer
+from .services import OrderExportService
+
 # Create your views here.
 
 
@@ -878,10 +881,12 @@ def export_orders_csv_api(request):
         # Initialize summary variables
         total_orders = 0
         total_amount = 0
+        total_delivery_charge = 0
         total_cancelled_orders = 0
         total_cancelled_amount = 0
         overall_orders = 0
         overall_amount = 0
+        overall_delivery_charge = 0
 
         # Write data rows
         for order in filtered_orders:
@@ -893,14 +898,17 @@ def export_orders_csv_api(request):
 
             # Calculate product price
             product_price = float(order.total_amount)
+            delivery_charge = float(order.delivery_charge or 0)
 
             overall_orders += 1
             overall_amount += product_price
+            overall_delivery_charge += delivery_charge
 
             # Update summary statistics
             if order.order_status not in excluded_statuses:
                 total_orders += 1
                 total_amount += product_price
+                total_delivery_charge += delivery_charge
 
             if order.order_status in excluded_statuses:
                 total_cancelled_orders += 1
@@ -929,8 +937,10 @@ def export_orders_csv_api(request):
         writer.writerow(["Summary Statistics"])
         writer.writerow(["Overall Orders", overall_orders])
         writer.writerow(["Overall Amount", f"{overall_amount:.2f}"])
+        writer.writerow(["Overall Delivery Charge", f"{overall_delivery_charge:.2f}"])
         writer.writerow(["Total Orders", total_orders])
         writer.writerow(["Total Amount", f"{total_amount:.2f}"])
+        writer.writerow(["Total Delivery Charge", f"{total_delivery_charge:.2f}"])
         writer.writerow(["Total Cancelled Orders", total_cancelled_orders])
         writer.writerow(["Total Cancelled Amount", f"{total_cancelled_amount:.2f}"])
 
@@ -1495,3 +1505,43 @@ class RemainingOldOrdersExcelExportView(APIView):
 
         wb.save(response)
         return response
+
+
+class OrderSelectedExportView(APIView):
+    """
+    Exports selected orders based on order IDs into the specified courier template format.
+    Order type is set to 'Regular', and Destination Branch is mapped to location.name.
+    Supports Excel (.xlsx) and CSV (.csv).
+    Accepts:
+        - order_ids: List of integer Order IDs (required)
+        - export_format: 'xlsx' (default) or 'csv' (optional)
+        - weight: Parcel weight, default 1.0 (optional)
+    """
+
+    # permission_classes = [IsAuthenticated]
+
+    def _export(self, request, data):
+        serializer = OrderSelectedExportSerializer(data=data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        order_ids = serializer.validated_data["order_ids"]
+        export_format = serializer.validated_data.get("export_format", "xlsx")
+        weight = serializer.validated_data.get("weight", 1.0)
+
+        orders = OrderExportService.get_orders(order_ids)
+        if not orders.exists():
+            return Response(
+                {"error": "No orders found for the provided order IDs."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if export_format == "csv":
+            return OrderExportService.export_to_csv(orders, weight=weight)
+        return OrderExportService.export_to_excel(orders, weight=weight)
+
+    def post(self, request, *args, **kwargs):
+        return self._export(request, request.data)
+
+    def get(self, request, *args, **kwargs):
+        return self._export(request, request.query_params)

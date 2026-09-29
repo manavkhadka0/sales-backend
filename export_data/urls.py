@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     OrderCSVExportView,
+    OrderSelectedExportView,
     PackagingSentToDashSummaryCSVView,
     RemainingOldOrdersExcelExportView,
     SalesPersonOrderCSVExportView,
@@ -39,5 +40,10 @@ urlpatterns = [
         "export-remaining-old-orders/",
         RemainingOldOrdersExcelExportView.as_view(),
         name="export-remaining-old-orders",
+    ),
+    path(
+        "export-selected-orders/",
+        OrderSelectedExportView.as_view(),
+        name="export-selected-orders",
     ),
 ]

@@ -110,12 +110,14 @@ RESPONSE — SUCCESS (200 OK)
   --------------------------------------------------------------
   [blank row]
   Summary Statistics
-  Overall Orders,         <count of all exported orders>
-  Overall Amount,         <sum of all total_amounts>
-  Total Orders,           <count excluding cancelled statuses>
-  Total Amount,           <sum excluding cancelled statuses>
-  Total Cancelled Orders, <count of cancelled statuses>
-  Total Cancelled Amount, <sum of cancelled statuses>
+  Overall Orders,          <count of all exported orders>
+  Overall Amount,          <sum of all total_amounts>
+  Overall Delivery Charge, <sum of all delivery charges>
+  Total Orders,            <count excluding cancelled statuses>
+  Total Amount,            <sum excluding cancelled statuses>
+  Total Delivery Charge,   <sum of delivery charges excluding cancelled statuses>
+  Total Cancelled Orders,  <count of cancelled statuses>
+  Total Cancelled Amount,  <sum of cancelled statuses>
 
   Statuses treated as CANCELLED (excluded from "Total" metrics):
     - Cancelled
