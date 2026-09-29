@@ -76,14 +76,11 @@ class OrderExportService:
         # 5. Secondary Mobile No.
         secondary_mobile = order.alternate_phone_number or ""
 
-        # 6. COD Amount
-        if order.payment_method == "Prepaid":
-            cod_amount = 0
-        else:
-            total = float(order.total_amount or 0)
-            prepaid = float(order.prepaid_amount or 0)
-            cod_val = max(0.0, total - prepaid)
-            cod_amount = int(cod_val) if cod_val.is_integer() else round(cod_val, 2)
+        # 6. COD Amount (total_amount - prepaid_amount)
+        total = float(order.total_amount or 0)
+        prepaid = float(order.prepaid_amount or 0)
+        cod_val = total - prepaid
+        cod_amount = int(cod_val) if cod_val.is_integer() else round(cod_val, 2)
 
         # 7. Landmark
         landmark = order.landmark or ""
