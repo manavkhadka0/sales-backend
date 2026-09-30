@@ -1031,11 +1031,7 @@ def export_orders_csv_api(request):
                 total_cancelled_discount_amount += discount_amount
 
             # Track quantity sold at each unit price for oil bottles and shampoo bottles
-            ratio = (
-                (net_product_amount / standard_total)
-                if standard_total > 0
-                else 0.0
-            )
+            ratio = (net_product_amount / standard_total) if standard_total > 0 else 0.0
 
             for p in products:
                 qty = p.quantity or 0
@@ -1130,23 +1126,25 @@ def export_orders_csv_api(request):
             std_oil_sold + std_oil_cancelled,
         ])
 
-        other_oil_sold = sum(
-            v
-            for k, v in oil_sold_counts.items()
-            if k not in [2250, 2200, 2150, 2050, 2000, 2500]
+        # Write any additional prices that appeared in orders, sorted descending by price
+        extra_oil_prices = sorted(
+            [
+                p
+                for p in set(oil_sold_counts.keys()) | set(oil_cancelled_counts.keys())
+                if p not in [2250, 2200, 2150, 2050, 2000, 2500]
+            ],
+            reverse=True,
         )
-        other_oil_cancelled = sum(
-            v
-            for k, v in oil_cancelled_counts.items()
-            if k not in [2250, 2200, 2150, 2050, 2000, 2500]
-        )
-        if other_oil_sold > 0 or other_oil_cancelled > 0:
-            writer.writerow([
-                "Other",
-                other_oil_sold,
-                other_oil_cancelled,
-                other_oil_sold + other_oil_cancelled,
-            ])
+        for price in extra_oil_prices:
+            sold_qty = oil_sold_counts.get(price, 0)
+            cancelled_qty = oil_cancelled_counts.get(price, 0)
+            if sold_qty > 0 or cancelled_qty > 0:
+                writer.writerow([
+                    price,
+                    sold_qty,
+                    cancelled_qty,
+                    sold_qty + cancelled_qty,
+                ])
 
         writer.writerow([
             "Total Oil Bottles",
@@ -1186,23 +1184,26 @@ def export_orders_csv_api(request):
             std_shampoo_sold + std_shampoo_cancelled,
         ])
 
-        other_shampoo_sold = sum(
-            v
-            for k, v in shampoo_sold_counts.items()
-            if k not in [900, 850, 830, 780, 1000]
+        # Write any additional shampoo prices that appeared in orders, sorted descending by price
+        extra_shampoo_prices = sorted(
+            [
+                p
+                for p in set(shampoo_sold_counts.keys())
+                | set(shampoo_cancelled_counts.keys())
+                if p not in [900, 850, 830, 780, 1000]
+            ],
+            reverse=True,
         )
-        other_shampoo_cancelled = sum(
-            v
-            for k, v in shampoo_cancelled_counts.items()
-            if k not in [900, 850, 830, 780, 1000]
-        )
-        if other_shampoo_sold > 0 or other_shampoo_cancelled > 0:
-            writer.writerow([
-                "Other",
-                other_shampoo_sold,
-                other_shampoo_cancelled,
-                other_shampoo_sold + other_shampoo_cancelled,
-            ])
+        for price in extra_shampoo_prices:
+            sold_qty = shampoo_sold_counts.get(price, 0)
+            cancelled_qty = shampoo_cancelled_counts.get(price, 0)
+            if sold_qty > 0 or cancelled_qty > 0:
+                writer.writerow([
+                    price,
+                    sold_qty,
+                    cancelled_qty,
+                    sold_qty + cancelled_qty,
+                ])
 
         writer.writerow([
             "Total Shampoo Bottles",
