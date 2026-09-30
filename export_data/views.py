@@ -815,6 +815,8 @@ PRODUCT_PRICE_MAP = {
 
 OIL_TARGET_PRICES = [2500, 2250, 2200, 2150, 2050, 2000]
 SHAMPOO_TARGET_PRICES = [1000, 900, 850, 830, 780]
+OIL_SACHET_TARGET_PRICES = [990]
+SHAMPOO_SACHET_TARGET_PRICES = [100]
 
 
 def is_oil_bottle(product_name: str) -> bool:
@@ -839,6 +841,22 @@ def is_shampoo_bottle(product_name: str) -> bool:
     if "sachet" in name:
         return False
     return "shampoo" in name and "bottle" in name
+
+
+def is_hair_oil_sachet(product_name: str) -> bool:
+    """Check if the product is a hair oil sachet."""
+    if not product_name:
+        return False
+    name = product_name.lower().strip()
+    return "sachet" in name and "oil" in name
+
+
+def is_shampoo_sachet(product_name: str) -> bool:
+    """Check if the product is a shampoo sachet."""
+    if not product_name:
+        return False
+    name = product_name.lower().strip()
+    return "sachet" in name and "shampoo" in name
 
 
 def match_target_price(
@@ -980,11 +998,15 @@ def export_orders_csv_api(request):
         overall_discount_amount = 0
         overall_delivery_charge = 0
 
-        # Track bottle sales by price
+        # Track bottle and sachet sales by price
         oil_sold_counts = defaultdict(int)
         oil_cancelled_counts = defaultdict(int)
         shampoo_sold_counts = defaultdict(int)
         shampoo_cancelled_counts = defaultdict(int)
+        oil_sachet_sold_counts = defaultdict(int)
+        oil_sachet_cancelled_counts = defaultdict(int)
+        shampoo_sachet_sold_counts = defaultdict(int)
+        shampoo_sachet_cancelled_counts = defaultdict(int)
 
         # Write data rows
         for order in filtered_orders:
@@ -1121,6 +1143,28 @@ def export_orders_csv_api(request):
                         oil_cancelled_counts[matched_price] += qty
                     else:
                         oil_sold_counts[matched_price] += qty
+                    price_breakdown_items.append(f"{qty}-{p_name} @ {matched_price}")
+
+                elif is_hair_oil_sachet(p_name):
+                    raw_price = get_product_unit_price(p_name) * ratio
+                    matched_price = match_target_price(
+                        raw_price, OIL_SACHET_TARGET_PRICES, tolerance=15.0
+                    )
+                    if is_cancelled:
+                        oil_sachet_cancelled_counts[matched_price] += qty
+                    else:
+                        oil_sachet_sold_counts[matched_price] += qty
+                    price_breakdown_items.append(f"{qty}-{p_name} @ {matched_price}")
+
+                elif is_shampoo_sachet(p_name):
+                    raw_price = get_product_unit_price(p_name) * ratio
+                    matched_price = match_target_price(
+                        raw_price, SHAMPOO_SACHET_TARGET_PRICES, tolerance=5.0
+                    )
+                    if is_cancelled:
+                        shampoo_sachet_cancelled_counts[matched_price] += qty
+                    else:
+                        shampoo_sachet_sold_counts[matched_price] += qty
                     price_breakdown_items.append(f"{qty}-{p_name} @ {matched_price}")
 
                 else:
@@ -1306,6 +1350,122 @@ def export_orders_csv_api(request):
             total_shampoo_sold,
             total_shampoo_cancelled,
             total_shampoo_sold + total_shampoo_cancelled,
+        ])
+
+        # Add Hair Oil Sachets Sold By Price section
+        writer.writerow([])  # Empty row for spacing
+        writer.writerow(["Hair Oil Sachets Sold By Price"])
+        writer.writerow([
+            "Price",
+            "Quantity Sold",
+            "Quantity Cancelled",
+            "Total Quantity",
+        ])
+        total_oil_sachet_sold = sum(oil_sachet_sold_counts.values())
+        total_oil_sachet_cancelled = sum(oil_sachet_cancelled_counts.values())
+
+        std_oil_sachet_sold = oil_sachet_sold_counts.get(990, 0)
+        std_oil_sachet_cancelled = oil_sachet_cancelled_counts.get(990, 0)
+        writer.writerow([
+            "990 (Standard)",
+            std_oil_sachet_sold,
+            std_oil_sachet_cancelled,
+            std_oil_sachet_sold + std_oil_sachet_cancelled,
+        ])
+
+        free_oil_sachet_sold = oil_sachet_sold_counts.get("Free", 0)
+        free_oil_sachet_cancelled = oil_sachet_cancelled_counts.get("Free", 0)
+        if free_oil_sachet_sold > 0 or free_oil_sachet_cancelled > 0:
+            writer.writerow([
+                "Free",
+                free_oil_sachet_sold,
+                free_oil_sachet_cancelled,
+                free_oil_sachet_sold + free_oil_sachet_cancelled,
+            ])
+
+        extra_oil_sachet_prices = sorted(
+            [
+                p
+                for p in set(oil_sachet_sold_counts.keys())
+                | set(oil_sachet_cancelled_counts.keys())
+                if p not in [990, "Free"]
+            ],
+            reverse=True,
+        )
+        for price in extra_oil_sachet_prices:
+            sold_qty = oil_sachet_sold_counts.get(price, 0)
+            cancelled_qty = oil_sachet_cancelled_counts.get(price, 0)
+            if sold_qty > 0 or cancelled_qty > 0:
+                writer.writerow([
+                    price,
+                    sold_qty,
+                    cancelled_qty,
+                    sold_qty + cancelled_qty,
+                ])
+
+        writer.writerow([
+            "Total Hair Oil Sachets",
+            total_oil_sachet_sold,
+            total_oil_sachet_cancelled,
+            total_oil_sachet_sold + total_oil_sachet_cancelled,
+        ])
+
+        # Add Shampoo Sachets Sold By Price section
+        writer.writerow([])  # Empty row for spacing
+        writer.writerow(["Shampoo Sachets Sold By Price"])
+        writer.writerow([
+            "Price",
+            "Quantity Sold",
+            "Quantity Cancelled",
+            "Total Quantity",
+        ])
+        total_shampoo_sachet_sold = sum(shampoo_sachet_sold_counts.values())
+        total_shampoo_sachet_cancelled = sum(shampoo_sachet_cancelled_counts.values())
+
+        std_shampoo_sachet_sold = shampoo_sachet_sold_counts.get(100, 0)
+        std_shampoo_sachet_cancelled = shampoo_sachet_cancelled_counts.get(100, 0)
+        writer.writerow([
+            "100 (Standard)",
+            std_shampoo_sachet_sold,
+            std_shampoo_sachet_cancelled,
+            std_shampoo_sachet_sold + std_shampoo_sachet_cancelled,
+        ])
+
+        free_shampoo_sachet_sold = shampoo_sachet_sold_counts.get("Free", 0)
+        free_shampoo_sachet_cancelled = shampoo_sachet_cancelled_counts.get("Free", 0)
+        if free_shampoo_sachet_sold > 0 or free_shampoo_sachet_cancelled > 0:
+            writer.writerow([
+                "Free",
+                free_shampoo_sachet_sold,
+                free_shampoo_sachet_cancelled,
+                free_shampoo_sachet_sold + free_shampoo_sachet_cancelled,
+            ])
+
+        extra_shampoo_sachet_prices = sorted(
+            [
+                p
+                for p in set(shampoo_sachet_sold_counts.keys())
+                | set(shampoo_sachet_cancelled_counts.keys())
+                if p not in [100, "Free"]
+            ],
+            reverse=True,
+        )
+        for price in extra_shampoo_sachet_prices:
+            sold_qty = shampoo_sachet_sold_counts.get(price, 0)
+            cancelled_qty = shampoo_sachet_cancelled_counts.get(price, 0)
+            if sold_qty > 0 or cancelled_qty > 0:
+                writer.writerow([
+                    price,
+                    sold_qty,
+                    cancelled_qty,
+                    sold_qty + cancelled_qty,
+                ])
+
+        writer.writerow([
+            "Total Shampoo Sachets",
+            total_shampoo_sachet_sold,
+            total_shampoo_sachet_cancelled,
+            total_shampoo_sachet_sold + total_shampoo_sachet_cancelled,
         ])
 
         # Add applied filters information
