@@ -99,8 +99,12 @@ RESPONSE — SUCCESS (200 OK)
   Product Name         OrderProduct lines          Format: "qty-ProductName"
                                                    comma-separated
                                                    e.g. "2-Oil Bottle 500ml,1-Cap"
-  Product Price        order.total_amount          Float as string
-  Discount Amount      Calculated                  max(0, standard_catalog_price - total_amount)
+  Product Price        order.total_amount          Order total billed amount
+  Delivery Charge      order.delivery_charge       Delivery fee portion (0.00 if null)
+  Net Product Price    Calculated                  max(0, Product Price - Delivery Charge)
+  Discount Amount      Calculated                  max(0, standard_catalog_price - Net Product Price)
+  Price Breakdown      Calculated                  Effective itemized unit prices,
+                                                   e.g. "1-Yachu Hair Oil @ 2500, 1-Shampoo Bottle @ 1000"
   Payment Type         order.payment_method        Appends "(prepaid_amount)"
                                                    if prepaid amount exists
   Order Status         order.order_status          Raw status string
@@ -143,6 +147,7 @@ RESPONSE — SUCCESS (200 OK)
   830,   ...
   780,   ...
   1000 (Standard), ...
+  Free,  ...
   [Any other actual prices sold, e.g. 800, 950...], ...
   Total Shampoo Bottles, ...
 

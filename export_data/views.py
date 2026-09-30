@@ -842,10 +842,10 @@ def is_shampoo_bottle(product_name: str) -> bool:
 
 
 def match_target_price(
-    price: float, target_prices: list, tolerance: float = 15.0
+    price: float, target_prices: list, tolerance: float = 20.0
 ) -> int:
     """
-    Match effective price to nearest target price if within tolerance (e.g. 15),
+    Match effective price to nearest target price if within tolerance (e.g. 20),
     otherwise return the rounded integer price.
     """
     p_round = int(round(price))
@@ -947,7 +947,10 @@ def export_orders_csv_api(request):
             "Address",
             "Product Name",
             "Product Price",
+            "Delivery Charge",
+            "Net Product Price",
             "Discount Amount",
+            "Price Breakdown",
             "Payment Type",
             "Order Status",
             "Remarks",
@@ -1030,9 +1033,54 @@ def export_orders_csv_api(request):
                 total_cancelled_amount += product_price
                 total_cancelled_discount_amount += discount_amount
 
-            # Track quantity sold at each unit price for oil bottles and shampoo bottles
-            ratio = (net_product_amount / standard_total) if standard_total > 0 else 0.0
+            # Check for offers: Buy 3 (or more) Hair Oils -> Get 1 Shampoo Bottle Free per 3 Hair Oils
+            oil_bottle_qty = sum(
+                (p.quantity or 0)
+                for p in products
+                if p.product
+                and p.product.product
+                and is_oil_bottle(p.product.product.name)
+            )
+            shampoo_bottle_qty = sum(
+                (p.quantity or 0)
+                for p in products
+                if p.product
+                and p.product.product
+                and is_shampoo_bottle(p.product.product.name)
+            )
 
+            potential_free_shampoos = min(shampoo_bottle_qty, oil_bottle_qty // 3)
+            remarks_lower = (order.remarks or "").lower()
+            free_shampoos = 0
+            if potential_free_shampoos > 0:
+                if discount_amount >= (1000.0 * potential_free_shampoos - 50.0) or (
+                    "free" in remarks_lower and "shampoo" in remarks_lower
+                ):
+                    free_shampoos = potential_free_shampoos
+                elif discount_amount >= 900.0:
+                    free_shampoos = min(
+                        potential_free_shampoos, int(round(discount_amount / 1000.0))
+                    )
+            elif (
+                shampoo_bottle_qty > 0
+                and "free" in remarks_lower
+                and "shampoo" in remarks_lower
+                and discount_amount >= 900.0
+            ):
+                free_shampoos = min(
+                    shampoo_bottle_qty, int(round(discount_amount / 1000.0))
+                )
+
+            # Deduct free shampoo value from standard total to determine price ratio for paid items
+            standard_total_ex_free = max(0.0, standard_total - (free_shampoos * 1000.0))
+            ratio = (
+                min(1.0, net_product_amount / standard_total_ex_free)
+                if standard_total_ex_free > 0
+                else 0.0
+            )
+
+            remaining_free_shampoos = free_shampoos
+            price_breakdown_items = []
             for p in products:
                 qty = p.quantity or 0
                 if qty <= 0:
@@ -1040,21 +1088,47 @@ def export_orders_csv_api(request):
                 p_name = (
                     p.product.product.name if p.product and p.product.product else ""
                 )
-                raw_price = get_product_unit_price(p_name) * ratio
 
-                if is_oil_bottle(p_name):
+                if is_shampoo_bottle(p_name):
+                    line_free_qty = min(qty, remaining_free_shampoos)
+                    line_paid_qty = qty - line_free_qty
+                    remaining_free_shampoos -= line_free_qty
+
+                    if line_free_qty > 0:
+                        if is_cancelled:
+                            shampoo_cancelled_counts["Free"] += line_free_qty
+                        else:
+                            shampoo_sold_counts["Free"] += line_free_qty
+                        price_breakdown_items.append(f"{line_free_qty}-{p_name} (Free)")
+
+                    if line_paid_qty > 0:
+                        raw_price = get_product_unit_price(p_name) * ratio
+                        matched_price = match_target_price(
+                            raw_price, SHAMPOO_TARGET_PRICES
+                        )
+                        if is_cancelled:
+                            shampoo_cancelled_counts[matched_price] += line_paid_qty
+                        else:
+                            shampoo_sold_counts[matched_price] += line_paid_qty
+                        price_breakdown_items.append(
+                            f"{line_paid_qty}-{p_name} @ {matched_price}"
+                        )
+
+                elif is_oil_bottle(p_name):
+                    raw_price = get_product_unit_price(p_name) * ratio
                     matched_price = match_target_price(raw_price, OIL_TARGET_PRICES)
                     if is_cancelled:
                         oil_cancelled_counts[matched_price] += qty
                     else:
                         oil_sold_counts[matched_price] += qty
+                    price_breakdown_items.append(f"{qty}-{p_name} @ {matched_price}")
 
-                elif is_shampoo_bottle(p_name):
-                    matched_price = match_target_price(raw_price, SHAMPOO_TARGET_PRICES)
-                    if is_cancelled:
-                        shampoo_cancelled_counts[matched_price] += qty
-                    else:
-                        shampoo_sold_counts[matched_price] += qty
+                else:
+                    raw_price = get_product_unit_price(p_name) * ratio
+                    matched_price = int(round(raw_price))
+                    price_breakdown_items.append(f"{qty}-{p_name} @ {matched_price}")
+
+            price_breakdown_str = ", ".join(price_breakdown_items)
 
             # Format payment type with prepaid amount if exists
             payment_type = order.payment_method
@@ -1070,8 +1144,11 @@ def export_orders_csv_api(request):
                 order.alternate_phone_number or "",  # Alternative Number
                 order.delivery_address,  # Address
                 products_str,  # Product Name
-                f"{product_price}",  # Product Price
+                f"{product_price:.2f}",  # Product Price
+                f"{delivery_charge:.2f}",  # Delivery Charge
+                f"{net_product_amount:.2f}",  # Net Product Price
                 f"{discount_amount:.2f}",  # Discount Amount
+                price_breakdown_str,  # Price Breakdown
                 payment_type,  # Payment Type
                 order.order_status,  # Order Status
                 order.remarks or "",  # Remarks
@@ -1131,7 +1208,7 @@ def export_orders_csv_api(request):
             [
                 p
                 for p in set(oil_sold_counts.keys()) | set(oil_cancelled_counts.keys())
-                if p not in [2250, 2200, 2150, 2050, 2000, 2500]
+                if p not in [2250, 2200, 2150, 2050, 2000, 2500, "Free"]
             ],
             reverse=True,
         )
@@ -1145,6 +1222,16 @@ def export_orders_csv_api(request):
                     cancelled_qty,
                     sold_qty + cancelled_qty,
                 ])
+
+        free_oil_sold = oil_sold_counts.get("Free", 0)
+        free_oil_cancelled = oil_cancelled_counts.get("Free", 0)
+        if free_oil_sold > 0 or free_oil_cancelled > 0:
+            writer.writerow([
+                "Free",
+                free_oil_sold,
+                free_oil_cancelled,
+                free_oil_sold + free_oil_cancelled,
+            ])
 
         writer.writerow([
             "Total Oil Bottles",
@@ -1184,13 +1271,22 @@ def export_orders_csv_api(request):
             std_shampoo_sold + std_shampoo_cancelled,
         ])
 
+        free_shampoo_sold = shampoo_sold_counts.get("Free", 0)
+        free_shampoo_cancelled = shampoo_cancelled_counts.get("Free", 0)
+        writer.writerow([
+            "Free",
+            free_shampoo_sold,
+            free_shampoo_cancelled,
+            free_shampoo_sold + free_shampoo_cancelled,
+        ])
+
         # Write any additional shampoo prices that appeared in orders, sorted descending by price
         extra_shampoo_prices = sorted(
             [
                 p
                 for p in set(shampoo_sold_counts.keys())
                 | set(shampoo_cancelled_counts.keys())
-                if p not in [900, 850, 830, 780, 1000]
+                if p not in [900, 850, 830, 780, 1000, "Free"]
             ],
             reverse=True,
         )
