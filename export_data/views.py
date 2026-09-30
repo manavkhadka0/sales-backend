@@ -849,12 +849,9 @@ def match_target_price(
     otherwise return the rounded integer price.
     """
     p_round = int(round(price))
-    all_targets = target_prices + (
-        [2500] if 2500 not in target_prices and 2200 in target_prices else [1000]
-    )
-    if p_round in all_targets:
+    if p_round in target_prices:
         return p_round
-    closest = min(all_targets, key=lambda t: abs(t - price))
+    closest = min(target_prices, key=lambda t: abs(t - price))
     if abs(closest - price) <= tolerance:
         return closest
     return p_round
@@ -996,9 +993,10 @@ def export_orders_csv_api(request):
                 if p.product and p.product.product
             ])
 
-            # Calculate product price
+            # Calculate product price and net product amount (excluding delivery charge)
             product_price = float(order.total_amount)
             delivery_charge = float(order.delivery_charge or 0)
+            net_product_amount = max(0.0, product_price - delivery_charge)
 
             # Calculate standard catalog price based on product unit price map
             standard_total = sum(
@@ -1009,7 +1007,9 @@ def export_orders_csv_api(request):
                 for p in products
             )
             discount_amount = (
-                max(0.0, standard_total - product_price) if standard_total > 0 else 0.0
+                max(0.0, standard_total - net_product_amount)
+                if standard_total > 0
+                else 0.0
             )
 
             overall_orders += 1
@@ -1031,7 +1031,11 @@ def export_orders_csv_api(request):
                 total_cancelled_discount_amount += discount_amount
 
             # Track quantity sold at each unit price for oil bottles and shampoo bottles
-            ratio = (product_price / standard_total) if standard_total > 0 else 0.0
+            ratio = (
+                (net_product_amount / standard_total)
+                if standard_total > 0
+                else 0.0
+            )
 
             for p in products:
                 qty = p.quantity or 0
