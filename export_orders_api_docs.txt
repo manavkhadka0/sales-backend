@@ -100,6 +100,7 @@ RESPONSE — SUCCESS (200 OK)
                                                    comma-separated
                                                    e.g. "2-Oil Bottle 500ml,1-Cap"
   Product Price        order.total_amount          Float as string
+  Discount Amount      Calculated                  max(0, standard_catalog_price - total_amount)
   Payment Type         order.payment_method        Appends "(prepaid_amount)"
                                                    if prepaid amount exists
   Order Status         order.order_status          Raw status string
@@ -110,14 +111,17 @@ RESPONSE — SUCCESS (200 OK)
   --------------------------------------------------------------
   [blank row]
   Summary Statistics
-  Overall Orders,          <count of all exported orders>
-  Overall Amount,          <sum of all total_amounts>
-  Overall Delivery Charge, <sum of all delivery charges>
-  Total Orders,            <count excluding cancelled statuses>
-  Total Amount,            <sum excluding cancelled statuses>
-  Total Delivery Charge,   <sum of delivery charges excluding cancelled statuses>
-  Total Cancelled Orders,  <count of cancelled statuses>
-  Total Cancelled Amount,  <sum of cancelled statuses>
+  Overall Orders,                  <count of all exported orders>
+  Overall Amount,                  <sum of all total_amounts>
+  Overall Discount Amount,         <sum of all discount amounts>
+  Overall Delivery Charge,         <sum of all delivery charges>
+  Total Orders,                    <count excluding cancelled statuses>
+  Total Amount,                    <sum excluding cancelled statuses>
+  Total Discount Amount,           <sum of discount amounts excluding cancelled statuses>
+  Total Delivery Charge,           <sum of delivery charges excluding cancelled statuses>
+  Total Cancelled Orders,          <count of cancelled statuses>
+  Total Cancelled Amount,          <sum of cancelled statuses>
+  Total Cancelled Discount Amount, <sum of cancelled discount amounts>
 
   Statuses treated as CANCELLED (excluded from "Total" metrics):
     - Cancelled

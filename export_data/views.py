@@ -802,6 +802,47 @@ class CustomOrderFilter(django_filters.FilterSet):
         return queryset
 
 
+PRODUCT_PRICE_MAP = {
+    "baldness oil bottle": 2500,
+    "hairfall oil bottle": 2500,
+    "dandruff oil bottle": 2500,
+    "yachu hair oil": 2500,
+    "hair oil sachet": 990,
+    "shampoo bottle": 1000,
+    "shampoo sachet": 100,
+}
+
+
+def get_product_unit_price(product_name: str) -> float:
+    """
+    Get unit price based on product name mapping:
+    - Baldness Oil Bottle / Hairfall Oil Bottle / Dandruff Oil Bottle / Yachu Hair Oil: 2500
+    - Hair Oil Sachet: 990
+    - Shampoo Bottle: 1000
+    - Shampoo Sachet: 100
+    """
+    if not product_name:
+        return 0.0
+
+    name_lower = product_name.lower().strip()
+    for key, price in PRODUCT_PRICE_MAP.items():
+        if key in name_lower:
+            return float(price)
+
+    # Fallback keyword checks for variations
+    if "sachet" in name_lower:
+        if "shampoo" in name_lower:
+            return 100.0
+        if "oil" in name_lower:
+            return 990.0
+    if "shampoo" in name_lower and "bottle" in name_lower:
+        return 1000.0
+    if any(k in name_lower for k in ["baldness", "hairfall", "dandruff", "yachu"]):
+        return 2500.0
+
+    return 0.0
+
+
 @api_view(["GET"])
 def export_orders_csv_api(request):
     """
@@ -862,6 +903,7 @@ def export_orders_csv_api(request):
             "Address",
             "Product Name",
             "Product Price",
+            "Discount Amount",
             "Payment Type",
             "Order Status",
             "Remarks",
@@ -881,38 +923,58 @@ def export_orders_csv_api(request):
         # Initialize summary variables
         total_orders = 0
         total_amount = 0
+        total_discount_amount = 0
         total_delivery_charge = 0
         total_cancelled_orders = 0
         total_cancelled_amount = 0
+        total_cancelled_discount_amount = 0
         overall_orders = 0
         overall_amount = 0
+        overall_discount_amount = 0
         overall_delivery_charge = 0
 
         # Write data rows
         for order in filtered_orders:
-            # Format products string as in existing code
-            products = OrderProduct.objects.filter(order=order)
+            # Format products string using prefetched objects to avoid N+1 queries
+            products = order.order_products.all()
             products_str = ",".join([
-                f"{p.quantity}-{p.product.product.name}" for p in products
+                f"{p.quantity}-{p.product.product.name}"
+                for p in products
+                if p.product and p.product.product
             ])
 
             # Calculate product price
             product_price = float(order.total_amount)
             delivery_charge = float(order.delivery_charge or 0)
 
+            # Calculate standard catalog price based on product unit price map
+            standard_total = sum(
+                (p.quantity or 0)
+                * get_product_unit_price(
+                    p.product.product.name if p.product and p.product.product else ""
+                )
+                for p in products
+            )
+            discount_amount = (
+                max(0.0, standard_total - product_price) if standard_total > 0 else 0.0
+            )
+
             overall_orders += 1
             overall_amount += product_price
+            overall_discount_amount += discount_amount
             overall_delivery_charge += delivery_charge
 
             # Update summary statistics
             if order.order_status not in excluded_statuses:
                 total_orders += 1
                 total_amount += product_price
+                total_discount_amount += discount_amount
                 total_delivery_charge += delivery_charge
 
             if order.order_status in excluded_statuses:
                 total_cancelled_orders += 1
                 total_cancelled_amount += product_price
+                total_cancelled_discount_amount += discount_amount
 
             # Format payment type with prepaid amount if exists
             payment_type = order.payment_method
@@ -920,13 +982,16 @@ def export_orders_csv_api(request):
                 payment_type += f" ({order.prepaid_amount})"
 
             writer.writerow([
-                order.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Date
+                order.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                if order.created_at
+                else "",  # Date
                 order.full_name,  # Customer Name
                 order.phone_number,  # Contact Number
                 order.alternate_phone_number or "",  # Alternative Number
                 order.delivery_address,  # Address
                 products_str,  # Product Name
                 f"{product_price}",  # Product Price
+                f"{discount_amount:.2f}",  # Discount Amount
                 payment_type,  # Payment Type
                 order.order_status,  # Order Status
                 order.remarks or "",  # Remarks
@@ -937,12 +1002,18 @@ def export_orders_csv_api(request):
         writer.writerow(["Summary Statistics"])
         writer.writerow(["Overall Orders", overall_orders])
         writer.writerow(["Overall Amount", f"{overall_amount:.2f}"])
+        writer.writerow(["Overall Discount Amount", f"{overall_discount_amount:.2f}"])
         writer.writerow(["Overall Delivery Charge", f"{overall_delivery_charge:.2f}"])
         writer.writerow(["Total Orders", total_orders])
         writer.writerow(["Total Amount", f"{total_amount:.2f}"])
+        writer.writerow(["Total Discount Amount", f"{total_discount_amount:.2f}"])
         writer.writerow(["Total Delivery Charge", f"{total_delivery_charge:.2f}"])
         writer.writerow(["Total Cancelled Orders", total_cancelled_orders])
         writer.writerow(["Total Cancelled Amount", f"{total_cancelled_amount:.2f}"])
+        writer.writerow([
+            "Total Cancelled Discount Amount",
+            f"{total_cancelled_discount_amount:.2f}",
+        ])
 
         # Add applied filters information
         writer.writerow([])  # Empty row
