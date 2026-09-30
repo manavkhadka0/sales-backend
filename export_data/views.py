@@ -1,5 +1,6 @@
 import csv
 import io
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 import openpyxl
@@ -812,6 +813,52 @@ PRODUCT_PRICE_MAP = {
     "shampoo sachet": 100,
 }
 
+OIL_TARGET_PRICES = [2500, 2250, 2200, 2150, 2050, 2000]
+SHAMPOO_TARGET_PRICES = [1000, 900, 850, 830, 780]
+
+
+def is_oil_bottle(product_name: str) -> bool:
+    """Check if the product is an oil bottle (excludes sachets)."""
+    if not product_name:
+        return False
+    name = product_name.lower().strip()
+    if "sachet" in name:
+        return False
+    if any(k in name for k in ["baldness", "hairfall", "dandruff", "yachu"]):
+        return True
+    if "oil" in name and "bottle" in name:
+        return True
+    return False
+
+
+def is_shampoo_bottle(product_name: str) -> bool:
+    """Check if the product is a shampoo bottle (excludes sachets)."""
+    if not product_name:
+        return False
+    name = product_name.lower().strip()
+    if "sachet" in name:
+        return False
+    return "shampoo" in name and "bottle" in name
+
+
+def match_target_price(
+    price: float, target_prices: list, tolerance: float = 15.0
+) -> int:
+    """
+    Match effective price to nearest target price if within tolerance (e.g. 15),
+    otherwise return the rounded integer price.
+    """
+    p_round = int(round(price))
+    all_targets = target_prices + (
+        [2500] if 2500 not in target_prices and 2200 in target_prices else [1000]
+    )
+    if p_round in all_targets:
+        return p_round
+    closest = min(all_targets, key=lambda t: abs(t - price))
+    if abs(closest - price) <= tolerance:
+        return closest
+    return p_round
+
 
 def get_product_unit_price(product_name: str) -> float:
     """
@@ -933,6 +980,12 @@ def export_orders_csv_api(request):
         overall_discount_amount = 0
         overall_delivery_charge = 0
 
+        # Track bottle sales by price
+        oil_sold_counts = defaultdict(int)
+        oil_cancelled_counts = defaultdict(int)
+        shampoo_sold_counts = defaultdict(int)
+        shampoo_cancelled_counts = defaultdict(int)
+
         # Write data rows
         for order in filtered_orders:
             # Format products string using prefetched objects to avoid N+1 queries
@@ -964,17 +1017,44 @@ def export_orders_csv_api(request):
             overall_discount_amount += discount_amount
             overall_delivery_charge += delivery_charge
 
+            is_cancelled = order.order_status in excluded_statuses
+
             # Update summary statistics
-            if order.order_status not in excluded_statuses:
+            if not is_cancelled:
                 total_orders += 1
                 total_amount += product_price
                 total_discount_amount += discount_amount
                 total_delivery_charge += delivery_charge
-
-            if order.order_status in excluded_statuses:
+            else:
                 total_cancelled_orders += 1
                 total_cancelled_amount += product_price
                 total_cancelled_discount_amount += discount_amount
+
+            # Track quantity sold at each unit price for oil bottles and shampoo bottles
+            ratio = (product_price / standard_total) if standard_total > 0 else 0.0
+
+            for p in products:
+                qty = p.quantity or 0
+                if qty <= 0:
+                    continue
+                p_name = (
+                    p.product.product.name if p.product and p.product.product else ""
+                )
+                raw_price = get_product_unit_price(p_name) * ratio
+
+                if is_oil_bottle(p_name):
+                    matched_price = match_target_price(raw_price, OIL_TARGET_PRICES)
+                    if is_cancelled:
+                        oil_cancelled_counts[matched_price] += qty
+                    else:
+                        oil_sold_counts[matched_price] += qty
+
+                elif is_shampoo_bottle(p_name):
+                    matched_price = match_target_price(raw_price, SHAMPOO_TARGET_PRICES)
+                    if is_cancelled:
+                        shampoo_cancelled_counts[matched_price] += qty
+                    else:
+                        shampoo_sold_counts[matched_price] += qty
 
             # Format payment type with prepaid amount if exists
             payment_type = order.payment_method
@@ -1013,6 +1093,118 @@ def export_orders_csv_api(request):
         writer.writerow([
             "Total Cancelled Discount Amount",
             f"{total_cancelled_discount_amount:.2f}",
+        ])
+
+        # Add Oil Bottles Sold By Price section
+        writer.writerow([])  # Empty row for spacing
+        writer.writerow(["Oil Bottles Sold By Price"])
+        writer.writerow([
+            "Price",
+            "Quantity Sold",
+            "Quantity Cancelled",
+            "Total Quantity",
+        ])
+        total_oil_sold = sum(oil_sold_counts.values())
+        total_oil_cancelled = sum(oil_cancelled_counts.values())
+
+        for price in [2250, 2200, 2150, 2050, 2000]:
+            sold_qty = oil_sold_counts.get(price, 0)
+            cancelled_qty = oil_cancelled_counts.get(price, 0)
+            writer.writerow([
+                price,
+                sold_qty,
+                cancelled_qty,
+                sold_qty + cancelled_qty,
+            ])
+
+        std_oil_sold = oil_sold_counts.get(2500, 0)
+        std_oil_cancelled = oil_cancelled_counts.get(2500, 0)
+        writer.writerow([
+            "2500 (Standard)",
+            std_oil_sold,
+            std_oil_cancelled,
+            std_oil_sold + std_oil_cancelled,
+        ])
+
+        other_oil_sold = sum(
+            v
+            for k, v in oil_sold_counts.items()
+            if k not in [2250, 2200, 2150, 2050, 2000, 2500]
+        )
+        other_oil_cancelled = sum(
+            v
+            for k, v in oil_cancelled_counts.items()
+            if k not in [2250, 2200, 2150, 2050, 2000, 2500]
+        )
+        if other_oil_sold > 0 or other_oil_cancelled > 0:
+            writer.writerow([
+                "Other",
+                other_oil_sold,
+                other_oil_cancelled,
+                other_oil_sold + other_oil_cancelled,
+            ])
+
+        writer.writerow([
+            "Total Oil Bottles",
+            total_oil_sold,
+            total_oil_cancelled,
+            total_oil_sold + total_oil_cancelled,
+        ])
+
+        # Add Shampoo Bottles Sold By Price section
+        writer.writerow([])  # Empty row for spacing
+        writer.writerow(["Shampoo Bottles Sold By Price"])
+        writer.writerow([
+            "Price",
+            "Quantity Sold",
+            "Quantity Cancelled",
+            "Total Quantity",
+        ])
+        total_shampoo_sold = sum(shampoo_sold_counts.values())
+        total_shampoo_cancelled = sum(shampoo_cancelled_counts.values())
+
+        for price in [900, 850, 830, 780]:
+            sold_qty = shampoo_sold_counts.get(price, 0)
+            cancelled_qty = shampoo_cancelled_counts.get(price, 0)
+            writer.writerow([
+                price,
+                sold_qty,
+                cancelled_qty,
+                sold_qty + cancelled_qty,
+            ])
+
+        std_shampoo_sold = shampoo_sold_counts.get(1000, 0)
+        std_shampoo_cancelled = shampoo_cancelled_counts.get(1000, 0)
+        writer.writerow([
+            "1000 (Standard)",
+            std_shampoo_sold,
+            std_shampoo_cancelled,
+            std_shampoo_sold + std_shampoo_cancelled,
+        ])
+
+        other_shampoo_sold = sum(
+            v
+            for k, v in shampoo_sold_counts.items()
+            if k not in [900, 850, 830, 780, 1000]
+        )
+        other_shampoo_cancelled = sum(
+            v
+            for k, v in shampoo_cancelled_counts.items()
+            if k not in [900, 850, 830, 780, 1000]
+        )
+        if other_shampoo_sold > 0 or other_shampoo_cancelled > 0:
+            writer.writerow([
+                "Other",
+                other_shampoo_sold,
+                other_shampoo_cancelled,
+                other_shampoo_sold + other_shampoo_cancelled,
+            ])
+
+        writer.writerow([
+            "Total Shampoo Bottles",
+            total_shampoo_sold,
+            total_shampoo_cancelled,
+            total_shampoo_sold + total_shampoo_cancelled,
         ])
 
         # Add applied filters information
