@@ -1,11 +1,12 @@
 import csv
+import os
 from typing import List
 
 import openpyxl
+from django.conf import settings
 from django.db.models import Case, Prefetch, When
 from django.http import HttpResponse
 from django.utils import timezone
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
@@ -34,6 +35,8 @@ class OrderExportService:
         "ItemDesc",
         "SpecialInstruction",
     ]
+
+    TEMPLATE_PATH = os.path.join(settings.BASE_DIR, "merchant_bulk_order_sample.xlsx")
 
     STORE_NAMES: List[str] = [
         "Yachu Jorpati",
@@ -254,85 +257,68 @@ class OrderExportService:
         cls, orders, weight: float = 1.0, store_name: str = ""
     ) -> HttpResponse:
         """
-        Generate an .xlsx workbook conforming to the required layout, complete with
-        StoreName dropdown validation and auto-fitted columns.
+        Generate an .xlsx workbook using the official merchant_bulk_order_sample.xlsx template,
+        preserving all built-in dropdown validations (Stores, Zones, Areas) and lookup formulas.
         """
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Orders"
-        ws.views.sheetView[0].showGridLines = True
+        if os.path.exists(cls.TEMPLATE_PATH):
+            wb = openpyxl.load_workbook(cls.TEMPLATE_PATH)
+            ws = wb["Worksheet"] if "Worksheet" in wb.sheetnames else wb.active
+            using_template = True
+        else:
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Worksheet"
+            ws.views.sheetView[0].showGridLines = True
+            ws.append(cls.HEADERS)
+            using_template = False
 
-        # Styles
-        header_font = Font(name="Segoe UI", size=10, bold=True, color="1F2937")
-        header_fill = PatternFill(
-            start_color="F3F4F6", end_color="F3F4F6", fill_type="solid"
-        )
-        header_alignment = Alignment(
-            horizontal="center", vertical="center", wrap_text=True
-        )
-
-        thin_border = Border(
-            left=Side(style="thin", color="E5E7EB"),
-            right=Side(style="thin", color="E5E7EB"),
-            top=Side(style="thin", color="E5E7EB"),
-            bottom=Side(style="thin", color="E5E7EB"),
-        )
-
-        data_font = Font(name="Segoe UI", size=10)
-        left_align = Alignment(horizontal="left", vertical="center")
-        center_align = Alignment(horizontal="center", vertical="center")
-        right_align = Alignment(horizontal="right", vertical="center")
-
-        # Write header row
-        ws.append(cls.HEADERS)
-        ws.row_dimensions[1].height = 28
-
-        for col_idx in range(1, len(cls.HEADERS) + 1):
-            cell = ws.cell(row=1, column=col_idx)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = header_alignment
-            cell.border = thin_border
-
-        # Write rows
         row_count = 0
         exported_order_ids: List[int] = []
+
         for index, order in enumerate(orders, start=2):
             row_count += 1
             exported_order_ids.append(order.id)
             row_data = cls.prepare_order_row(
                 order, weight=weight, store_name=store_name
             )
-            ws.append(row_data)
-            ws.row_dimensions[index].height = 22
 
-            for col_idx in range(1, len(cls.HEADERS) + 1):
-                cell = ws.cell(row=index, column=col_idx)
-                cell.font = data_font
-                cell.border = thin_border
+            if using_template:
+                # In the template, column F (6) holds the formula looking up Column G
+                for col_idx, val in enumerate(row_data, start=1):
+                    if col_idx == 6:
+                        ws.cell(
+                            row=index, column=col_idx
+                        ).value = f"=IFERROR(VLOOKUP(VLOOKUP(G{index},'Dropdown List'!$D:$F,2,FALSE),'Dropdown List'!$B:$C,2, FALSE), \"\")"
+                    else:
+                        ws.cell(row=index, column=col_idx).value = val
+            else:
+                ws.append(row_data)
 
-                # Alignment per column (1-indexed):
-                # 1: ItemType, 3: MerchantOrderId, 5: RecipientPhone, 6: RecipientCity,
-                # 7: RecipientZone, 11: ItemQuantity, 12: ItemWeight -> Center
-                # 10: AmountToCollect -> Right
-                # 2: StoreName, 4: RecipientName, 8: RecipientArea, 9: RecipientAddress,
-                # 13: ItemDesc, 14: SpecialInstruction -> Left
-                if col_idx in [1, 3, 5, 6, 7, 11, 12]:
-                    cell.alignment = center_align
-                elif col_idx == 10:
-                    cell.alignment = right_align
-                else:
-                    cell.alignment = left_align
+        if using_template:
+            # Clean up template placeholder rows after the last exported order
+            last_order_row = row_count + 1
+            if ws.max_row > last_order_row:
+                ws.delete_rows(last_order_row + 1, ws.max_row - last_order_row)
 
-        max_row = max(row_count + 1, 100)
-
-        # Add Data Validation for StoreName column (B)
-        stores_formula = f'"{",".join(cls.STORE_NAMES)}"'
-        dv_store_name = DataValidation(
-            type="list", formula1=stores_formula, allow_blank=True
-        )
-        ws.add_data_validation(dv_store_name)
-        dv_store_name.add(f"B2:B{max_row}")
+            # If more than 99 orders, extend the template data validations
+            if row_count > 99:
+                for dv in ws.data_validations.dataValidation:
+                    sqref_str = str(dv.sqref)
+                    if "B2:B" in sqref_str:
+                        dv.sqref = f"B2:B{last_order_row}"
+                    elif "G2:G" in sqref_str:
+                        dv.sqref = f"G2:G{last_order_row}"
+                    elif "H2:H" in sqref_str:
+                        dv.sqref = f"H2:H{last_order_row}"
+        else:
+            # Fallback data validation if template file is absent
+            stores_formula = f'"{",".join(cls.STORE_NAMES)}"'
+            dv_store_name = DataValidation(
+                type="list", formula1=stores_formula, allow_blank=True
+            )
+            ws.add_data_validation(dv_store_name)
+            max_r = max(row_count + 1, 100)
+            dv_store_name.add(f"B2:B{max_r}")
 
         # Auto-fit column widths
         for col in ws.columns:
