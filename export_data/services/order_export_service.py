@@ -15,23 +15,88 @@ from sales.models import Order, OrderProduct
 class OrderExportService:
     """
     Service responsible for querying and formatting orders into logistics/courier
-    export templates (Excel .xlsx and CSV .csv).
+    bulk upload export templates (Excel .xlsx and CSV .csv).
     """
 
     HEADERS: List[str] = [
-        "Reference ID",
-        "Order Type",
-        "Customer Name",
-        "Primary Mobile No.",
-        "Secondary Mobile No.",
-        "COD Amount",
-        "Landmark",
-        "City / Area",
-        "Destination Branch",
-        "Product Description",
-        "Instruction",
-        "weight",
+        "ItemType",
+        "StoreName",
+        "MerchantOrderId",
+        "RecipientName(*)",
+        "RecipientPhone(*)",
+        "RecipientCity(*)",
+        "RecipientZone(*)",
+        "RecipientArea",
+        "RecipientAddress(*)",
+        "AmountToCollect(*)",
+        "ItemQuantity",
+        "ItemWeight",
+        "ItemDesc",
+        "SpecialInstruction",
     ]
+
+    STORE_NAMES: List[str] = [
+        "Yachu Jorpati",
+        "Yachu Gairidhara",
+        "Yachu Kritipur",
+        "Yachu Baliyo ventures Pvt.Ltd",
+        "Yachu Bhaktapur",
+        "Yachu Jhamsikhel",
+        "New Uttam Traders",
+        "Yachu Soalteemode",
+        "Yachu Lagankhel",
+        "Yachu Sitapaila",
+        "Yachu Baneshwor",
+    ]
+
+    FRANCHISE_STORE_MAPPING = {
+        "jorpati": "Yachu Jorpati",
+        "gairidhara": "Yachu Gairidhara",
+        "kritipur": "Yachu Kritipur",
+        "chibe": "Yachu Baliyo ventures Pvt.Ltd",
+        "sankhamul": "Yachu Baliyo ventures Pvt.Ltd",
+        "bhaktapur": "Yachu Bhaktapur",
+        "jhamsikhel": "Yachu Jhamsikhel",
+        "swyambhu": "New Uttam Traders",
+        "main": "New Uttam Traders",
+        "soalteemode": "Yachu Soalteemode",
+        "lagankhel": "Yachu Lagankhel",
+        "sambridhi": "Yachu Sitapaila",
+        "baneshwor": "Yachu Baneshwor",
+    }
+
+    @classmethod
+    def match_store_name(cls, franchise) -> str:
+        """
+        Match an order's franchise to one of the predefined store names based on
+        name or short_form, falling back to franchise.name.
+        """
+        if not franchise:
+            return ""
+
+        name = getattr(franchise, "name", "") or ""
+        short_form = getattr(franchise, "short_form", "") or ""
+
+        # 1. Exact case-insensitive match against STORE_NAMES
+        for cand in [name, short_form]:
+            cand_clean = cand.strip()
+            if not cand_clean:
+                continue
+            for store in cls.STORE_NAMES:
+                if cand_clean.lower() == store.lower():
+                    return store
+
+        # 2. Keyword/substring mapping
+        for cand in [name, short_form]:
+            cand_lower = cand.strip().lower()
+            if not cand_lower:
+                continue
+            for key, store in cls.FRANCHISE_STORE_MAPPING.items():
+                if key in cand_lower:
+                    return store
+
+        # 3. Fallback to franchise name
+        return name.strip() if name else ""
 
     @classmethod
     def get_orders(cls, order_ids: List[int]):
@@ -46,7 +111,7 @@ class OrderExportService:
         return (
             Order.objects
             .filter(id__in=order_ids)
-            .select_related("location")
+            .select_related("location", "franchise")
             .prefetch_related(
                 Prefetch(
                     "order_products",
@@ -57,66 +122,66 @@ class OrderExportService:
         )
 
     @classmethod
-    def prepare_order_row(cls, order: Order, weight: float = 1.0) -> list:
+    def prepare_order_row(
+        cls, order: Order, weight: float = 1.0, store_name: str = ""
+    ) -> list:
         """
-        Transform an Order instance into the row format expected by the courier template.
+        Transform an Order instance into the row format expected by the courier template:
+        1. ItemType: "Parcel"
+        2. StoreName: Matched from order.franchise against predefined store names
+        3. MerchantOrderId: order.order_code or order.id
+        4. RecipientName(*): order.full_name
+        5. RecipientPhone(*): order.phone_number
+        6. RecipientCity(*): "" (blank as requested)
+        7. RecipientZone(*): "" (blank as requested)
+        8. RecipientArea: order.location.name if order.location else (order.city or "")
+        9. RecipientAddress(*): "" (blank as requested)
+        10. AmountToCollect(*): COD Amount (total_amount - prepaid_amount)
+        11. ItemQuantity: Total sum of item quantities in the order
+        12. ItemWeight: Parcel weight (default 1.0)
+        13. ItemDesc: Description of products (e.g., "1x Hair Oil, 2x Shampoo")
+        14. SpecialInstruction: Remarks and/or landmark
         """
-        # 1. Reference ID
-        reference_id = order.order_code or str(order.id)
+        # 1. ItemType
+        item_type = "package"
 
-        # 2. Order Type (Fixed to 'Regular' as required)
-        order_type = "Regular"
+        # 2. StoreName (use override if explicitly provided, else match from order.franchise)
+        resolved_store = (
+            store_name.strip() if store_name else cls.match_store_name(order.franchise)
+        )
 
-        # 3. Customer Name
-        customer_name = order.full_name or ""
+        # 3. MerchantOrderId
+        merchant_order_id = order.order_code or str(order.id)
 
-        # 4. Primary Mobile No.
-        primary_mobile = order.phone_number or ""
+        # 4. RecipientName(*)
+        recipient_name = order.full_name or ""
 
-        # 5. Secondary Mobile No.
-        secondary_mobile = order.alternate_phone_number or ""
+        # 5. RecipientPhone(*)
+        recipient_phone = order.phone_number or ""
 
-        # 6. COD Amount (total_amount - prepaid_amount)
+        # 6. RecipientCity(*) - blank as requested
+        recipient_city = ""
+
+        # 7. RecipientZone(*) - blank as requested
+        recipient_zone = ""
+
+        # 8. RecipientArea
+        recipient_area = order.location.name if order.location else (order.city or "")
+
+        # 9. RecipientAddress(*) - blank as requested
+        recipient_address = ""
+
+        # 10. AmountToCollect(*) (total_amount - prepaid_amount, non-negative)
         total = float(order.total_amount or 0)
         prepaid = float(order.prepaid_amount or 0)
-        cod_val = total - prepaid
-        cod_amount = int(cod_val) if cod_val.is_integer() else round(cod_val, 2)
+        cod_val = max(0.0, total - prepaid)
+        amount_to_collect = int(cod_val) if cod_val.is_integer() else round(cod_val, 2)
 
-        # 7. Landmark
-        landmark = order.landmark or ""
+        # 11. ItemQuantity (sum of all product quantities)
+        total_qty = sum(op.quantity for op in order.order_products.all())
+        item_quantity = total_qty if total_qty > 0 else 1
 
-        # 8. City / Area
-        delivery_address = (order.delivery_address or "").strip()
-        city = (order.city or "").strip()
-        if delivery_address and city:
-            if city.lower() in delivery_address.lower():
-                city_area = delivery_address
-            else:
-                city_area = f"{delivery_address}, {city}"
-        elif delivery_address:
-            city_area = delivery_address
-        elif city:
-            city_area = city
-        else:
-            city_area = ""
-
-        # 9. Destination Branch (location.name)
-        destination_branch = order.location.name if order.location else ""
-
-        # 10. Product Description
-        product_items = []
-        for op in order.order_products.all():
-            try:
-                p_name = op.product.product.name
-            except AttributeError:
-                p_name = "Product"
-            product_items.append(f"{op.quantity}x {p_name}")
-        product_description = ", ".join(product_items)
-
-        # 11. Instruction
-        instruction = order.remarks or ""
-
-        # 12. weight
+        # 12. ItemWeight
         try:
             numeric_weight = float(weight)
             formatted_weight = (
@@ -127,26 +192,48 @@ class OrderExportService:
         except (ValueError, TypeError):
             formatted_weight = 1
 
+        # 13. ItemDesc
+        product_items = []
+        for op in order.order_products.all():
+            try:
+                p_name = op.product.product.name
+            except AttributeError:
+                p_name = "Product"
+            product_items.append(f"{op.quantity}x {p_name}")
+        item_desc = ", ".join(product_items)
+
+        # 14. SpecialInstruction
+        instructions = []
+        if order.remarks:
+            instructions.append(order.remarks.strip())
+        if order.landmark:
+            instructions.append(f"Landmark: {order.landmark.strip()}")
+        special_instruction = " | ".join(instructions) if instructions else ""
+
         return [
-            reference_id,
-            order_type,
-            customer_name,
-            primary_mobile,
-            secondary_mobile,
-            cod_amount,
-            landmark,
-            city_area,
-            destination_branch,
-            product_description,
-            instruction,
+            item_type,
+            resolved_store,
+            merchant_order_id,
+            recipient_name,
+            recipient_phone,
+            recipient_city,
+            recipient_zone,
+            recipient_area,
+            recipient_address,
+            amount_to_collect,
+            item_quantity,
             formatted_weight,
+            item_desc,
+            special_instruction,
         ]
 
     @classmethod
-    def export_to_excel(cls, orders, weight: float = 1.0) -> HttpResponse:
+    def export_to_excel(
+        cls, orders, weight: float = 1.0, store_name: str = ""
+    ) -> HttpResponse:
         """
         Generate an .xlsx workbook conforming to the required layout, complete with
-        Order Type dropdown validation and auto-fitted columns.
+        ItemType and StoreName dropdown validation and auto-fitted columns.
         """
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -189,7 +276,9 @@ class OrderExportService:
         row_count = 0
         for index, order in enumerate(orders, start=2):
             row_count += 1
-            row_data = cls.prepare_order_row(order, weight=weight)
+            row_data = cls.prepare_order_row(
+                order, weight=weight, store_name=store_name
+            )
             ws.append(row_data)
             ws.row_dimensions[index].height = 22
 
@@ -198,24 +287,35 @@ class OrderExportService:
                 cell.font = data_font
                 cell.border = thin_border
 
-                # Alignment per column:
-                # 1: Ref ID, 2: Order Type, 4: Primary Mob, 5: Sec Mob, 9: Dest Branch, 12: weight -> Center
-                # 6: COD Amount -> Right
-                # 3: Customer Name, 7: Landmark, 8: City / Area, 10: Product Desc, 11: Instruction -> Left
-                if col_idx in [1, 2, 4, 5, 9, 12]:
+                # Alignment per column (1-indexed):
+                # 1: ItemType, 3: MerchantOrderId, 5: RecipientPhone, 6: RecipientCity,
+                # 7: RecipientZone, 11: ItemQuantity, 12: ItemWeight -> Center
+                # 10: AmountToCollect -> Right
+                # 2: StoreName, 4: RecipientName, 8: RecipientArea, 9: RecipientAddress,
+                # 13: ItemDesc, 14: SpecialInstruction -> Left
+                if col_idx in [1, 3, 5, 6, 7, 11, 12]:
                     cell.alignment = center_align
-                elif col_idx == 6:
+                elif col_idx == 10:
                     cell.alignment = right_align
                 else:
                     cell.alignment = left_align
 
-        # Add Data Validation for Order Type column (B)
-        dv_order_type = DataValidation(
-            type="list", formula1='"Regular,Exchange,Return"', allow_blank=True
-        )
-        ws.add_data_validation(dv_order_type)
         max_row = max(row_count + 1, 100)
-        dv_order_type.add(f"B2:B{max_row}")
+
+        # Add Data Validation for ItemType column (A)
+        dv_item_type = DataValidation(
+            type="list", formula1='"Parcel,Document"', allow_blank=True
+        )
+        ws.add_data_validation(dv_item_type)
+        dv_item_type.add(f"A2:A{max_row}")
+
+        # Add Data Validation for StoreName column (B)
+        stores_formula = f'"{",".join(cls.STORE_NAMES)}"'
+        dv_store_name = DataValidation(
+            type="list", formula1=stores_formula, allow_blank=True
+        )
+        ws.add_data_validation(dv_store_name)
+        dv_store_name.add(f"B2:B{max_row}")
 
         # Auto-fit column widths
         for col in ws.columns:
@@ -224,7 +324,7 @@ class OrderExportService:
             for cell in col:
                 if cell.value is not None:
                     max_len = max(max_len, len(str(cell.value)))
-            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 14)
 
         # Prepare HTTP Response
         response = HttpResponse(
@@ -238,7 +338,9 @@ class OrderExportService:
         return response
 
     @classmethod
-    def export_to_csv(cls, orders, weight: float = 1.0) -> HttpResponse:
+    def export_to_csv(
+        cls, orders, weight: float = 1.0, store_name: str = ""
+    ) -> HttpResponse:
         """
         Generate a downloadable CSV file with the same format.
         """
@@ -252,6 +354,8 @@ class OrderExportService:
         writer.writerow(cls.HEADERS)
 
         for order in orders:
-            writer.writerow(cls.prepare_order_row(order, weight=weight))
+            writer.writerow(
+                cls.prepare_order_row(order, weight=weight, store_name=store_name)
+            )
 
         return response

@@ -263,6 +263,7 @@ class Order(models.Model):
         ("PicknDrop", "PicknDrop"),
         ("NCM", "NCM"),
         ("Daraz", "Daraz"),
+        ("Pathao", "Pathao"),
     ]
     order_code = models.CharField(
         max_length=20, default=generate_order_id, null=True, blank=True

@@ -2033,13 +2033,19 @@ class RemainingOldOrdersExcelExportView(APIView):
 
 class OrderSelectedExportView(APIView):
     """
-    Exports selected orders based on order IDs into the specified courier template format.
-    Order type is set to 'Regular', and Destination Branch is mapped to location.name.
+    Exports selected orders based on order IDs into the specified courier template format:
+    ItemType, StoreName, MerchantOrderId, RecipientName(*), RecipientPhone(*),
+    RecipientCity(*), RecipientZone(*), RecipientArea, RecipientAddress(*),
+    AmountToCollect(*), ItemQuantity, ItemWeight, ItemDesc, SpecialInstruction.
+
+    RecipientCity, RecipientZone, and RecipientAddress are left blank.
+    StoreName is matched from the order's franchise (or overridden if provided).
     Supports Excel (.xlsx) and CSV (.csv).
     Accepts:
         - order_ids: List of integer Order IDs (required)
         - export_format: 'xlsx' (default) or 'csv' (optional)
         - weight: Parcel weight, default 1.0 (optional)
+        - store_name: Store name override (optional)
     """
 
     # permission_classes = [IsAuthenticated]
@@ -2052,6 +2058,7 @@ class OrderSelectedExportView(APIView):
         order_ids = serializer.validated_data["order_ids"]
         export_format = serializer.validated_data.get("export_format", "xlsx")
         weight = serializer.validated_data.get("weight", 1.0)
+        store_name = serializer.validated_data.get("store_name", "")
 
         orders = OrderExportService.get_orders(order_ids)
         if not orders.exists():
@@ -2061,8 +2068,12 @@ class OrderSelectedExportView(APIView):
             )
 
         if export_format == "csv":
-            return OrderExportService.export_to_csv(orders, weight=weight)
-        return OrderExportService.export_to_excel(orders, weight=weight)
+            return OrderExportService.export_to_csv(
+                orders, weight=weight, store_name=store_name
+            )
+        return OrderExportService.export_to_excel(
+            orders, weight=weight, store_name=store_name
+        )
 
     def post(self, request, *args, **kwargs):
         return self._export(request, request.data)

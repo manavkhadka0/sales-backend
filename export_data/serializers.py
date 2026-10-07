@@ -21,6 +21,13 @@ class OrderSelectedExportSerializer(serializers.Serializer):
         required=False,
         help_text="Parcel weight in kg to write in the weight column (default: 1.0)",
     )
+    store_name = serializers.CharField(
+        max_length=255,
+        required=False,
+        allow_blank=True,
+        default="",
+        help_text="Optional Store Name override. If omitted, matched from each order's franchise.",
+    )
 
     def to_internal_value(self, data):
         # Support QueryDict / dict where order_ids may be passed as comma-separated or list
@@ -35,14 +42,12 @@ class OrderSelectedExportSerializer(serializers.Serializer):
             if cleaned:
                 try:
                     data["order_ids"] = [
-                        int(item.strip())
-                        for item in cleaned.split(",")
-                        if item.strip()
+                        int(item.strip()) for item in cleaned.split(",") if item.strip()
                     ]
                 except ValueError:
-                    raise serializers.ValidationError(
-                        {"order_ids": "All order IDs must be valid integers."}
-                    )
+                    raise serializers.ValidationError({
+                        "order_ids": "All order IDs must be valid integers."
+                    })
             else:
                 data["order_ids"] = []
 
