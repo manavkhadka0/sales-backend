@@ -8,6 +8,7 @@ from django.db.models import Case, Prefetch, When
 from django.http import HttpResponse
 from django.utils import timezone
 from openpyxl.utils import get_column_letter
+from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from sales.models import Order, OrderProduct
@@ -101,6 +102,74 @@ class OrderExportService:
         # 3. Fallback to franchise name
         return name.strip() if name else ""
 
+    _cached_dropdown_cities: List[str] = []
+
+    @classmethod
+    def get_dropdown_cities(cls) -> List[str]:
+        """
+        Load and cache the list of city names from the template's Dropdown List sheet.
+        """
+        if cls._cached_dropdown_cities:
+            return cls._cached_dropdown_cities
+
+        if os.path.exists(cls.TEMPLATE_PATH):
+            try:
+                wb = openpyxl.load_workbook(cls.TEMPLATE_PATH, read_only=True)
+                if "Dropdown List" in wb.sheetnames:
+                    ws_dd = wb["Dropdown List"]
+                    cities = []
+                    for r in range(2, 350):
+                        val = ws_dd.cell(row=r, column=3).value
+                        if val:
+                            cities.append(str(val).strip())
+                    wb.close()
+                    cls._cached_dropdown_cities = cities
+            except Exception:
+                pass
+        return cls._cached_dropdown_cities
+
+    @classmethod
+    def match_city_name(cls, city_input: str) -> str:
+        """
+        Match an order's city against the official Pathao Dropdown List city_name column.
+        """
+        if not city_input:
+            return ""
+        c_in = str(city_input).strip().lower()
+        if not c_in:
+            return ""
+
+        dropdown_cities = cls.get_dropdown_cities()
+        if not dropdown_cities:
+            return str(city_input).strip()
+
+        # 1. Kathmandu Valley aliases
+        if any(
+            k in c_in for k in ["ktm", "kathmandu", "lalitpur", "bhaktapur", "patan"]
+        ):
+            for c in dropdown_cities:
+                if "kathmandu valley" in c.lower():
+                    return c
+            return "Kathmandu Valley"
+
+        # 2. Exact match
+        for c in dropdown_cities:
+            if c.lower() == c_in:
+                return c
+
+        # 3. Substring match
+        for c in dropdown_cities:
+            if c_in in c.lower():
+                return c
+
+        # 4. Word match without parentheses
+        for c in dropdown_cities:
+            cleaned_c = c.lower().replace("(", " ").replace(")", " ")
+            if c_in in cleaned_c.split():
+                return c
+
+        return ""
+
     @classmethod
     def get_orders(cls, order_ids: List[int]):
         """
@@ -162,8 +231,8 @@ class OrderExportService:
         # 5. RecipientPhone(*)
         recipient_phone = order.phone_number or ""
 
-        # 6. RecipientCity(*) - blank as requested
-        recipient_city = ""
+        # 6. RecipientCity(*) - matched from city_name in Dropdown List
+        recipient_city = cls.match_city_name(order.city)
 
         # 7. RecipientZone(*) - blank as requested
         recipient_zone = ""
@@ -283,22 +352,38 @@ class OrderExportService:
             )
 
             if using_template:
-                # In the template, column F (6) holds the formula looking up Column G
                 for col_idx, val in enumerate(row_data, start=1):
-                    if col_idx == 6:
-                        ws.cell(
-                            row=index, column=col_idx
-                        ).value = f"=IFERROR(VLOOKUP(VLOOKUP(G{index},'Dropdown List'!$D:$F,2,FALSE),'Dropdown List'!$B:$C,2, FALSE), \"\")"
-                    else:
-                        ws.cell(row=index, column=col_idx).value = val
+                    ws.cell(row=index, column=col_idx).value = val
             else:
                 ws.append(row_data)
 
         if using_template:
             # Clean up template placeholder rows after the last exported order
-            last_order_row = row_count + 1
+            last_order_row = max(row_count + 1, 2)
             if ws.max_row > last_order_row:
                 ws.delete_rows(last_order_row + 1, ws.max_row - last_order_row)
+
+            # Ensure ListCities named range exists pointing to 'Dropdown List'!$C$2:$C${max_city_row}
+            max_city_r = 317
+            if "Dropdown List" in wb.sheetnames:
+                ws_dd = wb["Dropdown List"]
+                for r in range(2, ws_dd.max_row + 1):
+                    if ws_dd.cell(row=r, column=3).value:
+                        max_city_r = r
+
+            if "ListCities" not in wb.defined_names:
+                dn_cities = DefinedName(
+                    "ListCities", attr_text=f"'Dropdown List'!$C$2:$C${max_city_r}"
+                )
+                wb.defined_names.add(dn_cities)
+
+            # Link RecipientCity(*) (Column F) with ListCities dropdown
+            dv_city = DataValidation(
+                type="list", formula1="ListCities", allow_blank=True
+            )
+            ws.add_data_validation(dv_city)
+            max_val_row = max(last_order_row, 100)
+            dv_city.add(f"F2:F{max_val_row}")
 
             # If more than 99 orders, extend the template data validations
             if row_count > 99:
@@ -306,6 +391,8 @@ class OrderExportService:
                     sqref_str = str(dv.sqref)
                     if "B2:B" in sqref_str:
                         dv.sqref = f"B2:B{last_order_row}"
+                    elif "F2:F" in sqref_str:
+                        dv.sqref = f"F2:F{last_order_row}"
                     elif "G2:G" in sqref_str:
                         dv.sqref = f"G2:G{last_order_row}"
                     elif "H2:H" in sqref_str:
