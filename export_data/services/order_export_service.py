@@ -168,8 +168,25 @@ class OrderExportService:
         # 8. RecipientArea
         recipient_area = order.location.name if order.location else (order.city or "")
 
-        # 9. RecipientAddress(*) - blank as requested
-        recipient_address = ""
+        # 9. RecipientAddress(*) (delivery_address, city, and landmark if any)
+        address_parts = []
+        if order.delivery_address and order.delivery_address.strip():
+            address_parts.append(order.delivery_address.strip())
+        if order.city and order.city.strip():
+            city_val = order.city.strip()
+            if (
+                not order.delivery_address
+                or city_val.lower() not in order.delivery_address.lower()
+            ):
+                address_parts.append(city_val)
+        if order.landmark and order.landmark.strip():
+            landmark_val = order.landmark.strip()
+            if (
+                not order.delivery_address
+                or landmark_val.lower() not in order.delivery_address.lower()
+            ):
+                address_parts.append(landmark_val)
+        recipient_address = ", ".join(address_parts)
 
         # 10. AmountToCollect(*) (total_amount - prepaid_amount, non-negative)
         total = float(order.total_amount or 0)
@@ -203,12 +220,7 @@ class OrderExportService:
         item_desc = ", ".join(product_items)
 
         # 14. SpecialInstruction
-        instructions = []
-        if order.remarks:
-            instructions.append(order.remarks.strip())
-        if order.landmark:
-            instructions.append(f"Landmark: {order.landmark.strip()}")
-        special_instruction = " | ".join(instructions) if instructions else ""
+        special_instruction = order.remarks.strip() if order.remarks else ""
 
         return [
             item_type,
@@ -228,12 +240,22 @@ class OrderExportService:
         ]
 
     @classmethod
+    def update_orders_logistics(
+        cls, order_ids: List[int], logistics: str = "Pathao"
+    ) -> None:
+        """
+        Update the logistics provider to 'Pathao' for the exported orders.
+        """
+        if order_ids:
+            Order.objects.filter(id__in=order_ids).update(logistics=logistics)
+
+    @classmethod
     def export_to_excel(
         cls, orders, weight: float = 1.0, store_name: str = ""
     ) -> HttpResponse:
         """
         Generate an .xlsx workbook conforming to the required layout, complete with
-        ItemType and StoreName dropdown validation and auto-fitted columns.
+        StoreName dropdown validation and auto-fitted columns.
         """
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -274,8 +296,10 @@ class OrderExportService:
 
         # Write rows
         row_count = 0
+        exported_order_ids: List[int] = []
         for index, order in enumerate(orders, start=2):
             row_count += 1
+            exported_order_ids.append(order.id)
             row_data = cls.prepare_order_row(
                 order, weight=weight, store_name=store_name
             )
@@ -302,13 +326,6 @@ class OrderExportService:
 
         max_row = max(row_count + 1, 100)
 
-        # Add Data Validation for ItemType column (A)
-        dv_item_type = DataValidation(
-            type="list", formula1='"Parcel,Document"', allow_blank=True
-        )
-        ws.add_data_validation(dv_item_type)
-        dv_item_type.add(f"A2:A{max_row}")
-
         # Add Data Validation for StoreName column (B)
         stores_formula = f'"{",".join(cls.STORE_NAMES)}"'
         dv_store_name = DataValidation(
@@ -325,6 +342,10 @@ class OrderExportService:
                 if cell.value is not None:
                     max_len = max(max_len, len(str(cell.value)))
             ws.column_dimensions[col_letter].width = max(max_len + 4, 14)
+
+        # Update logistics to Pathao for exported orders
+        if exported_order_ids:
+            cls.update_orders_logistics(exported_order_ids, logistics="Pathao")
 
         # Prepare HTTP Response
         response = HttpResponse(
@@ -353,9 +374,15 @@ class OrderExportService:
         writer = csv.writer(response)
         writer.writerow(cls.HEADERS)
 
+        exported_order_ids: List[int] = []
         for order in orders:
+            exported_order_ids.append(order.id)
             writer.writerow(
                 cls.prepare_order_row(order, weight=weight, store_name=store_name)
             )
+
+        # Update logistics to Pathao for exported orders
+        if exported_order_ids:
+            cls.update_orders_logistics(exported_order_ids, logistics="Pathao")
 
         return response

@@ -2038,7 +2038,9 @@ class OrderSelectedExportView(APIView):
     RecipientCity(*), RecipientZone(*), RecipientArea, RecipientAddress(*),
     AmountToCollect(*), ItemQuantity, ItemWeight, ItemDesc, SpecialInstruction.
 
-    RecipientCity, RecipientZone, and RecipientAddress are left blank.
+    RecipientCity and RecipientZone are left blank.
+    RecipientAddress is populated with delivery address, city, and landmark if any.
+    ItemType is set to 'package'.
     StoreName is matched from the order's franchise (or overridden if provided).
     Supports Excel (.xlsx) and CSV (.csv).
     Accepts:
