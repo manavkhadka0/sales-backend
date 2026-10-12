@@ -121,10 +121,15 @@ class SalesStatisticsView(generics.GenericAPIView):
             # When filtered by date, daily_stats represents the whole filtered range
             daily_stats = queryset.exclude(
                 order_status__in=excluded_statuses
-            ).aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
+            ).aggregate(
+                total_orders=Count("id"),
+                total_sales=Sum("total_amount"),
+                total_delivery_charge=Sum("delivery_charge"),
+            )
             yesterday_stats = {
                 "total_orders": 0,
                 "total_sales": 0,
+                "total_delivery_charge": 0,
             }
         else:
             # Get today's stats - no exclusions
@@ -132,7 +137,11 @@ class SalesStatisticsView(generics.GenericAPIView):
                 queryset
                 .filter(date=today)
                 .exclude(order_status__in=excluded_statuses)
-                .aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
+                .aggregate(
+                    total_orders=Count("id"),
+                    total_sales=Sum("total_amount"),
+                    total_delivery_charge=Sum("delivery_charge"),
+                )
             )
 
             # Calculate yesterday's date
@@ -143,7 +152,11 @@ class SalesStatisticsView(generics.GenericAPIView):
                 queryset
                 .filter(date=yesterday)
                 .exclude(order_status__in=excluded_statuses)
-                .aggregate(total_orders=Count("id"), total_sales=Sum("total_amount"))
+                .aggregate(
+                    total_orders=Count("id"),
+                    total_sales=Sum("total_amount"),
+                    total_delivery_charge=Sum("delivery_charge"),
+                )
             )
 
         # Get all-time stats with status breakdown
@@ -153,12 +166,22 @@ class SalesStatisticsView(generics.GenericAPIView):
             all_time_sales=Sum(
                 "total_amount", filter=~Q(order_status__in=excluded_statuses), default=0
             ),
+            all_time_delivery_charge=Sum(
+                "delivery_charge",
+                filter=~Q(order_status__in=excluded_statuses),
+                default=0,
+            ),
             # Cancelled orders and sales totals
             cancelled_orders_count=Count(
                 "id", filter=Q(order_status__in=excluded_statuses)
             ),
             all_time_cancelled_sales=Sum(
                 "total_amount", filter=Q(order_status__in=excluded_statuses), default=0
+            ),
+            all_time_cancelled_delivery_charge=Sum(
+                "delivery_charge",
+                filter=Q(order_status__in=excluded_statuses),
+                default=0,
             ),
             # Status-specific counts for active orders
             pending_count=Count("id", filter=Q(order_status="Pending")),
@@ -207,8 +230,12 @@ class SalesStatisticsView(generics.GenericAPIView):
             "date": today,
             "total_orders": daily_stats["total_orders"] or 0,
             "total_sales": daily_stats["total_sales"] or 0,
+            "total_delivery_charge": daily_stats["total_delivery_charge"] or 0,
             "total_orders_yesterday": yesterday_stats["total_orders"] or 0,
             "total_sales_yesterday": yesterday_stats["total_sales"] or 0,
+            "total_delivery_charge_yesterday": (
+                yesterday_stats["total_delivery_charge"] or 0
+            ),
             "all_time_orders": all_time_stats["all_time_orders"] or 0,
             "cancelled_orders_count": all_time_stats["cancelled_orders_count"] or 0,
             "cancelled_orders": {
@@ -224,6 +251,12 @@ class SalesStatisticsView(generics.GenericAPIView):
             "all_time_sales": float(all_time_stats["all_time_sales"] or 0),
             "all_time_cancelled_sales": float(
                 all_time_stats["all_time_cancelled_sales"] or 0
+            ),
+            "all_time_delivery_charge": float(
+                all_time_stats["all_time_delivery_charge"] or 0
+            ),
+            "all_time_cancelled_delivery_charge": float(
+                all_time_stats["all_time_cancelled_delivery_charge"] or 0
             ),
             "cancelled_amount": {
                 "cancelled": float(all_time_stats["cancelled_amount"] or 0),
