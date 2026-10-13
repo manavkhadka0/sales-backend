@@ -459,3 +459,86 @@ class OrderExportService:
             cls.update_orders_logistics(exported_order_ids, logistics="Pathao")
 
         return response
+
+    GENERAL_CSV_HEADERS: List[str] = [
+        "Customer Name",
+        "Contact Number",
+        "Alternative Number",
+        "Location",
+        "Customer Landmark",
+        "Address",
+        "Customer Order ID",
+        "Product Name",
+        "Product Price",
+        "Payment Type",
+        "Client Note",
+    ]
+
+    @classmethod
+    def export_general_csv(
+        cls, orders, filename_prefix: str = "orders"
+    ) -> HttpResponse:
+        """
+        Generate a downloadable CSV in General Order format:
+        Customer Name, Contact Number, Alternative Number, Location, Customer Landmark,
+        Address, Customer Order ID, Product Name, Product Price, Payment Type, Client Note.
+        """
+        response = HttpResponse(content_type="text/csv")
+        timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
+        response["Content-Disposition"] = (
+            f'attachment; filename="{filename_prefix}_{timestamp}.csv"'
+        )
+
+        writer = csv.writer(response)
+        writer.writerow(cls.GENERAL_CSV_HEADERS)
+
+        for order in orders:
+            products = order.order_products.all()
+            products_str = ",".join([
+                f"{p.quantity}-{p.product.product.name}"
+                for p in products
+                if getattr(p, "product", None)
+                and getattr(p.product, "product", None)
+            ])
+
+            total = float(order.total_amount or 0)
+            prepaid = float(order.prepaid_amount or 0)
+            product_price = max(0.0, total - prepaid) if prepaid > 0 else total
+            product_price_formatted = (
+                int(product_price)
+                if product_price.is_integer()
+                else round(product_price, 2)
+            )
+
+            if order.payment_method == "Office Visit":
+                payment_type = "Office Visit"
+            elif prepaid > 0 and (total - prepaid) == 0:
+                payment_type = "pre-paid"
+            elif order.payment_method:
+                payment_type = order.payment_method
+            else:
+                payment_type = "cashOnDelivery"
+
+            address_parts = []
+            if order.delivery_address and order.delivery_address.strip():
+                address_parts.append(order.delivery_address.strip())
+            if order.city and order.city.strip():
+                address_parts.append(order.city.strip())
+            full_address = ", ".join(address_parts)
+
+            writer.writerow([
+                order.full_name or "",
+                order.phone_number or "",
+                order.alternate_phone_number or "",
+                order.location.name if order.location else "",
+                order.landmark or "",
+                full_address,
+                order.order_code or str(order.id),
+                products_str,
+                product_price_formatted,
+                payment_type,
+                order.remarks or "",
+            ])
+
+        return response
+

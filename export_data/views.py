@@ -11,13 +11,14 @@ from django_filters import rest_framework as django_filters
 from openpyxl.styles import Alignment, Font, PatternFill
 from rest_framework import generics, status
 from rest_framework.decorators import api_view
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from account.models import CustomUser, Franchise
 from sales.models import Order, OrderProduct
 
+from .filters import OrderCSVExportFilter
 from .serializers import OrderSelectedExportSerializer
 from .services import OrderExportService
 
@@ -52,6 +53,7 @@ class OrderCSVExportView(generics.GenericAPIView):
             )
         if logistics:
             orders = orders.filter(logistics=logistics)
+        orders = orders.exclude(payment_method="Office Visit")
 
         if not orders.exists():
             return Response(
@@ -2082,3 +2084,75 @@ class OrderSelectedExportView(APIView):
 
     def get(self, request, *args, **kwargs):
         return self._export(request, request.query_params)
+
+
+def _get_base_export_queryset():
+    """
+    Returns optimized base queryset excluding Office Visit orders.
+    """
+    return (
+        Order.objects
+        .select_related("location", "franchise", "sales_person")
+        .prefetch_related(
+            Prefetch(
+                "order_products",
+                queryset=OrderProduct.objects.select_related("product__product"),
+            )
+        )
+        .exclude(payment_method="Office Visit")
+        .order_by("-id")
+    )
+
+
+def _apply_export_filters(request, queryset, data):
+    """
+    Filters queryset by order_ids, start_date, end_date, franchise, and other criteria.
+    """
+    order_ids = data.get("order_ids")
+    if order_ids:
+        if isinstance(order_ids, str):
+            cleaned = order_ids.strip("[]() ")
+            if cleaned:
+                id_list = [
+                    int(x.strip()) for x in cleaned.split(",") if x.strip().isdigit()
+                ]
+                if id_list:
+                    queryset = queryset.filter(id__in=id_list)
+        elif isinstance(order_ids, list):
+            id_list = [int(x) for x in order_ids if str(x).isdigit()]
+            if id_list:
+                queryset = queryset.filter(id__in=id_list)
+
+    filterset = OrderCSVExportFilter(data, queryset=queryset)
+    if filterset.is_valid():
+        return filterset.qs
+    return queryset
+
+
+class OrderExportWithoutOfficeVisitView(APIView):
+    """
+    Export orders to General CSV format excluding 'Office Visit' payment method.
+    No authentication required. Filters by start_date, end_date, franchise, and/or order_ids.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def _export(self, request, data):
+        queryset = _get_base_export_queryset()
+        orders = _apply_export_filters(request, queryset, data)
+
+        if not orders.exists():
+            return Response(
+                {"error": "No orders found to export"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return OrderExportService.export_general_csv(orders, filename_prefix="orders")
+
+    def get(self, request, *args, **kwargs):
+        return self._export(request, request.query_params)
+
+    def post(self, request, *args, **kwargs):
+        return self._export(request, request.data)
+
