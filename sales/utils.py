@@ -247,3 +247,99 @@ def deduct_single_inventory_item(user, instance, inv_id, qty):
         )
     except Inventory.DoesNotExist:
         raise Exception(f"Inventory ID {inv_id} not found for this organization.")
+
+
+def get_force_order_suffix(user):
+    """
+    Constructs 'force order by {first_name} {last_name}' or
+    'force order by {first_name} {last_name} - {franchise_name}' if franchise exists.
+    """
+    first_name = (getattr(user, "first_name", "") or "").strip()
+    last_name = (getattr(user, "last_name", "") or "").strip()
+    full_name = f"{first_name} {last_name}".strip()
+    if not full_name:
+        full_name = (
+            user.get_full_name().strip()
+            if hasattr(user, "get_full_name")
+            else str(user)
+        )
+
+    franchise = getattr(user, "franchise", None)
+    franchise_name = getattr(franchise, "name", "").strip() if franchise else ""
+
+    if franchise_name:
+        return f"force order by {full_name} - {franchise_name}"
+    return f"force order by {full_name}"
+
+
+def append_force_order_remark(current_remarks, user):
+    """
+    Appends '- force order by {first_name} {last_name} [- {franchise_name}]' to remarks.
+    """
+    force_suffix = get_force_order_suffix(user)
+    remarks = (current_remarks or "").strip()
+
+    if not remarks:
+        return force_suffix
+    if force_suffix in remarks:
+        return remarks
+    return f"{remarks} - {force_suffix}"
+
+
+def apply_force_order_remarks(
+    order, user, phone_number=None, alternate_phone_number=None
+):
+    """
+    Updates remarks on existing active order(s) (within last 7 days)
+    with '- force order by {first_name} {last_name} [- {franchise_name}]'.
+    """
+    from django.db.models import Q
+    from django.utils import timezone
+
+    from sales.models import Order
+
+    force_suffix = get_force_order_suffix(user)
+
+    phone_queries = Q()
+    if phone_number:
+        phone_queries |= Q(phone_number=phone_number) | Q(
+            alternate_phone_number=phone_number
+        )
+    if alternate_phone_number:
+        phone_queries |= Q(phone_number=alternate_phone_number) | Q(
+            alternate_phone_number=alternate_phone_number
+        )
+
+    if not phone_queries:
+        return
+
+    seven_days_ago = timezone.now() - timezone.timedelta(days=7)
+    recent_orders = (
+        Order.objects
+        .filter(
+            phone_queries,
+            created_at__gte=seven_days_ago,
+        )
+        .exclude(id=order.id)
+        .exclude(
+            order_status__in=[
+                "Cancelled",
+                "Returned By Customer",
+                "Returned By Dash",
+                "Delivered",
+                "Indrive",
+                "Returned By PicknDrop",
+                "Returned By YDM",
+            ]
+        )
+        .only("id", "remarks")
+    )
+
+    for recent_order in recent_orders:
+        existing_remarks = (recent_order.remarks or "").strip()
+        if not existing_remarks:
+            recent_order.remarks = force_suffix
+            recent_order.save(update_fields=["remarks"])
+        elif force_suffix not in existing_remarks:
+            recent_order.remarks = f"{existing_remarks} - {force_suffix}"
+            recent_order.save(update_fields=["remarks"])

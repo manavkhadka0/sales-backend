@@ -63,7 +63,9 @@ from .serializers import (
     RawMaterialSerializer,
 )
 from .utils import (
+    append_force_order_remark,
     append_order_status_comments,
+    apply_force_order_remarks,
     deduct_order_inventory,
     deduct_single_inventory_item,
     format_inventory_list,
@@ -689,7 +691,11 @@ class OrderListCreateView(generics.ListCreateAPIView):
             # Convert string to bool if needed (e.g., from form-data)
             force_order = force_order.lower() in ["true", "1", "yes", "y"]
 
-        if not force_order:
+        if force_order:
+            serializer.validated_data["remarks"] = append_force_order_remark(
+                serializer.validated_data.get("remarks"), salesperson
+            )
+        else:
             # ---------------------------------------------------------
             # 1. Check for Active Orders (Last 7 days)
             # ---------------------------------------------------------
@@ -804,10 +810,6 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     }
                     raise serializers.ValidationError(error_details)
 
-            # Use empty set as described in previous logic (Active orders loop logic was redundant/empty)
-        else:
-            pass
-
         # Validate all products exist in inventory before proceeding
         for order_product_data in order_products_data:
             product_id = order_product_data.get("product_id")
@@ -866,6 +868,16 @@ class OrderListCreateView(generics.ListCreateAPIView):
         elif salesperson.role == "SuperAdmin":
             order = serializer.save(
                 factory=salesperson.factory, sales_person=salesperson
+            )
+        else:
+            order = serializer.save(sales_person=salesperson)
+
+        if force_order:
+            apply_force_order_remarks(
+                order=order,
+                user=salesperson,
+                phone_number=phone_number,
+                alternate_phone_number=self.request.data.get("alternate_phone_number"),
             )
 
         # Update inventory after order creation
