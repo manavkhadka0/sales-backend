@@ -461,84 +461,118 @@ class OrderExportService:
         return response
 
     GENERAL_CSV_HEADERS: List[str] = [
+        "Created Date & Time",
+        "Order ID",
+        "Franchise Name",
         "Customer Name",
         "Contact Number",
         "Alternative Number",
-        "Location",
-        "Customer Landmark",
+        "City",
         "Address",
-        "Customer Order ID",
+        "Customer Landmark",
+        "Location",
+        "Delivery Type",
         "Product Name",
-        "Product Price",
-        "Payment Type",
+        "Total Price",
+        "Payment Status",
+        "Status",
         "Client Note",
     ]
 
     @classmethod
     def export_general_csv(
-        cls, orders, filename_prefix: str = "orders"
+        cls, orders, filename_prefix: str = "orders", franchise_name: str = ""
     ) -> HttpResponse:
         """
         Generate a downloadable CSV in General Order format:
-        Customer Name, Contact Number, Alternative Number, Location, Customer Landmark,
-        Address, Customer Order ID, Product Name, Product Price, Payment Type, Client Note.
+        Created Date & Time, Order ID, Franchise Name, Customer Name, Contact Number,
+        Alternative Number, City, Address, Customer Landmark, Location, Delivery Type,
+        Product Name, Total Price, Payment Status, Status, Client Note, and total amount of total price at the end.
         """
+        import re
+
+        parts = [filename_prefix] if filename_prefix else ["orders"]
+        if franchise_name:
+            clean_franchise = re.sub(r"[^\w\s-]", "", franchise_name).strip()
+            clean_franchise = re.sub(r"[\s-]+", "_", clean_franchise).lower()
+            if clean_franchise and clean_franchise not in parts:
+                parts.append(clean_franchise)
+
+        timestamp = timezone.localtime().strftime("%Y-%m-%d_%H-%M-%S")
+        parts.append(timestamp)
+        filename = f"{'_'.join(parts)}.csv"
+
         response = HttpResponse(content_type="text/csv")
-        timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
-        response["Content-Disposition"] = (
-            f'attachment; filename="{filename_prefix}_{timestamp}.csv"'
-        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
         writer = csv.writer(response)
         writer.writerow(cls.GENERAL_CSV_HEADERS)
 
+        overall_total_price = 0.0
+
         for order in orders:
             products = order.order_products.all()
-            products_str = ",".join([
+            products_str = ", ".join([
                 f"{p.quantity}-{p.product.product.name}"
                 for p in products
-                if getattr(p, "product", None)
-                and getattr(p.product, "product", None)
+                if getattr(p, "product", None) and getattr(p.product, "product", None)
             ])
 
             total = float(order.total_amount or 0)
-            prepaid = float(order.prepaid_amount or 0)
-            product_price = max(0.0, total - prepaid) if prepaid > 0 else total
-            product_price_formatted = (
-                int(product_price)
-                if product_price.is_integer()
-                else round(product_price, 2)
+            overall_total_price += total
+
+            total_price_formatted = (
+                int(total) if total.is_integer() else round(total, 2)
             )
 
+            prepaid = float(order.prepaid_amount or 0)
             if order.payment_method == "Office Visit":
-                payment_type = "Office Visit"
-            elif prepaid > 0 and (total - prepaid) == 0:
-                payment_type = "pre-paid"
+                payment_status = "Office Visit"
+            elif prepaid > 0 and (total - prepaid) <= 0:
+                payment_status = "Prepaid"
             elif order.payment_method:
-                payment_type = order.payment_method
+                payment_status = order.payment_method
+                if prepaid > 0 and order.payment_method != "Prepaid":
+                    prepaid_val = (
+                        int(prepaid) if prepaid.is_integer() else round(prepaid, 2)
+                    )
+                    payment_status += f" (Prepaid: {prepaid_val})"
             else:
-                payment_type = "cashOnDelivery"
+                payment_status = "Cash on Delivery"
 
-            address_parts = []
-            if order.delivery_address and order.delivery_address.strip():
-                address_parts.append(order.delivery_address.strip())
-            if order.city and order.city.strip():
-                address_parts.append(order.city.strip())
-            full_address = ", ".join(address_parts)
+            created_at_str = (
+                timezone.localtime(order.created_at).strftime("%Y-%m-%d %H:%M:%S")
+                if order.created_at
+                else ""
+            )
+            franchise_name = order.franchise.name if order.franchise else ""
 
             writer.writerow([
+                created_at_str,
+                order.order_code or str(order.id),
+                franchise_name,
                 order.full_name or "",
                 order.phone_number or "",
                 order.alternate_phone_number or "",
-                order.location.name if order.location else "",
+                order.city or "",
+                order.delivery_address or "",
                 order.landmark or "",
-                full_address,
-                order.order_code or str(order.id),
+                order.location.name if order.location else "",
+                order.delivery_type or "",
                 products_str,
-                product_price_formatted,
-                payment_type,
+                total_price_formatted,
+                payment_status,
+                order.order_status or "",
                 order.remarks or "",
             ])
 
-        return response
+        # Write total amount of the total price after 1 row gap (side by side)
+        total_sum_formatted = (
+            int(overall_total_price)
+            if overall_total_price.is_integer()
+            else round(overall_total_price, 2)
+        )
+        writer.writerow([])
+        writer.writerow(["Total Amount", total_sum_formatted])
 
+        return response

@@ -48,7 +48,7 @@ urlpatterns = [
         name="export-selected-orders",
     ),
     path(
-        "export-orders/",
+        "export-orders-without-officevisit/",
         OrderExportWithoutOfficeVisitView.as_view(),
         name="export-orders-without-office-visit",
     ),

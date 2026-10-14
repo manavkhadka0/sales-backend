@@ -2148,11 +2148,33 @@ class OrderExportWithoutOfficeVisitView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        return OrderExportService.export_general_csv(orders, filename_prefix="orders")
+        # Resolve franchise name if filtered by franchise
+        franchise_val = data.get("franchise") or data.get("franchise_id")
+        franchise_name = ""
+        if franchise_val:
+            val_str = str(franchise_val).strip()
+            if val_str.isdigit():
+                f_obj = Franchise.objects.filter(id=int(val_str)).first()
+                franchise_name = f_obj.name if f_obj else f"franchise_{val_str}"
+            else:
+                f_obj = Franchise.objects.filter(name__icontains=val_str).first()
+                franchise_name = f_obj.name if f_obj else val_str
+        else:
+            distinct_franchises = list(
+                orders
+                .values_list("franchise__name", flat=True)
+                .exclude(franchise__isnull=True)
+                .distinct()
+            )
+            if len(distinct_franchises) == 1 and distinct_franchises[0]:
+                franchise_name = distinct_franchises[0]
+
+        return OrderExportService.export_general_csv(
+            orders, filename_prefix="orders", franchise_name=franchise_name
+        )
 
     def get(self, request, *args, **kwargs):
         return self._export(request, request.query_params)
 
     def post(self, request, *args, **kwargs):
         return self._export(request, request.data)
-
