@@ -287,6 +287,7 @@ class OrderAdmin(ModelAdmin, ImportExportModelAdmin):
     list_display = [
         "full_name",
         "created_at",
+        "updated_at",
         "get_sales_person_name",
         "franchise__name",
         "product_name",
