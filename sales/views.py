@@ -652,8 +652,11 @@ class OrderListCreateView(generics.ListCreateAPIView):
                         "Returned By PicknDrop",
                         "Sent to Daraz",
                         "Sent to PicknDrop",
+                        "Sent to Pathao",
                         "Return By Dash",
+                        "Returned By Dash",
                         "Returned By Daraz",
+                        "Returned By Pathao",
                     ]
                 )
             )
@@ -671,8 +674,11 @@ class OrderListCreateView(generics.ListCreateAPIView):
                         "Returned By PicknDrop",
                         "Sent to Daraz",
                         "Sent to PicknDrop",
+                        "Sent to Pathao",
                         "Return By Dash",
+                        "Returned By Dash",
                         "Returned By Daraz",
+                        "Returned By Pathao",
                     ]
                 )
             )
@@ -712,6 +718,8 @@ class OrderListCreateView(generics.ListCreateAPIView):
                     "Indrive",
                     "Returned By PicknDrop",
                     "Returned By YDM",
+                    "Returned By Daraz",
+                    "Returned By Pathao",
                 ]
             )
 
@@ -1017,6 +1025,7 @@ class OrderUpdateView(generics.UpdateAPIView):
             "Returned By YDM",
             "Returned By PicknDrop",
             "Returned By Daraz",
+            "Returned By Pathao",
         ]
 
         is_returning = new_status in return_statuses
@@ -1028,8 +1037,6 @@ class OrderUpdateView(generics.UpdateAPIView):
                     restore_order_inventory(order, request.user)
                 else:
                     deduct_order_inventory(order, request.user)
-
-        return response
 
         return response
 
@@ -1599,6 +1606,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 "Sent to YDM",
                 "Sent to Daraz",
                 "Sent to PicknDrop",
+                "Sent to Pathao",
                 "Delivered",
                 "Indrive",
                 "Out For Delivery",
@@ -1612,6 +1620,7 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                 "Returned By YDM",
                 "Returned By PicknDrop",
                 "Returned By Daraz",
+                "Returned By Pathao",
             ]
 
             old_status_sync = instance.order_status
@@ -1660,32 +1669,6 @@ class OrderDetailUpdateView(generics.RetrieveUpdateAPIView):
                         # Moving from Return/Cancelled -> Any other stage
                         # Deduct CURRENT products from stock
                         deduct_order_inventory(order, request.user)
-
-            # Update promo code usage if changed and provided
-            if (
-                "promo_code" in modified_data
-                and instance.promo_code != promo_code_instance
-            ):
-                if instance.promo_code:
-                    # Decrease usage count of old promo code
-                    instance.promo_code.times_used -= 1
-                    instance.promo_code.save()
-
-                # Increase usage count of new promo code
-                promo_code_instance.times_used += 1
-                promo_code_instance.save()
-
-                # Update order's promo code
-                instance.promo_code = promo_code_instance
-                instance.save()
-
-            return Response(serializer.data)
-
-        except Exception as e:
-            return Response(
-                {"error": f"Failed to update order: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
             # Update promo code usage if changed and provided
             if (

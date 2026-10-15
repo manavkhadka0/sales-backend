@@ -162,6 +162,10 @@ def get_franchise_order_stats(request, franchise_id):
                 "Indrive",
                 "Returned By PicknDrop",
                 "Sent to PicknDrop",
+                "Sent to YDM",
+                "Returned By YDM",
+                "Sent to Pathao",
+                "Returned By Pathao",
                 "Returned By Dash",
                 "Returned By Daraz",
             ]
@@ -252,6 +256,10 @@ def get_complete_dashboard_stats(request, franchise_id):
             "Indrive",
             "Returned By PicknDrop",
             "Sent to PicknDrop",
+            "Sent to YDM",
+            "Returned By YDM",
+            "Sent to Pathao",
+            "Returned By Pathao",
             "Returned By Dash",
             "Returned By Daraz",
         ]
@@ -530,7 +538,11 @@ def get_total_pending_cod(request, franchise_id):
             "Indrive",
             "Returned By PicknDrop",
             "Sent to PicknDrop",
+            "Sent to YDM",
             "Returned By Dash",
+            "Sent to Pathao",
+            "Returned By Pathao",
+            "Returned By YDM",
             "Returned By Daraz",
         ]
 
@@ -940,6 +952,10 @@ def daily_delivered_orders(request, franchise_id):
         "Indrive",
         "Returned By PicknDrop",
         "Sent to PicknDrop",
+        "Sent to YDM",
+        "Sent to Pathao",
+        "Returned By Pathao",
+        "Returned By YDM",
         "Returned By Dash",
         "Returned By Daraz",
     ]
@@ -2250,6 +2266,10 @@ def calculate_dashboard_pending_cod(franchise_id):
         "Indrive",
         "Returned By PicknDrop",
         "Sent to PicknDrop",
+        "Sent to YDM",
+        "Sent to Pathao",
+        "Returned By Pathao",
+        "Returned By YDM",
         "Returned By Dash",
         "Returned By Daraz",
     ]
@@ -3038,4 +3058,3 @@ class YdmLogisticsSettingView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
-

@@ -161,6 +161,8 @@ def resolve_order_logistics_and_status(logistics, order_status, current_status):
         resolved_logistics = "Daraz"
     elif order_status == "Sent to PicknDrop":
         resolved_logistics = "PicknDrop"
+    elif order_status == "Sent to Pathao":
+        resolved_logistics = "Pathao"
 
     return resolved_logistics, resolved_status
 
@@ -330,6 +332,8 @@ def apply_force_order_remarks(
                 "Indrive",
                 "Returned By PicknDrop",
                 "Returned By YDM",
+                "Returned By Daraz",
+                "Returned By Pathao",
             ]
         )
         .only("id", "remarks")

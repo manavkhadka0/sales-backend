@@ -9,6 +9,7 @@ ACTIVE_ORDER_STATUSES = [
     "Sent to YDM",
     "Sent to Daraz",
     "Sent to PicknDrop",
+    "Sent to Pathao",
     "Processing",
 ]
 
@@ -20,5 +21,6 @@ EXCLUDED_STATUSES = [
     "Return Pending",
     "Returned By PicknDrop",
     "Returned By YDM",
+    "Returned By Pathao",
     "Returned By Daraz",
 ]
