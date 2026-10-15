@@ -13,6 +13,7 @@ from .views import (
     FranchiseHistoricalOrderView,
     FranchiseInventoryListView,
     FranchiseOrdersListView,
+    InventoryChangeLogExportView,
     InventoryChangeLogView,
     InventoryCheckView,
     InventoryDateSnapshotView,
@@ -140,5 +141,10 @@ urlpatterns = [
         "export-payment-screenshots/",
         ExportPaymentScreenshotsView.as_view(),
         name="export-payment-screenshots",
+    ),
+    path(
+        "inventory-change-log/export/",
+        InventoryChangeLogExportView.as_view(),
+        name="inventory-change-log-export",
     ),
 ]

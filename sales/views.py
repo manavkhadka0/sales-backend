@@ -24,7 +24,7 @@ from rest_framework import filters as rest_filters
 from rest_framework import generics, serializers, status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -34,6 +34,7 @@ from logistics.models import AssignOrder, OrderChangeLog
 from logistics.utils import create_order_log
 
 from .constants import EXCLUDED_STATUSES
+from .filters import InventoryChangeLogExportFilter
 from .models import (
     Commission,
     DatabaseMode,
@@ -51,6 +52,7 @@ from .serializers import (
     BulkOrderDateUpdateSerializer,
     ExportPaymentScreenshotsSerializer,
     FileUploadSerializer,
+    InventoryChangeLogExportSerializer,
     InventoryChangeLogSerializer,
     InventoryRequestSerializer,
     InventorySerializer,
@@ -62,6 +64,7 @@ from .serializers import (
     PromoCodeSerializer,
     RawMaterialSerializer,
 )
+from .services.inventory_export_service import InventoryChangeLogExportService
 from .utils import (
     append_force_order_remark,
     append_order_status_comments,
@@ -2691,3 +2694,65 @@ class ExportPaymentScreenshotsView(generics.GenericAPIView):
         response = HttpResponse(buffer.getvalue(), content_type="application/zip")
         response["Content-Disposition"] = f'attachment; filename="{zip_filename}"'
         return response
+
+
+class InventoryChangeLogExportView(generics.GenericAPIView):
+    """
+    API endpoint to export InventoryChangeLog data for 'add' and 'update' actions only.
+    Filters:
+      - franchise: Franchise ID or Franchise name
+      - start_date: Start date (YYYY-MM-DD)
+      - end_date: End date (YYYY-MM-DD)
+    Exports in Excel (.xlsx) format.
+    """
+
+    permission_classes = [AllowAny]
+    serializer_class = InventoryChangeLogExportSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = InventoryChangeLogExportFilter
+
+    def get_queryset(self):
+        queryset = (
+            InventoryChangeLog.objects
+            .filter(action__in=["add", "update"])
+            .select_related(
+                "inventory",
+                "inventory__product",
+                "inventory__franchise",
+                "inventory__distributor",
+                "inventory__factory",
+                "user",
+            )
+            .order_by("-changed_at")
+        )
+
+        return queryset
+
+    # def get(self, request, *args, **kwargs):
+    #     return self._export(request, request.query_params)
+
+    def post(self, request, *args, **kwargs):
+        data = request.data if request.data else request.query_params
+        return self._export(request, data)
+
+    def _export(self, request, raw_data):
+        serializer = self.get_serializer(data=raw_data)
+        serializer.is_valid(raise_exception=True)
+        validated_data = serializer.validated_data
+
+        queryset = self.get_queryset()
+
+        if validated_data.get("franchise"):
+            queryset = queryset.filter(inventory__franchise=validated_data["franchise"])
+        if validated_data.get("start_date"):
+            queryset = queryset.filter(changed_at__date__gte=validated_data["start_date"])
+        if validated_data.get("end_date"):
+            queryset = queryset.filter(changed_at__date__lte=validated_data["end_date"])
+
+        if not queryset.exists():
+            return Response(
+                {"detail": "No inventory change logs found for the selected criteria."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return InventoryChangeLogExportService.export_to_excel(queryset)

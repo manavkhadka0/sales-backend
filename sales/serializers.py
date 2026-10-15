@@ -527,3 +527,31 @@ class ExportPaymentScreenshotsSerializer(serializers.Serializer):
                 "start_date": "start_date cannot be after end_date."
             })
         return attrs
+
+
+class InventoryChangeLogExportSerializer(serializers.Serializer):
+    franchise = serializers.PrimaryKeyRelatedField(
+        queryset=Franchise.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text="Select franchise to filter inventory change logs for.",
+    )
+    start_date = serializers.DateField(
+        required=False,
+        allow_null=True,
+        help_text="Start date for filtering change logs (YYYY-MM-DD).",
+    )
+    end_date = serializers.DateField(
+        required=False,
+        allow_null=True,
+        help_text="End date for filtering change logs (YYYY-MM-DD).",
+    )
+
+    def validate(self, attrs):
+        start_date = attrs.get("start_date")
+        end_date = attrs.get("end_date")
+        if start_date and end_date and start_date > end_date:
+            raise serializers.ValidationError({
+                "start_date": "start_date cannot be after end_date."
+            })
+        return attrs
