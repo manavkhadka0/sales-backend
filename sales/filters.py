@@ -30,7 +30,17 @@ class InventoryChangeLogExportFilter(django_filters.FilterSet):
         field_name="inventory__franchise",
         label="Franchise",
     )
+    ordering = django_filters.OrderingFilter(
+        fields=(
+            ("inventory__product__name", "product_name"),
+            ("changed_at", "changed_at"),
+        ),
+        field_labels={
+            "product_name": "Product Name",
+            "changed_at": "Date",
+        },
+    )
 
     class Meta:
         model = InventoryChangeLog
-        fields = ["start_date", "end_date", "franchise"]
+        fields = ["start_date", "end_date", "franchise", "ordering"]

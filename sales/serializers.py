@@ -547,6 +547,31 @@ class InventoryChangeLogExportSerializer(serializers.Serializer):
         help_text="End date for filtering change logs (YYYY-MM-DD).",
     )
 
+    ordering = serializers.ChoiceField(
+        choices=[
+            ("product_name", "Product Name (A-Z)"),
+            ("-product_name", "Product Name (Z-A)"),
+            ("-changed_at", "Date (Newest First)"),
+            ("changed_at", "Date (Oldest First)"),
+        ],
+        default="product_name",
+        required=False,
+        help_text="Order logs by: product_name (A-Z), -product_name (Z-A), -changed_at (newest), changed_at (oldest).",
+    )
+
+    def to_internal_value(self, data):
+        if hasattr(data, "copy"):
+            data = data.copy()
+        elif hasattr(data, "dict"):
+            data = data.dict()
+        else:
+            data = dict(data)
+
+        if "order_by" in data and "ordering" not in data:
+            data["ordering"] = data["order_by"]
+
+        return super().to_internal_value(data)
+
     def validate(self, attrs):
         start_date = attrs.get("start_date")
         end_date = attrs.get("end_date")

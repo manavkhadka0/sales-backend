@@ -12,7 +12,7 @@ from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import F, Q, Sum
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
@@ -2723,7 +2723,7 @@ class InventoryChangeLogExportView(generics.GenericAPIView):
                 "inventory__factory",
                 "user",
             )
-            .order_by("-changed_at")
+            .order_by("inventory__product__name", "-changed_at")
         )
 
         return queryset
@@ -2745,9 +2745,29 @@ class InventoryChangeLogExportView(generics.GenericAPIView):
         if validated_data.get("franchise"):
             queryset = queryset.filter(inventory__franchise=validated_data["franchise"])
         if validated_data.get("start_date"):
-            queryset = queryset.filter(changed_at__date__gte=validated_data["start_date"])
+            queryset = queryset.filter(
+                changed_at__date__gte=validated_data["start_date"]
+            )
         if validated_data.get("end_date"):
             queryset = queryset.filter(changed_at__date__lte=validated_data["end_date"])
+
+        ordering = validated_data.get("ordering", "product_name")
+        if ordering == "product_name":
+            queryset = queryset.order_by(
+                F("inventory__product__name").asc(nulls_last=True), "-changed_at"
+            )
+        elif ordering == "-product_name":
+            queryset = queryset.order_by(
+                F("inventory__product__name").desc(nulls_last=True), "-changed_at"
+            )
+        elif ordering == "changed_at":
+            queryset = queryset.order_by(
+                "changed_at", F("inventory__product__name").asc(nulls_last=True)
+            )
+        elif ordering == "-changed_at":
+            queryset = queryset.order_by(
+                "-changed_at", F("inventory__product__name").asc(nulls_last=True)
+            )
 
         if not queryset.exists():
             return Response(
