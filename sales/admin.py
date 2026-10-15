@@ -336,7 +336,17 @@ class InventoryAdmin(ModelAdmin):
 
 
 class InventoryChangeLogAdmin(ModelAdmin):
-    list_filter = ["changed_at"]
+    list_display = [
+        "id",
+        "inventory",
+        "action",
+        "old_quantity",
+        "new_quantity",
+        "user",
+        "changed_at",
+    ]
+    list_filter = ["action", "inventory__franchise", "changed_at"]
+    search_fields = ["inventory__product__name", "user__first_name", "user__email"]
 
 
 class InventoryRequestItemInline(TabularInline):
