@@ -34,7 +34,7 @@ from logistics.models import AssignOrder, OrderChangeLog
 from logistics.utils import create_order_log
 
 from .constants import EXCLUDED_STATUSES
-from .filters import InventoryChangeLogExportFilter
+from .filters import InventoryChangeLogExportFilter, UserInventoryLogFilter
 from .models import (
     Commission,
     DatabaseMode,
@@ -1350,17 +1350,6 @@ class AllProductsListView(generics.ListCreateAPIView):
         return super().list(request, *args, **kwargs)
 
 
-class UserInventoryLogFilter(django_filters.FilterSet):
-    changed_at = django_filters.CharFilter(
-        field_name="changed_at", lookup_expr="icontains"
-    )
-    action = django_filters.CharFilter(field_name="action", lookup_expr="icontains")
-
-    class Meta:
-        model = InventoryChangeLog
-        fields = ["changed_at", "action"]
-
-
 class UserInventoryLogs(generics.ListAPIView):
     serializer_class = InventoryChangeLogSerializer
     pagination_class = CustomPagination
@@ -1370,16 +1359,25 @@ class UserInventoryLogs(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        base_queryset = InventoryChangeLog.objects.select_related(
+            "inventory",
+            "inventory__product",
+            "inventory__factory",
+            "inventory__distributor",
+            "inventory__franchise",
+            "user",
+        ).order_by("-id")
 
         if user.role == "SalesPerson":
-            return InventoryChangeLog.objects.filter(user=user).order_by("-id")
+            return base_queryset.filter(user=user)
 
         owner, owner_field = get_owner_by_role(user)
         if owner and owner_field:
             filter_kwargs = {f"inventory__{owner_field}": owner}
-            return InventoryChangeLog.objects.filter(**filter_kwargs).order_by("-id")
+            return base_queryset.filter(**filter_kwargs)
 
         return InventoryChangeLog.objects.none()
+
 
 
 class RawMaterialListView(generics.ListAPIView):
