@@ -813,24 +813,44 @@ PRODUCT_PRICE_MAP = {
     "hair oil sachet": 990,
     "shampoo bottle": 1000,
     "shampoo sachet": 100,
+    "yachu facewash": 300,
+    "facewash": 300,
+    "face wash": 300,
+    "yachu body lotion": 900,
+    "body lotion": 900,
+    "yachu brightning cream": 990,
+    "yachu brightening cream": 990,
+    "brightning cream": 990,
+    "brightening cream": 990,
 }
 
 OIL_TARGET_PRICES = [2500, 2250, 2200, 2150, 2050, 2000]
 SHAMPOO_TARGET_PRICES = [1000, 900, 850, 830, 780]
 OIL_SACHET_TARGET_PRICES = [990]
 SHAMPOO_SACHET_TARGET_PRICES = [100]
+FACEWASH_TARGET_PRICES = [300]
+BODY_LOTION_TARGET_PRICES = [900]
+BRIGHTENING_CREAM_TARGET_PRICES = [990]
 
 
 def is_oil_bottle(product_name: str) -> bool:
-    """Check if the product is an oil bottle (excludes sachets)."""
+    """Check if the product is an oil bottle (excludes sachets, shampoo, facewash, lotion, cream)."""
     if not product_name:
         return False
     name = product_name.lower().strip()
-    if "sachet" in name:
+    if any(
+        k in name
+        for k in [
+            "sachet",
+            "shampoo",
+            "facewash",
+            "face wash",
+            "lotion",
+            "cream",
+        ]
+    ):
         return False
-    if any(k in name for k in ["baldness", "hairfall", "dandruff", "yachu"]):
-        return True
-    if "oil" in name and "bottle" in name:
+    if any(k in name for k in ["baldness", "hairfall", "dandruff", "oil", "yachu"]):
         return True
     return False
 
@@ -861,6 +881,30 @@ def is_shampoo_sachet(product_name: str) -> bool:
     return "sachet" in name and "shampoo" in name
 
 
+def is_facewash(product_name: str) -> bool:
+    """Check if the product is a facewash."""
+    if not product_name:
+        return False
+    name = product_name.lower().strip()
+    return "facewash" in name or "face wash" in name
+
+
+def is_body_lotion(product_name: str) -> bool:
+    """Check if the product is a body lotion."""
+    if not product_name:
+        return False
+    name = product_name.lower().strip()
+    return "body lotion" in name or "lotion" in name
+
+
+def is_brightening_cream(product_name: str) -> bool:
+    """Check if the product is a brightening cream."""
+    if not product_name:
+        return False
+    name = product_name.lower().strip()
+    return "brightning" in name or "brightening" in name or "cream" in name
+
+
 def match_target_price(
     price: float, target_prices: list, tolerance: float = 20.0
 ) -> int:
@@ -884,6 +928,9 @@ def get_product_unit_price(product_name: str) -> float:
     - Hair Oil Sachet: 990
     - Shampoo Bottle: 1000
     - Shampoo Sachet: 100
+    - Yachu Facewash: 300
+    - Yachu Body Lotion: 900
+    - Yachu Brightening Cream: 990
     """
     if not product_name:
         return 0.0
@@ -894,6 +941,16 @@ def get_product_unit_price(product_name: str) -> float:
             return float(price)
 
     # Fallback keyword checks for variations
+    if "facewash" in name_lower or "face wash" in name_lower:
+        return 300.0
+    if "body lotion" in name_lower or "lotion" in name_lower:
+        return 900.0
+    if (
+        "brightning" in name_lower
+        or "brightening" in name_lower
+        or "cream" in name_lower
+    ):
+        return 990.0
     if "sachet" in name_lower:
         if "shampoo" in name_lower:
             return 100.0
@@ -1000,7 +1057,7 @@ def export_orders_csv_api(request):
         overall_discount_amount = 0
         overall_delivery_charge = 0
 
-        # Track bottle and sachet sales by price
+        # Track bottle, sachet, facewash, body lotion, and brightening cream sales by price
         oil_sold_counts = defaultdict(int)
         oil_cancelled_counts = defaultdict(int)
         shampoo_sold_counts = defaultdict(int)
@@ -1009,6 +1066,12 @@ def export_orders_csv_api(request):
         oil_sachet_cancelled_counts = defaultdict(int)
         shampoo_sachet_sold_counts = defaultdict(int)
         shampoo_sachet_cancelled_counts = defaultdict(int)
+        facewash_sold_counts = defaultdict(int)
+        facewash_cancelled_counts = defaultdict(int)
+        body_lotion_sold_counts = defaultdict(int)
+        body_lotion_cancelled_counts = defaultdict(int)
+        brightening_cream_sold_counts = defaultdict(int)
+        brightening_cream_cancelled_counts = defaultdict(int)
 
         # Write data rows
         for order in filtered_orders:
@@ -1167,6 +1230,39 @@ def export_orders_csv_api(request):
                         shampoo_sachet_cancelled_counts[matched_price] += qty
                     else:
                         shampoo_sachet_sold_counts[matched_price] += qty
+                    price_breakdown_items.append(f"{qty}-{p_name} @ {matched_price}")
+
+                elif is_facewash(p_name):
+                    raw_price = get_product_unit_price(p_name) * ratio
+                    matched_price = match_target_price(
+                        raw_price, FACEWASH_TARGET_PRICES, tolerance=10.0
+                    )
+                    if is_cancelled:
+                        facewash_cancelled_counts[matched_price] += qty
+                    else:
+                        facewash_sold_counts[matched_price] += qty
+                    price_breakdown_items.append(f"{qty}-{p_name} @ {matched_price}")
+
+                elif is_body_lotion(p_name):
+                    raw_price = get_product_unit_price(p_name) * ratio
+                    matched_price = match_target_price(
+                        raw_price, BODY_LOTION_TARGET_PRICES, tolerance=15.0
+                    )
+                    if is_cancelled:
+                        body_lotion_cancelled_counts[matched_price] += qty
+                    else:
+                        body_lotion_sold_counts[matched_price] += qty
+                    price_breakdown_items.append(f"{qty}-{p_name} @ {matched_price}")
+
+                elif is_brightening_cream(p_name):
+                    raw_price = get_product_unit_price(p_name) * ratio
+                    matched_price = match_target_price(
+                        raw_price, BRIGHTENING_CREAM_TARGET_PRICES, tolerance=15.0
+                    )
+                    if is_cancelled:
+                        brightening_cream_cancelled_counts[matched_price] += qty
+                    else:
+                        brightening_cream_sold_counts[matched_price] += qty
                     price_breakdown_items.append(f"{qty}-{p_name} @ {matched_price}")
 
                 else:
@@ -1468,6 +1564,184 @@ def export_orders_csv_api(request):
             total_shampoo_sachet_sold,
             total_shampoo_sachet_cancelled,
             total_shampoo_sachet_sold + total_shampoo_sachet_cancelled,
+        ])
+
+        # Add Yachu Facewash Sold By Price section
+        writer.writerow([])  # Empty row for spacing
+        writer.writerow(["Yachu Facewash Sold By Price"])
+        writer.writerow([
+            "Price",
+            "Quantity Sold",
+            "Quantity Cancelled",
+            "Total Quantity",
+        ])
+        total_facewash_sold = sum(facewash_sold_counts.values())
+        total_facewash_cancelled = sum(facewash_cancelled_counts.values())
+
+        std_facewash_sold = facewash_sold_counts.get(300, 0)
+        std_facewash_cancelled = facewash_cancelled_counts.get(300, 0)
+        writer.writerow([
+            "300 (Standard)",
+            std_facewash_sold,
+            std_facewash_cancelled,
+            std_facewash_sold + std_facewash_cancelled,
+        ])
+
+        free_facewash_sold = facewash_sold_counts.get("Free", 0)
+        free_facewash_cancelled = facewash_cancelled_counts.get("Free", 0)
+        if free_facewash_sold > 0 or free_facewash_cancelled > 0:
+            writer.writerow([
+                "Free",
+                free_facewash_sold,
+                free_facewash_cancelled,
+                free_facewash_sold + free_facewash_cancelled,
+            ])
+
+        extra_facewash_prices = sorted(
+            [
+                p
+                for p in set(facewash_sold_counts.keys())
+                | set(facewash_cancelled_counts.keys())
+                if p not in [300, "Free"]
+            ],
+            reverse=True,
+        )
+        for price in extra_facewash_prices:
+            sold_qty = facewash_sold_counts.get(price, 0)
+            cancelled_qty = facewash_cancelled_counts.get(price, 0)
+            if sold_qty > 0 or cancelled_qty > 0:
+                writer.writerow([
+                    price,
+                    sold_qty,
+                    cancelled_qty,
+                    sold_qty + cancelled_qty,
+                ])
+
+        writer.writerow([
+            "Total Yachu Facewash",
+            total_facewash_sold,
+            total_facewash_cancelled,
+            total_facewash_sold + total_facewash_cancelled,
+        ])
+
+        # Add Yachu Body Lotion Sold By Price section
+        writer.writerow([])  # Empty row for spacing
+        writer.writerow(["Yachu Body Lotion Sold By Price"])
+        writer.writerow([
+            "Price",
+            "Quantity Sold",
+            "Quantity Cancelled",
+            "Total Quantity",
+        ])
+        total_body_lotion_sold = sum(body_lotion_sold_counts.values())
+        total_body_lotion_cancelled = sum(body_lotion_cancelled_counts.values())
+
+        std_body_lotion_sold = body_lotion_sold_counts.get(900, 0)
+        std_body_lotion_cancelled = body_lotion_cancelled_counts.get(900, 0)
+        writer.writerow([
+            "900 (Standard)",
+            std_body_lotion_sold,
+            std_body_lotion_cancelled,
+            std_body_lotion_sold + std_body_lotion_cancelled,
+        ])
+
+        free_body_lotion_sold = body_lotion_sold_counts.get("Free", 0)
+        free_body_lotion_cancelled = body_lotion_cancelled_counts.get("Free", 0)
+        if free_body_lotion_sold > 0 or free_body_lotion_cancelled > 0:
+            writer.writerow([
+                "Free",
+                free_body_lotion_sold,
+                free_body_lotion_cancelled,
+                free_body_lotion_sold + free_body_lotion_cancelled,
+            ])
+
+        extra_body_lotion_prices = sorted(
+            [
+                p
+                for p in set(body_lotion_sold_counts.keys())
+                | set(body_lotion_cancelled_counts.keys())
+                if p not in [900, "Free"]
+            ],
+            reverse=True,
+        )
+        for price in extra_body_lotion_prices:
+            sold_qty = body_lotion_sold_counts.get(price, 0)
+            cancelled_qty = body_lotion_cancelled_counts.get(price, 0)
+            if sold_qty > 0 or cancelled_qty > 0:
+                writer.writerow([
+                    price,
+                    sold_qty,
+                    cancelled_qty,
+                    sold_qty + cancelled_qty,
+                ])
+
+        writer.writerow([
+            "Total Yachu Body Lotion",
+            total_body_lotion_sold,
+            total_body_lotion_cancelled,
+            total_body_lotion_sold + total_body_lotion_cancelled,
+        ])
+
+        # Add Yachu Brightening Cream Sold By Price section
+        writer.writerow([])  # Empty row for spacing
+        writer.writerow(["Yachu Brightening Cream Sold By Price"])
+        writer.writerow([
+            "Price",
+            "Quantity Sold",
+            "Quantity Cancelled",
+            "Total Quantity",
+        ])
+        total_brightening_cream_sold = sum(brightening_cream_sold_counts.values())
+        total_brightening_cream_cancelled = sum(
+            brightening_cream_cancelled_counts.values()
+        )
+
+        std_brightening_cream_sold = brightening_cream_sold_counts.get(990, 0)
+        std_brightening_cream_cancelled = brightening_cream_cancelled_counts.get(990, 0)
+        writer.writerow([
+            "990 (Standard)",
+            std_brightening_cream_sold,
+            std_brightening_cream_cancelled,
+            std_brightening_cream_sold + std_brightening_cream_cancelled,
+        ])
+
+        free_brightening_cream_sold = brightening_cream_sold_counts.get("Free", 0)
+        free_brightening_cream_cancelled = brightening_cream_cancelled_counts.get(
+            "Free", 0
+        )
+        if free_brightening_cream_sold > 0 or free_brightening_cream_cancelled > 0:
+            writer.writerow([
+                "Free",
+                free_brightening_cream_sold,
+                free_brightening_cream_cancelled,
+                free_brightening_cream_sold + free_brightening_cream_cancelled,
+            ])
+
+        extra_brightening_cream_prices = sorted(
+            [
+                p
+                for p in set(brightening_cream_sold_counts.keys())
+                | set(brightening_cream_cancelled_counts.keys())
+                if p not in [990, "Free"]
+            ],
+            reverse=True,
+        )
+        for price in extra_brightening_cream_prices:
+            sold_qty = brightening_cream_sold_counts.get(price, 0)
+            cancelled_qty = brightening_cream_cancelled_counts.get(price, 0)
+            if sold_qty > 0 or cancelled_qty > 0:
+                writer.writerow([
+                    price,
+                    sold_qty,
+                    cancelled_qty,
+                    sold_qty + cancelled_qty,
+                ])
+
+        writer.writerow([
+            "Total Yachu Brightening Cream",
+            total_brightening_cream_sold,
+            total_brightening_cream_cancelled,
+            total_brightening_cream_sold + total_brightening_cream_cancelled,
         ])
 
         # Add applied filters information
