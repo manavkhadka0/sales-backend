@@ -1315,434 +1315,456 @@ def export_orders_csv_api(request):
         ])
 
         # Add Oil Bottles Sold By Price section
-        writer.writerow([])  # Empty row for spacing
-        writer.writerow(["Oil Bottles Sold By Price"])
-        writer.writerow([
-            "Price",
-            "Quantity Sold",
-            "Quantity Cancelled",
-            "Total Quantity",
-        ])
         total_oil_sold = sum(oil_sold_counts.values())
         total_oil_cancelled = sum(oil_cancelled_counts.values())
-
-        for price in [2250, 2200, 2150, 2050, 2000]:
-            sold_qty = oil_sold_counts.get(price, 0)
-            cancelled_qty = oil_cancelled_counts.get(price, 0)
+        if (total_oil_sold + total_oil_cancelled) > 0:
+            writer.writerow([])  # Empty row for spacing
+            writer.writerow(["Oil Bottles Sold By Price"])
             writer.writerow([
-                price,
-                sold_qty,
-                cancelled_qty,
-                sold_qty + cancelled_qty,
+                "Price",
+                "Quantity Sold",
+                "Quantity Cancelled",
+                "Total Quantity",
             ])
 
-        std_oil_sold = oil_sold_counts.get(2500, 0)
-        std_oil_cancelled = oil_cancelled_counts.get(2500, 0)
-        writer.writerow([
-            "2500 (Standard)",
-            std_oil_sold,
-            std_oil_cancelled,
-            std_oil_sold + std_oil_cancelled,
-        ])
+            for price in [2250, 2200, 2150, 2050, 2000]:
+                sold_qty = oil_sold_counts.get(price, 0)
+                cancelled_qty = oil_cancelled_counts.get(price, 0)
+                if sold_qty > 0 or cancelled_qty > 0:
+                    writer.writerow([
+                        price,
+                        sold_qty,
+                        cancelled_qty,
+                        sold_qty + cancelled_qty,
+                    ])
 
-        # Write any additional prices that appeared in orders, sorted descending by price
-        extra_oil_prices = sorted(
-            [
-                p
-                for p in set(oil_sold_counts.keys()) | set(oil_cancelled_counts.keys())
-                if p not in [2250, 2200, 2150, 2050, 2000, 2500, "Free"]
-            ],
-            reverse=True,
-        )
-        for price in extra_oil_prices:
-            sold_qty = oil_sold_counts.get(price, 0)
-            cancelled_qty = oil_cancelled_counts.get(price, 0)
-            if sold_qty > 0 or cancelled_qty > 0:
+            std_oil_sold = oil_sold_counts.get(2500, 0)
+            std_oil_cancelled = oil_cancelled_counts.get(2500, 0)
+            if std_oil_sold > 0 or std_oil_cancelled > 0:
                 writer.writerow([
-                    price,
-                    sold_qty,
-                    cancelled_qty,
-                    sold_qty + cancelled_qty,
+                    "2500 (Standard)",
+                    std_oil_sold,
+                    std_oil_cancelled,
+                    std_oil_sold + std_oil_cancelled,
                 ])
 
-        free_oil_sold = oil_sold_counts.get("Free", 0)
-        free_oil_cancelled = oil_cancelled_counts.get("Free", 0)
-        if free_oil_sold > 0 or free_oil_cancelled > 0:
-            writer.writerow([
-                "Free",
-                free_oil_sold,
-                free_oil_cancelled,
-                free_oil_sold + free_oil_cancelled,
-            ])
+            # Write any additional prices that appeared in orders, sorted descending by price
+            extra_oil_prices = sorted(
+                [
+                    p
+                    for p in set(oil_sold_counts.keys())
+                    | set(oil_cancelled_counts.keys())
+                    if p not in [2250, 2200, 2150, 2050, 2000, 2500, "Free"]
+                ],
+                reverse=True,
+            )
+            for price in extra_oil_prices:
+                sold_qty = oil_sold_counts.get(price, 0)
+                cancelled_qty = oil_cancelled_counts.get(price, 0)
+                if sold_qty > 0 or cancelled_qty > 0:
+                    writer.writerow([
+                        price,
+                        sold_qty,
+                        cancelled_qty,
+                        sold_qty + cancelled_qty,
+                    ])
 
-        writer.writerow([
-            "Total Oil Bottles",
-            total_oil_sold,
-            total_oil_cancelled,
-            total_oil_sold + total_oil_cancelled,
-        ])
+            free_oil_sold = oil_sold_counts.get("Free", 0)
+            free_oil_cancelled = oil_cancelled_counts.get("Free", 0)
+            if free_oil_sold > 0 or free_oil_cancelled > 0:
+                writer.writerow([
+                    "Free",
+                    free_oil_sold,
+                    free_oil_cancelled,
+                    free_oil_sold + free_oil_cancelled,
+                ])
+
+            writer.writerow([
+                "Total Oil Bottles",
+                total_oil_sold,
+                total_oil_cancelled,
+                total_oil_sold + total_oil_cancelled,
+            ])
 
         # Add Shampoo Bottles Sold By Price section
-        writer.writerow([])  # Empty row for spacing
-        writer.writerow(["Shampoo Bottles Sold By Price"])
-        writer.writerow([
-            "Price",
-            "Quantity Sold",
-            "Quantity Cancelled",
-            "Total Quantity",
-        ])
         total_shampoo_sold = sum(shampoo_sold_counts.values())
         total_shampoo_cancelled = sum(shampoo_cancelled_counts.values())
-
-        for price in [900, 850, 830, 780]:
-            sold_qty = shampoo_sold_counts.get(price, 0)
-            cancelled_qty = shampoo_cancelled_counts.get(price, 0)
+        if (total_shampoo_sold + total_shampoo_cancelled) > 0:
+            writer.writerow([])  # Empty row for spacing
+            writer.writerow(["Shampoo Bottles Sold By Price"])
             writer.writerow([
-                price,
-                sold_qty,
-                cancelled_qty,
-                sold_qty + cancelled_qty,
+                "Price",
+                "Quantity Sold",
+                "Quantity Cancelled",
+                "Total Quantity",
             ])
 
-        std_shampoo_sold = shampoo_sold_counts.get(1000, 0)
-        std_shampoo_cancelled = shampoo_cancelled_counts.get(1000, 0)
-        writer.writerow([
-            "1000 (Standard)",
-            std_shampoo_sold,
-            std_shampoo_cancelled,
-            std_shampoo_sold + std_shampoo_cancelled,
-        ])
+            for price in [900, 850, 830, 780]:
+                sold_qty = shampoo_sold_counts.get(price, 0)
+                cancelled_qty = shampoo_cancelled_counts.get(price, 0)
+                if sold_qty > 0 or cancelled_qty > 0:
+                    writer.writerow([
+                        price,
+                        sold_qty,
+                        cancelled_qty,
+                        sold_qty + cancelled_qty,
+                    ])
 
-        free_shampoo_sold = shampoo_sold_counts.get("Free", 0)
-        free_shampoo_cancelled = shampoo_cancelled_counts.get("Free", 0)
-        writer.writerow([
-            "Free",
-            free_shampoo_sold,
-            free_shampoo_cancelled,
-            free_shampoo_sold + free_shampoo_cancelled,
-        ])
-
-        # Write any additional shampoo prices that appeared in orders, sorted descending by price
-        extra_shampoo_prices = sorted(
-            [
-                p
-                for p in set(shampoo_sold_counts.keys())
-                | set(shampoo_cancelled_counts.keys())
-                if p not in [900, 850, 830, 780, 1000, "Free"]
-            ],
-            reverse=True,
-        )
-        for price in extra_shampoo_prices:
-            sold_qty = shampoo_sold_counts.get(price, 0)
-            cancelled_qty = shampoo_cancelled_counts.get(price, 0)
-            if sold_qty > 0 or cancelled_qty > 0:
+            std_shampoo_sold = shampoo_sold_counts.get(1000, 0)
+            std_shampoo_cancelled = shampoo_cancelled_counts.get(1000, 0)
+            if std_shampoo_sold > 0 or std_shampoo_cancelled > 0:
                 writer.writerow([
-                    price,
-                    sold_qty,
-                    cancelled_qty,
-                    sold_qty + cancelled_qty,
+                    "1000 (Standard)",
+                    std_shampoo_sold,
+                    std_shampoo_cancelled,
+                    std_shampoo_sold + std_shampoo_cancelled,
                 ])
 
-        writer.writerow([
-            "Total Shampoo Bottles",
-            total_shampoo_sold,
-            total_shampoo_cancelled,
-            total_shampoo_sold + total_shampoo_cancelled,
-        ])
+            free_shampoo_sold = shampoo_sold_counts.get("Free", 0)
+            free_shampoo_cancelled = shampoo_cancelled_counts.get("Free", 0)
+            if free_shampoo_sold > 0 or free_shampoo_cancelled > 0:
+                writer.writerow([
+                    "Free",
+                    free_shampoo_sold,
+                    free_shampoo_cancelled,
+                    free_shampoo_sold + free_shampoo_cancelled,
+                ])
+
+            # Write any additional shampoo prices that appeared in orders, sorted descending by price
+            extra_shampoo_prices = sorted(
+                [
+                    p
+                    for p in set(shampoo_sold_counts.keys())
+                    | set(shampoo_cancelled_counts.keys())
+                    if p not in [900, 850, 830, 780, 1000, "Free"]
+                ],
+                reverse=True,
+            )
+            for price in extra_shampoo_prices:
+                sold_qty = shampoo_sold_counts.get(price, 0)
+                cancelled_qty = shampoo_cancelled_counts.get(price, 0)
+                if sold_qty > 0 or cancelled_qty > 0:
+                    writer.writerow([
+                        price,
+                        sold_qty,
+                        cancelled_qty,
+                        sold_qty + cancelled_qty,
+                    ])
+
+            writer.writerow([
+                "Total Shampoo Bottles",
+                total_shampoo_sold,
+                total_shampoo_cancelled,
+                total_shampoo_sold + total_shampoo_cancelled,
+            ])
 
         # Add Hair Oil Sachets Sold By Price section
-        writer.writerow([])  # Empty row for spacing
-        writer.writerow(["Hair Oil Sachets Sold By Price"])
-        writer.writerow([
-            "Price",
-            "Quantity Sold",
-            "Quantity Cancelled",
-            "Total Quantity",
-        ])
         total_oil_sachet_sold = sum(oil_sachet_sold_counts.values())
         total_oil_sachet_cancelled = sum(oil_sachet_cancelled_counts.values())
-
-        std_oil_sachet_sold = oil_sachet_sold_counts.get(990, 0)
-        std_oil_sachet_cancelled = oil_sachet_cancelled_counts.get(990, 0)
-        writer.writerow([
-            "990 (Standard)",
-            std_oil_sachet_sold,
-            std_oil_sachet_cancelled,
-            std_oil_sachet_sold + std_oil_sachet_cancelled,
-        ])
-
-        free_oil_sachet_sold = oil_sachet_sold_counts.get("Free", 0)
-        free_oil_sachet_cancelled = oil_sachet_cancelled_counts.get("Free", 0)
-        if free_oil_sachet_sold > 0 or free_oil_sachet_cancelled > 0:
+        if (total_oil_sachet_sold + total_oil_sachet_cancelled) > 0:
+            writer.writerow([])  # Empty row for spacing
+            writer.writerow(["Hair Oil Sachets Sold By Price"])
             writer.writerow([
-                "Free",
-                free_oil_sachet_sold,
-                free_oil_sachet_cancelled,
-                free_oil_sachet_sold + free_oil_sachet_cancelled,
+                "Price",
+                "Quantity Sold",
+                "Quantity Cancelled",
+                "Total Quantity",
             ])
 
-        extra_oil_sachet_prices = sorted(
-            [
-                p
-                for p in set(oil_sachet_sold_counts.keys())
-                | set(oil_sachet_cancelled_counts.keys())
-                if p not in [990, "Free"]
-            ],
-            reverse=True,
-        )
-        for price in extra_oil_sachet_prices:
-            sold_qty = oil_sachet_sold_counts.get(price, 0)
-            cancelled_qty = oil_sachet_cancelled_counts.get(price, 0)
-            if sold_qty > 0 or cancelled_qty > 0:
+            std_oil_sachet_sold = oil_sachet_sold_counts.get(990, 0)
+            std_oil_sachet_cancelled = oil_sachet_cancelled_counts.get(990, 0)
+            if std_oil_sachet_sold > 0 or std_oil_sachet_cancelled > 0:
                 writer.writerow([
-                    price,
-                    sold_qty,
-                    cancelled_qty,
-                    sold_qty + cancelled_qty,
+                    "990 (Standard)",
+                    std_oil_sachet_sold,
+                    std_oil_sachet_cancelled,
+                    std_oil_sachet_sold + std_oil_sachet_cancelled,
                 ])
 
-        writer.writerow([
-            "Total Hair Oil Sachets",
-            total_oil_sachet_sold,
-            total_oil_sachet_cancelled,
-            total_oil_sachet_sold + total_oil_sachet_cancelled,
-        ])
+            free_oil_sachet_sold = oil_sachet_sold_counts.get("Free", 0)
+            free_oil_sachet_cancelled = oil_sachet_cancelled_counts.get("Free", 0)
+            if free_oil_sachet_sold > 0 or free_oil_sachet_cancelled > 0:
+                writer.writerow([
+                    "Free",
+                    free_oil_sachet_sold,
+                    free_oil_sachet_cancelled,
+                    free_oil_sachet_sold + free_oil_sachet_cancelled,
+                ])
+
+            extra_oil_sachet_prices = sorted(
+                [
+                    p
+                    for p in set(oil_sachet_sold_counts.keys())
+                    | set(oil_sachet_cancelled_counts.keys())
+                    if p not in [990, "Free"]
+                ],
+                reverse=True,
+            )
+            for price in extra_oil_sachet_prices:
+                sold_qty = oil_sachet_sold_counts.get(price, 0)
+                cancelled_qty = oil_sachet_cancelled_counts.get(price, 0)
+                if sold_qty > 0 or cancelled_qty > 0:
+                    writer.writerow([
+                        price,
+                        sold_qty,
+                        cancelled_qty,
+                        sold_qty + cancelled_qty,
+                    ])
+
+            writer.writerow([
+                "Total Hair Oil Sachets",
+                total_oil_sachet_sold,
+                total_oil_sachet_cancelled,
+                total_oil_sachet_sold + total_oil_sachet_cancelled,
+            ])
 
         # Add Shampoo Sachets Sold By Price section
-        writer.writerow([])  # Empty row for spacing
-        writer.writerow(["Shampoo Sachets Sold By Price"])
-        writer.writerow([
-            "Price",
-            "Quantity Sold",
-            "Quantity Cancelled",
-            "Total Quantity",
-        ])
         total_shampoo_sachet_sold = sum(shampoo_sachet_sold_counts.values())
         total_shampoo_sachet_cancelled = sum(shampoo_sachet_cancelled_counts.values())
-
-        std_shampoo_sachet_sold = shampoo_sachet_sold_counts.get(100, 0)
-        std_shampoo_sachet_cancelled = shampoo_sachet_cancelled_counts.get(100, 0)
-        writer.writerow([
-            "100 (Standard)",
-            std_shampoo_sachet_sold,
-            std_shampoo_sachet_cancelled,
-            std_shampoo_sachet_sold + std_shampoo_sachet_cancelled,
-        ])
-
-        free_shampoo_sachet_sold = shampoo_sachet_sold_counts.get("Free", 0)
-        free_shampoo_sachet_cancelled = shampoo_sachet_cancelled_counts.get("Free", 0)
-        if free_shampoo_sachet_sold > 0 or free_shampoo_sachet_cancelled > 0:
+        if (total_shampoo_sachet_sold + total_shampoo_sachet_cancelled) > 0:
+            writer.writerow([])  # Empty row for spacing
+            writer.writerow(["Shampoo Sachets Sold By Price"])
             writer.writerow([
-                "Free",
-                free_shampoo_sachet_sold,
-                free_shampoo_sachet_cancelled,
-                free_shampoo_sachet_sold + free_shampoo_sachet_cancelled,
+                "Price",
+                "Quantity Sold",
+                "Quantity Cancelled",
+                "Total Quantity",
             ])
 
-        extra_shampoo_sachet_prices = sorted(
-            [
-                p
-                for p in set(shampoo_sachet_sold_counts.keys())
-                | set(shampoo_sachet_cancelled_counts.keys())
-                if p not in [100, "Free"]
-            ],
-            reverse=True,
-        )
-        for price in extra_shampoo_sachet_prices:
-            sold_qty = shampoo_sachet_sold_counts.get(price, 0)
-            cancelled_qty = shampoo_sachet_cancelled_counts.get(price, 0)
-            if sold_qty > 0 or cancelled_qty > 0:
+            std_shampoo_sachet_sold = shampoo_sachet_sold_counts.get(100, 0)
+            std_shampoo_sachet_cancelled = shampoo_sachet_cancelled_counts.get(100, 0)
+            if std_shampoo_sachet_sold > 0 or std_shampoo_sachet_cancelled > 0:
                 writer.writerow([
-                    price,
-                    sold_qty,
-                    cancelled_qty,
-                    sold_qty + cancelled_qty,
+                    "100 (Standard)",
+                    std_shampoo_sachet_sold,
+                    std_shampoo_sachet_cancelled,
+                    std_shampoo_sachet_sold + std_shampoo_sachet_cancelled,
                 ])
 
-        writer.writerow([
-            "Total Shampoo Sachets",
-            total_shampoo_sachet_sold,
-            total_shampoo_sachet_cancelled,
-            total_shampoo_sachet_sold + total_shampoo_sachet_cancelled,
-        ])
+            free_shampoo_sachet_sold = shampoo_sachet_sold_counts.get("Free", 0)
+            free_shampoo_sachet_cancelled = shampoo_sachet_cancelled_counts.get(
+                "Free", 0
+            )
+            if free_shampoo_sachet_sold > 0 or free_shampoo_sachet_cancelled > 0:
+                writer.writerow([
+                    "Free",
+                    free_shampoo_sachet_sold,
+                    free_shampoo_sachet_cancelled,
+                    free_shampoo_sachet_sold + free_shampoo_sachet_cancelled,
+                ])
+
+            extra_shampoo_sachet_prices = sorted(
+                [
+                    p
+                    for p in set(shampoo_sachet_sold_counts.keys())
+                    | set(shampoo_sachet_cancelled_counts.keys())
+                    if p not in [100, "Free"]
+                ],
+                reverse=True,
+            )
+            for price in extra_shampoo_sachet_prices:
+                sold_qty = shampoo_sachet_sold_counts.get(price, 0)
+                cancelled_qty = shampoo_sachet_cancelled_counts.get(price, 0)
+                if sold_qty > 0 or cancelled_qty > 0:
+                    writer.writerow([
+                        price,
+                        sold_qty,
+                        cancelled_qty,
+                        sold_qty + cancelled_qty,
+                    ])
+
+            writer.writerow([
+                "Total Shampoo Sachets",
+                total_shampoo_sachet_sold,
+                total_shampoo_sachet_cancelled,
+                total_shampoo_sachet_sold + total_shampoo_sachet_cancelled,
+            ])
 
         # Add Yachu Facewash Sold By Price section
-        writer.writerow([])  # Empty row for spacing
-        writer.writerow(["Yachu Facewash Sold By Price"])
-        writer.writerow([
-            "Price",
-            "Quantity Sold",
-            "Quantity Cancelled",
-            "Total Quantity",
-        ])
         total_facewash_sold = sum(facewash_sold_counts.values())
         total_facewash_cancelled = sum(facewash_cancelled_counts.values())
-
-        std_facewash_sold = facewash_sold_counts.get(300, 0)
-        std_facewash_cancelled = facewash_cancelled_counts.get(300, 0)
-        writer.writerow([
-            "300 (Standard)",
-            std_facewash_sold,
-            std_facewash_cancelled,
-            std_facewash_sold + std_facewash_cancelled,
-        ])
-
-        free_facewash_sold = facewash_sold_counts.get("Free", 0)
-        free_facewash_cancelled = facewash_cancelled_counts.get("Free", 0)
-        if free_facewash_sold > 0 or free_facewash_cancelled > 0:
+        if (total_facewash_sold + total_facewash_cancelled) > 0:
+            writer.writerow([])  # Empty row for spacing
+            writer.writerow(["Yachu Facewash Sold By Price"])
             writer.writerow([
-                "Free",
-                free_facewash_sold,
-                free_facewash_cancelled,
-                free_facewash_sold + free_facewash_cancelled,
+                "Price",
+                "Quantity Sold",
+                "Quantity Cancelled",
+                "Total Quantity",
             ])
 
-        extra_facewash_prices = sorted(
-            [
-                p
-                for p in set(facewash_sold_counts.keys())
-                | set(facewash_cancelled_counts.keys())
-                if p not in [300, "Free"]
-            ],
-            reverse=True,
-        )
-        for price in extra_facewash_prices:
-            sold_qty = facewash_sold_counts.get(price, 0)
-            cancelled_qty = facewash_cancelled_counts.get(price, 0)
-            if sold_qty > 0 or cancelled_qty > 0:
+            std_facewash_sold = facewash_sold_counts.get(300, 0)
+            std_facewash_cancelled = facewash_cancelled_counts.get(300, 0)
+            if std_facewash_sold > 0 or std_facewash_cancelled > 0:
                 writer.writerow([
-                    price,
-                    sold_qty,
-                    cancelled_qty,
-                    sold_qty + cancelled_qty,
+                    "300 (Standard)",
+                    std_facewash_sold,
+                    std_facewash_cancelled,
+                    std_facewash_sold + std_facewash_cancelled,
                 ])
 
-        writer.writerow([
-            "Total Yachu Facewash",
-            total_facewash_sold,
-            total_facewash_cancelled,
-            total_facewash_sold + total_facewash_cancelled,
-        ])
+            free_facewash_sold = facewash_sold_counts.get("Free", 0)
+            free_facewash_cancelled = facewash_cancelled_counts.get("Free", 0)
+            if free_facewash_sold > 0 or free_facewash_cancelled > 0:
+                writer.writerow([
+                    "Free",
+                    free_facewash_sold,
+                    free_facewash_cancelled,
+                    free_facewash_sold + free_facewash_cancelled,
+                ])
+
+            extra_facewash_prices = sorted(
+                [
+                    p
+                    for p in set(facewash_sold_counts.keys())
+                    | set(facewash_cancelled_counts.keys())
+                    if p not in [300, "Free"]
+                ],
+                reverse=True,
+            )
+            for price in extra_facewash_prices:
+                sold_qty = facewash_sold_counts.get(price, 0)
+                cancelled_qty = facewash_cancelled_counts.get(price, 0)
+                if sold_qty > 0 or cancelled_qty > 0:
+                    writer.writerow([
+                        price,
+                        sold_qty,
+                        cancelled_qty,
+                        sold_qty + cancelled_qty,
+                    ])
+
+            writer.writerow([
+                "Total Yachu Facewash",
+                total_facewash_sold,
+                total_facewash_cancelled,
+                total_facewash_sold + total_facewash_cancelled,
+            ])
 
         # Add Yachu Body Lotion Sold By Price section
-        writer.writerow([])  # Empty row for spacing
-        writer.writerow(["Yachu Body Lotion Sold By Price"])
-        writer.writerow([
-            "Price",
-            "Quantity Sold",
-            "Quantity Cancelled",
-            "Total Quantity",
-        ])
         total_body_lotion_sold = sum(body_lotion_sold_counts.values())
         total_body_lotion_cancelled = sum(body_lotion_cancelled_counts.values())
-
-        std_body_lotion_sold = body_lotion_sold_counts.get(900, 0)
-        std_body_lotion_cancelled = body_lotion_cancelled_counts.get(900, 0)
-        writer.writerow([
-            "900 (Standard)",
-            std_body_lotion_sold,
-            std_body_lotion_cancelled,
-            std_body_lotion_sold + std_body_lotion_cancelled,
-        ])
-
-        free_body_lotion_sold = body_lotion_sold_counts.get("Free", 0)
-        free_body_lotion_cancelled = body_lotion_cancelled_counts.get("Free", 0)
-        if free_body_lotion_sold > 0 or free_body_lotion_cancelled > 0:
+        if (total_body_lotion_sold + total_body_lotion_cancelled) > 0:
+            writer.writerow([])  # Empty row for spacing
+            writer.writerow(["Yachu Body Lotion Sold By Price"])
             writer.writerow([
-                "Free",
-                free_body_lotion_sold,
-                free_body_lotion_cancelled,
-                free_body_lotion_sold + free_body_lotion_cancelled,
+                "Price",
+                "Quantity Sold",
+                "Quantity Cancelled",
+                "Total Quantity",
             ])
 
-        extra_body_lotion_prices = sorted(
-            [
-                p
-                for p in set(body_lotion_sold_counts.keys())
-                | set(body_lotion_cancelled_counts.keys())
-                if p not in [900, "Free"]
-            ],
-            reverse=True,
-        )
-        for price in extra_body_lotion_prices:
-            sold_qty = body_lotion_sold_counts.get(price, 0)
-            cancelled_qty = body_lotion_cancelled_counts.get(price, 0)
-            if sold_qty > 0 or cancelled_qty > 0:
+            std_body_lotion_sold = body_lotion_sold_counts.get(900, 0)
+            std_body_lotion_cancelled = body_lotion_cancelled_counts.get(900, 0)
+            if std_body_lotion_sold > 0 or std_body_lotion_cancelled > 0:
                 writer.writerow([
-                    price,
-                    sold_qty,
-                    cancelled_qty,
-                    sold_qty + cancelled_qty,
+                    "900 (Standard)",
+                    std_body_lotion_sold,
+                    std_body_lotion_cancelled,
+                    std_body_lotion_sold + std_body_lotion_cancelled,
                 ])
 
-        writer.writerow([
-            "Total Yachu Body Lotion",
-            total_body_lotion_sold,
-            total_body_lotion_cancelled,
-            total_body_lotion_sold + total_body_lotion_cancelled,
-        ])
+            free_body_lotion_sold = body_lotion_sold_counts.get("Free", 0)
+            free_body_lotion_cancelled = body_lotion_cancelled_counts.get("Free", 0)
+            if free_body_lotion_sold > 0 or free_body_lotion_cancelled > 0:
+                writer.writerow([
+                    "Free",
+                    free_body_lotion_sold,
+                    free_body_lotion_cancelled,
+                    free_body_lotion_sold + free_body_lotion_cancelled,
+                ])
+
+            extra_body_lotion_prices = sorted(
+                [
+                    p
+                    for p in set(body_lotion_sold_counts.keys())
+                    | set(body_lotion_cancelled_counts.keys())
+                    if p not in [900, "Free"]
+                ],
+                reverse=True,
+            )
+            for price in extra_body_lotion_prices:
+                sold_qty = body_lotion_sold_counts.get(price, 0)
+                cancelled_qty = body_lotion_cancelled_counts.get(price, 0)
+                if sold_qty > 0 or cancelled_qty > 0:
+                    writer.writerow([
+                        price,
+                        sold_qty,
+                        cancelled_qty,
+                        sold_qty + cancelled_qty,
+                    ])
+
+            writer.writerow([
+                "Total Yachu Body Lotion",
+                total_body_lotion_sold,
+                total_body_lotion_cancelled,
+                total_body_lotion_sold + total_body_lotion_cancelled,
+            ])
 
         # Add Yachu Brightening Cream Sold By Price section
-        writer.writerow([])  # Empty row for spacing
-        writer.writerow(["Yachu Brightening Cream Sold By Price"])
-        writer.writerow([
-            "Price",
-            "Quantity Sold",
-            "Quantity Cancelled",
-            "Total Quantity",
-        ])
         total_brightening_cream_sold = sum(brightening_cream_sold_counts.values())
         total_brightening_cream_cancelled = sum(
             brightening_cream_cancelled_counts.values()
         )
-
-        std_brightening_cream_sold = brightening_cream_sold_counts.get(990, 0)
-        std_brightening_cream_cancelled = brightening_cream_cancelled_counts.get(990, 0)
-        writer.writerow([
-            "990 (Standard)",
-            std_brightening_cream_sold,
-            std_brightening_cream_cancelled,
-            std_brightening_cream_sold + std_brightening_cream_cancelled,
-        ])
-
-        free_brightening_cream_sold = brightening_cream_sold_counts.get("Free", 0)
-        free_brightening_cream_cancelled = brightening_cream_cancelled_counts.get(
-            "Free", 0
-        )
-        if free_brightening_cream_sold > 0 or free_brightening_cream_cancelled > 0:
+        if (total_brightening_cream_sold + total_brightening_cream_cancelled) > 0:
+            writer.writerow([])  # Empty row for spacing
+            writer.writerow(["Yachu Brightening Cream Sold By Price"])
             writer.writerow([
-                "Free",
-                free_brightening_cream_sold,
-                free_brightening_cream_cancelled,
-                free_brightening_cream_sold + free_brightening_cream_cancelled,
+                "Price",
+                "Quantity Sold",
+                "Quantity Cancelled",
+                "Total Quantity",
             ])
 
-        extra_brightening_cream_prices = sorted(
-            [
-                p
-                for p in set(brightening_cream_sold_counts.keys())
-                | set(brightening_cream_cancelled_counts.keys())
-                if p not in [990, "Free"]
-            ],
-            reverse=True,
-        )
-        for price in extra_brightening_cream_prices:
-            sold_qty = brightening_cream_sold_counts.get(price, 0)
-            cancelled_qty = brightening_cream_cancelled_counts.get(price, 0)
-            if sold_qty > 0 or cancelled_qty > 0:
+            std_brightening_cream_sold = brightening_cream_sold_counts.get(990, 0)
+            std_brightening_cream_cancelled = brightening_cream_cancelled_counts.get(
+                990, 0
+            )
+            if std_brightening_cream_sold > 0 or std_brightening_cream_cancelled > 0:
                 writer.writerow([
-                    price,
-                    sold_qty,
-                    cancelled_qty,
-                    sold_qty + cancelled_qty,
+                    "990 (Standard)",
+                    std_brightening_cream_sold,
+                    std_brightening_cream_cancelled,
+                    std_brightening_cream_sold + std_brightening_cream_cancelled,
                 ])
 
-        writer.writerow([
-            "Total Yachu Brightening Cream",
-            total_brightening_cream_sold,
-            total_brightening_cream_cancelled,
-            total_brightening_cream_sold + total_brightening_cream_cancelled,
-        ])
+            free_brightening_cream_sold = brightening_cream_sold_counts.get("Free", 0)
+            free_brightening_cream_cancelled = brightening_cream_cancelled_counts.get(
+                "Free", 0
+            )
+            if free_brightening_cream_sold > 0 or free_brightening_cream_cancelled > 0:
+                writer.writerow([
+                    "Free",
+                    free_brightening_cream_sold,
+                    free_brightening_cream_cancelled,
+                    free_brightening_cream_sold + free_brightening_cream_cancelled,
+                ])
+
+            extra_brightening_cream_prices = sorted(
+                [
+                    p
+                    for p in set(brightening_cream_sold_counts.keys())
+                    | set(brightening_cream_cancelled_counts.keys())
+                    if p not in [990, "Free"]
+                ],
+                reverse=True,
+            )
+            for price in extra_brightening_cream_prices:
+                sold_qty = brightening_cream_sold_counts.get(price, 0)
+                cancelled_qty = brightening_cream_cancelled_counts.get(price, 0)
+                if sold_qty > 0 or cancelled_qty > 0:
+                    writer.writerow([
+                        price,
+                        sold_qty,
+                        cancelled_qty,
+                        sold_qty + cancelled_qty,
+                    ])
+
+            writer.writerow([
+                "Total Yachu Brightening Cream",
+                total_brightening_cream_sold,
+                total_brightening_cream_cancelled,
+                total_brightening_cream_sold + total_brightening_cream_cancelled,
+            ])
 
         # Add applied filters information
         writer.writerow([])  # Empty row
