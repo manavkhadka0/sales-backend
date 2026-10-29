@@ -5,11 +5,14 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from offlineSales.models import (
+    Attendance,
+    AttendanceConfig,
     OfflineCustomer,
     OfflineOrder,
     OfflineOrderItem,
     OfflinePaymentHistory,
 )
+from offlineSales.services.attendance_service import create_attendance
 from offlineSales.services.order_service import (
     create_offline_order,
     update_offline_order,
@@ -629,3 +632,90 @@ class OfflineSalesStatsSerializer(serializers.Serializer):
     total_order_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
     total_paid_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
     total_remaining_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+
+
+# ---------------------------------------------------------------------------
+# Attendance Config Serializers
+# ---------------------------------------------------------------------------
+
+class AttendanceConfigSerializer(serializers.ModelSerializer):
+    updated_by_name = serializers.CharField(
+        source="updated_by.get_full_name", read_only=True
+    )
+
+    class Meta:
+        model = AttendanceConfig
+        fields = [
+            "id",
+            "cutoff_time",
+            "updated_by",
+            "updated_by_name",
+            "updated_at",
+            "created_at",
+        ]
+        read_only_fields = ["id", "updated_by", "updated_by_name", "updated_at", "created_at"]
+
+
+class AttendanceConfigUpdateSerializer(serializers.ModelSerializer):
+    """
+    Only SuperAdmin uses this. Allows updating cutoff_time and is_active.
+    """
+
+    class Meta:
+        model = AttendanceConfig
+        fields = ["cutoff_time"]
+
+
+# ---------------------------------------------------------------------------
+# Attendance Serializers
+# ---------------------------------------------------------------------------
+
+class AttendanceSerializer(serializers.ModelSerializer):
+    sales_person_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Attendance
+        fields = [
+            "id",
+            "sales_person",
+            "sales_person_name",
+            "image",
+            "attendance_date",
+            "attendance_time",
+            "attendance_location",
+            "attendance_lat",
+            "attendance_long",
+        ]
+        read_only_fields = [
+            "id",
+            "sales_person",
+            "sales_person_name",
+            "attendance_date",
+            "attendance_time",
+        ]
+
+    def get_sales_person_name(self, obj) -> str:
+        user = obj.sales_person
+        return user.get_full_name() or user.username
+
+
+class AttendanceCreateSerializer(serializers.Serializer):
+    """
+    Used by salespersons to post their attendance.
+    Validates the cutoff time window before creating the record.
+    """
+
+    image = serializers.ImageField(required=False, allow_null=True)
+    attendance_location = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    attendance_lat = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    attendance_long = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        return create_attendance(
+            sales_person=request.user,
+            image=validated_data.get("image"),
+            attendance_location=validated_data.get("attendance_location"),
+            attendance_lat=validated_data.get("attendance_lat"),
+            attendance_long=validated_data.get("attendance_long"),
+        )

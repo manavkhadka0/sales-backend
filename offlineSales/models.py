@@ -68,9 +68,8 @@ class OfflineCustomer(models.Model):
     @property
     def total_paid_amount(self):
         total = (
-            self.payment_history.model.objects.filter(
-                models.Q(customer=self) | models.Q(order__customer=self)
-            )
+            self.payment_history.model.objects
+            .filter(models.Q(customer=self) | models.Q(order__customer=self))
             .exclude(order__order_status="Cancelled")
             .aggregate(total=Sum("amount"))["total"]
         )
@@ -258,11 +257,6 @@ class OfflinePaymentHistory(models.Model):
             models.Index(fields=["recorded_by", "payment_date"]),
         ]
 
-    def save(self, *args, **kwargs):
-        if not self.customer and self.order and self.order.customer:
-            self.customer = self.order.customer
-        super().save(*args, **kwargs)
-
     def __str__(self):
         target = (
             self.order.order_code
@@ -270,3 +264,72 @@ class OfflinePaymentHistory(models.Model):
             else (self.customer.store_name if self.customer else "N/A")
         )
         return f"{target} - Rs. {self.amount} via {self.get_payment_method_display()}"
+
+    def save(self, *args, **kwargs):
+        if not self.customer and self.order and self.order.customer:
+            self.customer = self.order.customer
+        super().save(*args, **kwargs)
+
+
+class AttendanceConfig(models.Model):
+    """
+    Singleton-style configuration model for attendance timing.
+    Only SuperAdmin can modify this. Salespersons can only mark attendance
+    before the configured cutoff time each day.
+    """
+
+    cutoff_time = models.TimeField(
+        default="12:00:00",
+        help_text="Salespersons can post attendance only before this time (local time).",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="attendance_config_updates",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Attendance Config"
+        verbose_name_plural = "Attendance Config"
+
+    def __str__(self):
+        return f"Attendance Cutoff: {self.cutoff_time}"
+
+    @classmethod
+    def get_config(cls):
+        """Return the single active config row, creating defaults if missing."""
+        config, _ = cls.objects.get_or_create(pk=1)
+        return config
+
+
+class Attendance(models.Model):
+    sales_person = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="attendance",
+        db_index=True,
+    )
+    image = models.ImageField(
+        upload_to="offline_sales/attendance/",
+        null=True,
+        blank=True,
+        storage=PublicMediaStorage(),
+    )
+    attendance_date = models.DateField(default=timezone.localdate, db_index=True)
+    attendance_time = models.DateTimeField(default=timezone.now, db_index=True)
+    attendance_location = models.TextField(null=True, blank=True)
+    attendance_lat = models.CharField(max_length=255, null=True, blank=True)
+    attendance_long = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        ordering = ["-attendance_date"]
+        indexes = [
+            models.Index(fields=["sales_person", "attendance_date"]),
+        ]
+
+    def __str__(self):
+        return f"{self.sales_person.username} - {self.attendance_date}"

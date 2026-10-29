@@ -1,5 +1,6 @@
 from django.db.models import Q
 from django.http import Http404
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, generics, status
 from rest_framework.permissions import IsAuthenticated
@@ -11,6 +12,9 @@ from offlineSales.filters import (
     OfflineOrderFilter,
     OfflinePaymentHistoryFilter,
 )
+from offlineSales.models import Attendance, AttendanceConfig
+from offlineSales.permissions import CanPostAttendance, CanViewAttendance, IsSuperAdmin
+from offlineSales.selectors.attendance_selector import get_attendance_queryset
 from offlineSales.selectors.customer_selector import get_customer_queryset
 from offlineSales.selectors.order_selector import (
     get_customer_orders,
@@ -20,6 +24,10 @@ from offlineSales.selectors.order_selector import (
 from offlineSales.selectors.payment_selector import get_payment_queryset
 from offlineSales.selectors.stats_selector import get_offline_sales_stats
 from offlineSales.serializers import (
+    AttendanceConfigSerializer,
+    AttendanceConfigUpdateSerializer,
+    AttendanceCreateSerializer,
+    AttendanceSerializer,
     OfflineCustomerSerializer,
     OfflineOrderCreateSerializer,
     OfflineOrderCreditReminderSerializer,
@@ -29,6 +37,7 @@ from offlineSales.serializers import (
     OfflineSalesStatsSerializer,
     RecordPaymentCreateSerializer,
 )
+from offlineSales.services.attendance_service import update_attendance_config
 from offlineSales.services.order_service import cancel_offline_order
 from sales.views import CustomPagination
 
@@ -341,3 +350,124 @@ class OfflineSalesStatsView(generics.GenericAPIView):
         stats = get_offline_sales_stats(request.user)
         serializer = self.get_serializer(stats)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
+# Attendance Config Views
+# ---------------------------------------------------------------------------
+
+
+class AttendanceConfigView(generics.GenericAPIView):
+    """
+    GET  → Any authenticated user can read the current config.
+    PATCH → Only SuperAdmin can update cutoff_time and is_active.
+    """
+
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "PUT"):
+            return [IsSuperAdmin()]
+        return [IsAuthenticated()]
+
+    def get_serializer_class(self):
+        if self.request.method in ("PATCH", "PUT"):
+            return AttendanceConfigUpdateSerializer
+        return AttendanceConfigSerializer
+
+    def get_object(self):
+        return AttendanceConfig.get_config()
+
+    def get(self, request, *args, **kwargs):
+        config = self.get_object()
+        serializer = AttendanceConfigSerializer(config)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request, *args, **kwargs):
+        config = self.get_object()
+        serializer = AttendanceConfigUpdateSerializer(
+            config, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        updated_config = update_attendance_config(
+            config, serializer.validated_data, request.user
+        )
+        return Response(
+            AttendanceConfigSerializer(updated_config).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Attendance Views
+# ---------------------------------------------------------------------------
+
+
+class AttendanceListCreateView(generics.ListCreateAPIView):
+    """
+    GET  → List attendance records (scoped by role: own records for salespersons,
+           all/franchise-filtered records for supervisors).
+    POST → Salespersons post today's attendance (validated against cutoff time).
+    """
+
+    pagination_class = CustomPagination
+    filter_backends = (
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    )
+    search_fields = [
+        "sales_person__username",
+        "sales_person__first_name",
+        "sales_person__last_name",
+    ]
+    ordering_fields = ["attendance_date", "attendance_time"]
+    ordering = ["-attendance_date"]
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [CanPostAttendance()]
+        return [CanViewAttendance()]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return AttendanceCreateSerializer
+        return AttendanceSerializer
+
+    def get_queryset(self):
+        return get_attendance_queryset(self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        attendance = serializer.save()
+        output_serializer = AttendanceSerializer(attendance)
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class AttendanceDetailView(generics.RetrieveAPIView):
+    """
+    Retrieve a single attendance record.
+    Salespersons can only access their own; supervisors can access all.
+    """
+
+    serializer_class = AttendanceSerializer
+    permission_classes = [CanViewAttendance]
+
+    def get_queryset(self):
+        return get_attendance_queryset(self.request.user)
+
+
+class AttendanceTodayCheckView(generics.GenericAPIView):
+    """
+    Check whether the requesting salesperson has already posted attendance today.
+    Returns: { "attendance": true | false }
+    """
+
+    permission_classes = [CanPostAttendance]
+
+    def get(self, request, *args, **kwargs):
+        today = timezone.localdate()
+        has_attendance = Attendance.objects.filter(
+            sales_person=request.user,
+            attendance_date=today,
+        ).exists()
+        return Response({"attendance": has_attendance}, status=status.HTTP_200_OK)

@@ -2,6 +2,8 @@ from django.contrib import admin
 from unfold.admin import ModelAdmin, TabularInline
 
 from offlineSales.models import (
+    Attendance,
+    AttendanceConfig,
     OfflineCustomer,
     OfflineOrder,
     OfflineOrderItem,
@@ -98,3 +100,38 @@ class OfflinePaymentHistoryAdmin(ModelAdmin):
         "remarks",
     )
     raw_id_fields = ("customer", "order", "recorded_by")
+
+
+@admin.register(AttendanceConfig)
+class AttendanceConfigAdmin(ModelAdmin):
+    list_display = ("cutoff_time", "updated_by", "updated_at")
+    readonly_fields = ("updated_by", "updated_at", "created_at")
+
+    def save_model(self, request, obj, form, change):
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+
+    def has_add_permission(self, request):
+        # Singleton: block creating a second row from admin
+        return not AttendanceConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Attendance)
+class AttendanceAdmin(ModelAdmin):
+    list_display = (
+        "sales_person",
+        "attendance_date",
+        "attendance_time",
+        "attendance_location",
+    )
+    list_filter = ("attendance_date",)
+    search_fields = (
+        "sales_person__username",
+        "sales_person__first_name",
+        "sales_person__last_name",
+    )
+    raw_id_fields = ("sales_person",)
+    readonly_fields = ("attendance_date", "attendance_time")

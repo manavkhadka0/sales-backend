@@ -1,6 +1,10 @@
 from django.urls import path
 
 from offlineSales.views import (
+    AttendanceConfigView,
+    AttendanceDetailView,
+    AttendanceListCreateView,
+    AttendanceTodayCheckView,
     OfflineCustomerDetailView,
     OfflineCustomerListCreateView,
     OfflineCustomerOrdersListView,
@@ -68,5 +72,27 @@ urlpatterns = [
         "payments/<int:pk>/",
         OfflinePaymentHistoryDetailView.as_view(),
         name="offline-payment-detail",
+    ),
+    # Attendance config (SuperAdmin only for write)
+    path(
+        "attendance/config/",
+        AttendanceConfigView.as_view(),
+        name="attendance-config",
+    ),
+    # Attendance endpoints
+    path(
+        "attendance/",
+        AttendanceListCreateView.as_view(),
+        name="attendance-list-create",
+    ),
+    path(
+        "attendance/today/",
+        AttendanceTodayCheckView.as_view(),
+        name="attendance-today-check",
+    ),
+    path(
+        "attendance/<int:pk>/",
+        AttendanceDetailView.as_view(),
+        name="attendance-detail",
     ),
 ]
