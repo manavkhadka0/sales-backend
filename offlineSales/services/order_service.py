@@ -60,8 +60,8 @@ def create_offline_order(
             try:
                 inventory = (
                     Inventory.objects
-                    .select_for_update()
-                    .select_related("product", "franchise")
+                    .select_for_update(of=("self",))
+                    .select_related("product")
                     .get(id=inventory_id)
                 )
             except Inventory.DoesNotExist:
@@ -191,7 +191,7 @@ def cancel_offline_order(order: OfflineOrder, user) -> OfflineOrder:
     with transaction.atomic():
         locked_order = (
             OfflineOrder.objects
-            .select_for_update()
+            .select_for_update(of=("self",))
             .select_related("franchise")
             .get(id=order.id)
         )
@@ -238,7 +238,7 @@ def update_offline_order(
     with transaction.atomic():
         locked_order = (
             OfflineOrder.objects
-            .select_for_update()
+            .select_for_update(of=("self",))
             .select_related("franchise")
             .get(id=order.id)
         )
