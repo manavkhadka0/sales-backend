@@ -56,13 +56,16 @@ class OfflineCustomer(models.Model):
 
     @property
     def total_orders_count(self):
-        return self.orders.exclude(order_status="Cancelled").count()
+        return self.orders.exclude(order_status="Cancelled").order_by().count()
 
     @property
     def total_purchased_amount(self):
-        total = self.orders.exclude(order_status="Cancelled").aggregate(
-            total=Sum("total_amount")
-        )["total"]
+        total = (
+            self.orders
+            .exclude(order_status="Cancelled")
+            .order_by()
+            .aggregate(total=Sum("total_amount"))["total"]
+        )
         return total or Decimal("0.00")
 
     @property
@@ -71,6 +74,7 @@ class OfflineCustomer(models.Model):
             self.payment_history.model.objects
             .filter(models.Q(customer=self) | models.Q(order__customer=self))
             .exclude(order__order_status="Cancelled")
+            .order_by()
             .aggregate(total=Sum("amount"))["total"]
         )
         return total or Decimal("0.00")
@@ -269,6 +273,44 @@ class OfflinePaymentHistory(models.Model):
         if not self.customer and self.order and self.order.customer:
             self.customer = self.order.customer
         super().save(*args, **kwargs)
+
+
+class OfflineSalesAccess(models.Model):
+    """
+    Whitelist of SuperAdmin users who are granted access to view
+    offline sales data (attendance, orders, customers, payments) on the frontend.
+
+    Only users present in this table (with role=SuperAdmin) can access
+    the offline sales dashboard. Managed exclusively by Django superusers
+    or other SuperAdmins.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="offline_sales_access",
+        db_index=True,
+    )
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="offline_sales_access_granted",
+    )
+    granted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Offline Sales Access"
+        verbose_name_plural = "Offline Sales Access"
+        indexes = [
+            models.Index(fields=["user"]),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.user.get_full_name() or self.user.username} — Offline Sales Access"
+        )
 
 
 class AttendanceConfig(models.Model):

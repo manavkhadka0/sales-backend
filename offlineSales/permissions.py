@@ -4,7 +4,7 @@ from rest_framework.permissions import BasePermission
 class IsSuperAdmin(BasePermission):
     """
     Grants access only to SuperAdmin users (or Django superusers).
-    Used to protect attendance config endpoints.
+    Used to protect attendance config and access management endpoints.
     """
 
     def has_permission(self, request, view):
@@ -12,6 +12,26 @@ class IsSuperAdmin(BasePermission):
         if not (user and user.is_authenticated):
             return False
         return user.is_superuser or getattr(user, "role", None) == "SuperAdmin"
+
+
+class HasOfflineSalesAccess(BasePermission):
+    """
+    Grants read access to offline sales data only to SuperAdmin users
+    who are explicitly whitelisted in OfflineSalesAccess.
+    Django superusers bypass the whitelist check.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if user.is_superuser:
+            return True
+        if getattr(user, "role", None) != "SuperAdmin":
+            return False
+        # Lazy import to avoid circular dependency
+        from offlineSales.models import OfflineSalesAccess
+        return OfflineSalesAccess.objects.filter(user=user).exists()
 
 
 class CanPostAttendance(BasePermission):

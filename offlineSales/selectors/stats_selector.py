@@ -48,7 +48,7 @@ def get_offline_sales_stats(user):
     ).count()
 
     # Order aggregates in single query
-    order_aggregates = order_qs.aggregate(
+    order_aggregates = order_qs.order_by().aggregate(
         total_orders=Count("id"),
         pending_orders_count=Count("id", filter=Q(remaining_amount__gt=0)),
         close_to_due_orders_count=Count(
@@ -77,7 +77,7 @@ def get_offline_sales_stats(user):
     payment_qs = get_payment_queryset(user).exclude(
         order__order_status=OfflineOrder.OrderStatus.CANCELLED
     )
-    total_paid_amount = payment_qs.aggregate(
+    total_paid_amount = payment_qs.order_by().aggregate(
         total=Coalesce(
             Sum("amount"),
             Value(Decimal("0.00")),

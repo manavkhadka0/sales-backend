@@ -436,7 +436,9 @@ class AttendanceListCreateView(generics.ListCreateAPIView):
         return get_attendance_queryset(self.request.user)
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data, context={"request": request})
+        serializer = self.get_serializer(
+            data=request.data, context={"request": request}
+        )
         serializer.is_valid(raise_exception=True)
         attendance = serializer.save()
         output_serializer = AttendanceSerializer(attendance)

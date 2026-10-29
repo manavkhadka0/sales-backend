@@ -8,6 +8,7 @@ from offlineSales.models import (
     OfflineOrder,
     OfflineOrderItem,
     OfflinePaymentHistory,
+    OfflineSalesAccess,
 )
 
 
@@ -135,3 +136,20 @@ class AttendanceAdmin(ModelAdmin):
     )
     raw_id_fields = ("sales_person",)
     readonly_fields = ("attendance_date", "attendance_time")
+
+
+@admin.register(OfflineSalesAccess)
+class OfflineSalesAccessAdmin(ModelAdmin):
+    list_display = ("user", "granted_by", "granted_at")
+    readonly_fields = ("granted_by", "granted_at")
+    raw_id_fields = ("user",)
+    search_fields = (
+        "user__username",
+        "user__first_name",
+        "user__last_name",
+    )
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.granted_by = request.user
+        super().save_model(request, obj, form, change)
