@@ -70,6 +70,8 @@ INSTALLED_APPS = [
     "storages",
     "daraz",
     "ydm",
+    "offlineSales",
+    "tracking",
     "import_export",
 ]
 
@@ -207,14 +209,14 @@ CORS_ALLOWED_ORIGINS = [
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
     "https://ending-ann-extremely-cycle.trycloudflare.com",
-    "https://widely-transmission-anne-submission.trycloudflare.com",
+    "https://cord-reserved-spell-viruses.trycloudflare.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
     "https://ending-ann-extremely-cycle.trycloudflare.com",
-    "https://widely-transmission-anne-submission.trycloudflare.com",
+    "https://cord-reserved-spell-viruses.trycloudflare.com",
 ]
 
 # Default primary key field type

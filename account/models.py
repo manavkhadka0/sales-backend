@@ -38,6 +38,7 @@ class CustomUser(AbstractUser):
         ("Distributor", "Distributor"),
         ("Franchise", "Franchise"),
         ("SalesPerson", "Sales Person"),
+        ("Offline_SalesPerson", "Offline Sales Person"),
         ("Treatment Staff", "Treatment Staff"),
         ("YDM_Logistics", "YDM Logistics"),
         ("YDM_Rider", "YDM Rider"),

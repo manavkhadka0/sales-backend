@@ -37,6 +37,8 @@ urlpatterns = (
         path("api/daraz/", include("daraz.urls")),
         path("api/", include("ydm.urls")),
         path("api/treatment/", include("treatment.urls")),
+        path("api/offline-sales/", include("offlineSales.urls")),
+        path("api/tracking/", include("tracking.urls")),
     ]
     + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

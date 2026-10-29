@@ -9,7 +9,7 @@ def get_owner_by_role(user):
         return getattr(user, "factory", None), "factory"
     elif user.role == "Distributor":
         return getattr(user, "distributor", None), "distributor"
-    elif user.role in ["Franchise", "SalesPerson", "Packaging"]:
+    elif user.role in ["Franchise", "SalesPerson", "Packaging", "Offline_SalesPerson"]:
         return getattr(user, "franchise", None), "franchise"
     return None, None
 

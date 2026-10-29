@@ -1102,7 +1102,13 @@ class ProductListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        if user.role in ["Franchise", "SalesPerson", "Distributor", "SuperAdmin"]:
+        if user.role in [
+            "Franchise",
+            "SalesPerson",
+            "Distributor",
+            "SuperAdmin",
+            "Offline_SalesPerson",
+        ]:
             include_status = user.role == "SuperAdmin"
             inventory_qs = get_inventory_by_user_role(user)
             return format_product_inventory_list(
@@ -1377,7 +1383,6 @@ class UserInventoryLogs(generics.ListAPIView):
             return base_queryset.filter(**filter_kwargs)
 
         return InventoryChangeLog.objects.none()
-
 
 
 class RawMaterialListView(generics.ListAPIView):

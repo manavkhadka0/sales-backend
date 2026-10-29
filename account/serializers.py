@@ -149,7 +149,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
         distributor = validated_data.get("distributor")
         factory = validated_data.get("factory")
 
-        if role == "SalesPerson" and franchise:
+        if role in ["SalesPerson", "Offline_SalesPerson"] and franchise:
             # For salesperson, check if franchise has distributor
             if hasattr(franchise, "distributor") and franchise.distributor:
                 # If franchise has distributor, set both distributor and factory
