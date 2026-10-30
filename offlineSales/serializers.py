@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -11,6 +12,7 @@ from offlineSales.models import (
     OfflineOrder,
     OfflineOrderItem,
     OfflinePaymentHistory,
+    OfflineSalesAccess,
 )
 from offlineSales.services.attendance_service import create_attendance
 from offlineSales.services.order_service import (
@@ -18,6 +20,8 @@ from offlineSales.services.order_service import (
     update_offline_order,
 )
 from offlineSales.services.payment_service import record_order_payment
+
+User = get_user_model()
 
 
 class OfflineCustomerSerializer(serializers.ModelSerializer):
@@ -638,6 +642,7 @@ class OfflineSalesStatsSerializer(serializers.Serializer):
 # Attendance Config Serializers
 # ---------------------------------------------------------------------------
 
+
 class AttendanceConfigSerializer(serializers.ModelSerializer):
     updated_by_name = serializers.CharField(
         source="updated_by.get_full_name", read_only=True
@@ -653,7 +658,13 @@ class AttendanceConfigSerializer(serializers.ModelSerializer):
             "updated_at",
             "created_at",
         ]
-        read_only_fields = ["id", "updated_by", "updated_by_name", "updated_at", "created_at"]
+        read_only_fields = [
+            "id",
+            "updated_by",
+            "updated_by_name",
+            "updated_at",
+            "created_at",
+        ]
 
 
 class AttendanceConfigUpdateSerializer(serializers.ModelSerializer):
@@ -669,6 +680,7 @@ class AttendanceConfigUpdateSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 # Attendance Serializers
 # ---------------------------------------------------------------------------
+
 
 class AttendanceSerializer(serializers.ModelSerializer):
     sales_person_name = serializers.SerializerMethodField()
@@ -706,9 +718,15 @@ class AttendanceCreateSerializer(serializers.Serializer):
     """
 
     image = serializers.ImageField(required=False, allow_null=True)
-    attendance_location = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    attendance_lat = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    attendance_long = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    attendance_location = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
+    attendance_lat = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
+    attendance_long = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
 
     def create(self, validated_data):
         request = self.context.get("request")
@@ -718,4 +736,88 @@ class AttendanceCreateSerializer(serializers.Serializer):
             attendance_location=validated_data.get("attendance_location"),
             attendance_lat=validated_data.get("attendance_lat"),
             attendance_long=validated_data.get("attendance_long"),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Offline Sales Access Serializers
+# ---------------------------------------------------------------------------
+
+
+class OfflineSalesAccessSerializer(serializers.ModelSerializer):
+    """
+    Read serializer returning full user details for users granted offline sales access.
+    """
+
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    user_name = serializers.SerializerMethodField()
+    user_username = serializers.CharField(source="user.username", read_only=True)
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+    user_phone = serializers.CharField(source="user.phone_number", read_only=True)
+    user_role = serializers.CharField(source="user.role", read_only=True)
+    granted_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OfflineSalesAccess
+        fields = [
+            "id",
+            "user",
+            "user_id",
+            "user_name",
+            "user_username",
+            "user_email",
+            "user_phone",
+            "user_role",
+            "granted_by",
+            "granted_by_name",
+            "granted_at",
+        ]
+        read_only_fields = [
+            "id",
+            "user_id",
+            "user_name",
+            "user_username",
+            "user_email",
+            "user_phone",
+            "user_role",
+            "granted_by",
+            "granted_by_name",
+            "granted_at",
+        ]
+
+    def get_user_name(self, obj) -> str:
+        return obj.user.get_full_name() or obj.user.username
+
+    def get_granted_by_name(self, obj) -> str | None:
+        if obj.granted_by:
+            return obj.granted_by.get_full_name() or obj.granted_by.username
+        return None
+
+
+class OfflineSalesAccessCreateSerializer(serializers.ModelSerializer):
+    """
+    Write serializer for granting offline sales access to a user.
+    """
+
+    user = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True)
+    )
+
+    class Meta:
+        model = OfflineSalesAccess
+        fields = ["user"]
+
+    def validate_user(self, value):
+        if OfflineSalesAccess.objects.filter(user=value).exists():
+            raise serializers.ValidationError(
+                f"{value.get_full_name() or value.username} already has offline sales access."
+            )
+        return value
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        return OfflineSalesAccess.objects.create(
+            user=validated_data["user"],
+            granted_by=user if user and user.is_authenticated else None,
         )

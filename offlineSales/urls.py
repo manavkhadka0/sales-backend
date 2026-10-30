@@ -14,6 +14,8 @@ from offlineSales.views import (
     OfflineOrderListCreateView,
     OfflinePaymentHistoryDetailView,
     OfflinePaymentHistoryListCreateView,
+    OfflineSalesAccessDetailView,
+    OfflineSalesAccessListCreateView,
     OfflineSalesStatsView,
 )
 
@@ -94,5 +96,16 @@ urlpatterns = [
         "attendance/<int:pk>/",
         AttendanceDetailView.as_view(),
         name="attendance-detail",
+    ),
+    # Offline sales access endpoints (SuperAdmin whitelist)
+    path(
+        "access/",
+        OfflineSalesAccessListCreateView.as_view(),
+        name="offline-sales-access-list-create",
+    ),
+    path(
+        "access/<int:pk>/",
+        OfflineSalesAccessDetailView.as_view(),
+        name="offline-sales-access-detail",
     ),
 ]

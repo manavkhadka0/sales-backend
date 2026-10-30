@@ -4,9 +4,11 @@ import django_filters
 from django.utils import timezone
 
 from offlineSales.models import (
+    Attendance,
     OfflineCustomer,
     OfflineOrder,
     OfflinePaymentHistory,
+    OfflineSalesAccess,
 )
 
 
@@ -156,3 +158,32 @@ class OfflineOrderCreditReminderFilter(django_filters.FilterSet):
             cutoff = timezone.localdate() - timedelta(days=int(value))
             return queryset.filter(order_date__lte=cutoff)
         return queryset
+
+
+class OfflineSalesAccessFilter(django_filters.FilterSet):
+    user = django_filters.NumberFilter(field_name="user_id")
+    role = django_filters.CharFilter(field_name="user__role", lookup_expr="iexact")
+    start_date = django_filters.DateFilter(
+        field_name="granted_at__date", lookup_expr="gte"
+    )
+    end_date = django_filters.DateFilter(
+        field_name="granted_at__date", lookup_expr="lte"
+    )
+
+    class Meta:
+        model = OfflineSalesAccess
+        fields = ["user", "role", "start_date", "end_date"]
+
+
+class AttendanceFilter(django_filters.FilterSet):
+    sales_person = django_filters.NumberFilter(field_name="sales_person_id")
+    start_date = django_filters.DateFilter(
+        field_name="attendance_date", lookup_expr="gte"
+    )
+    end_date = django_filters.DateFilter(
+        field_name="attendance_date", lookup_expr="lte"
+    )
+
+    class Meta:
+        model = Attendance
+        fields = ["sales_person", "start_date", "end_date"]

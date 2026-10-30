@@ -3,17 +3,20 @@ from django.http import Http404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, generics, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from offlineSales.filters import (
+    AttendanceFilter,
     OfflineCustomerFilter,
     OfflineOrderCreditReminderFilter,
     OfflineOrderFilter,
     OfflinePaymentHistoryFilter,
+    OfflineSalesAccessFilter,
 )
 from offlineSales.models import Attendance, AttendanceConfig
 from offlineSales.permissions import CanPostAttendance, CanViewAttendance, IsSuperAdmin
+from offlineSales.selectors.access_selector import get_offline_sales_access_queryset
 from offlineSales.selectors.attendance_selector import get_attendance_queryset
 from offlineSales.selectors.customer_selector import get_customer_queryset
 from offlineSales.selectors.order_selector import (
@@ -34,6 +37,8 @@ from offlineSales.serializers import (
     OfflineOrderDetailSerializer,
     OfflineOrderListSerializer,
     OfflinePaymentHistorySerializer,
+    OfflineSalesAccessCreateSerializer,
+    OfflineSalesAccessSerializer,
     OfflineSalesStatsSerializer,
     RecordPaymentCreateSerializer,
 )
@@ -414,6 +419,7 @@ class AttendanceListCreateView(generics.ListCreateAPIView):
         filters.SearchFilter,
         filters.OrderingFilter,
     )
+    filterset_class = AttendanceFilter
     search_fields = [
         "sales_person__username",
         "sales_person__first_name",
@@ -473,3 +479,71 @@ class AttendanceTodayCheckView(generics.GenericAPIView):
             attendance_date=today,
         ).exists()
         return Response({"attendance": has_attendance}, status=status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
+# Offline Sales Access Views
+# ---------------------------------------------------------------------------
+
+
+class OfflineSalesAccessListCreateView(generics.ListCreateAPIView):
+    """
+    List users who have been granted offline sales access or grant access to a user.
+    """
+
+    pagination_class = CustomPagination
+    filter_backends = (
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    )
+    filterset_class = OfflineSalesAccessFilter
+    search_fields = [
+        "user__username",
+        "user__first_name",
+        "user__last_name",
+        "user__email",
+        "user__phone_number",
+    ]
+    ordering_fields = ["granted_at", "user__first_name", "user__username"]
+    ordering = ["-granted_at"]
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsSuperAdmin()]
+        return [AllowAny()]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return OfflineSalesAccessCreateSerializer
+        return OfflineSalesAccessSerializer
+
+    def get_queryset(self):
+        return get_offline_sales_access_queryset()
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(
+            data=request.data, context=self.get_serializer_context()
+        )
+        serializer.is_valid(raise_exception=True)
+        access = serializer.save()
+        output_serializer = OfflineSalesAccessSerializer(
+            access, context=self.get_serializer_context()
+        )
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class OfflineSalesAccessDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Retrieve, update, or revoke offline sales access for a user.
+    """
+
+    serializer_class = OfflineSalesAccessSerializer
+
+    def get_permissions(self):
+        if self.request.method in ("PUT", "PATCH", "DELETE"):
+            return [IsSuperAdmin()]
+        return [AllowAny()]
+
+    def get_queryset(self):
+        return get_offline_sales_access_queryset()

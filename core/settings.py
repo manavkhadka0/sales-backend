@@ -209,14 +209,14 @@ CORS_ALLOWED_ORIGINS = [
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
     "https://ending-ann-extremely-cycle.trycloudflare.com",
-    "https://cord-reserved-spell-viruses.trycloudflare.com",
+    "https://breakfast-subsidiaries-hazardous-submit.trycloudflare.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "https://sales-frontend-xi.vercel.app",
     "https://sales.baliyoventures.com",
     "https://ending-ann-extremely-cycle.trycloudflare.com",
-    "https://cord-reserved-spell-viruses.trycloudflare.com",
+    "https://breakfast-subsidiaries-hazardous-submit.trycloudflare.com",
 ]
 
 # Default primary key field type
