@@ -38,7 +38,7 @@ class SalesPersonLocationPingAPIView(CreateAPIView):
     HTTP REST endpoint for mobile apps to submit live GPS location pings.
     """
 
-    permission_classes = [permissions.IsAuthenticated, IsOfflineSalesPerson]
+    permission_classes = [permissions.IsAuthenticated]
     serializer_class = SalesPersonLocationPingSerializer
 
     def create(self, request, *args, **kwargs):
