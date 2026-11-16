@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 from django.db.models import Q
 from django.utils import timezone
@@ -43,8 +43,9 @@ class FranchiseSalesReportFilter(django_filters.FilterSet):
     - date: Single date (YYYY-MM-DD)
     - start_date: Range start (YYYY-MM-DD)
     - end_date: Range end (YYYY-MM-DD)
-    - filter: Preset options (today, yesterday, this_week, this_month, last_month, weekly, monthly)
+    - filter: Preset options (today [12am-12pm], yesterday, this_week, this_month, last_month, weekly, monthly, all)
     - include_cancelled: Optional boolean to include cancelled/returned orders
+    - breakdown_by: 'category' (default) or 'product'
     """
 
     franchise = django_filters.CharFilter(method="filter_franchise")
@@ -108,10 +109,14 @@ class FranchiseSalesReportFilter(django_filters.FilterSet):
     def filter_preset(self, queryset, name, value):
         if not value:
             return queryset
-        today = timezone.localtime(timezone.now()).date()
+        now_local = timezone.localtime(timezone.now())
+        today = now_local.date()
+        tz = timezone.get_current_timezone()
         val = str(value).lower().strip()
         if val == "today":
-            return queryset.filter(Q(date=today) | Q(created_at__date=today))
+            start_dt = timezone.make_aware(datetime.combine(today, time(0, 0, 0)), tz)
+            end_dt = timezone.make_aware(datetime.combine(today, time(12, 0, 0)), tz)
+            return queryset.filter(created_at__gte=start_dt, created_at__lte=end_dt)
         elif val == "yesterday":
             yesterday = today - timedelta(days=1)
             return queryset.filter(Q(date=yesterday) | Q(created_at__date=yesterday))

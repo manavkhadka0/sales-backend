@@ -1699,6 +1699,7 @@ class FranchiseSalesReportView(generics.GenericAPIView):
     """
     API View to generate Franchise Sales and Product Breakdown Report.
     Access restricted to SuperAdmin users only.
+    By default, returns today's sales report from 12:00 AM to 12:00 PM.
     """
 
     permission_classes = [IsAuthenticated, IsSuperAdmin]

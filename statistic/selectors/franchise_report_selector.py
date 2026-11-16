@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from typing import Any, Dict, List, Optional
 
 from django.db.models import Count, Q, Sum
@@ -111,6 +111,9 @@ def apply_date_and_status_filters(
     """
     Apply date and preset filters to the Order queryset.
     Excludes cancelled and returned order statuses.
+
+    Default behavior (when no date or preset filter is provided, or filter=today):
+    Filters for today's orders between 12:00 AM (00:00:00) and 12:00 PM (12:00:00) in local timezone.
     """
     include_cancelled = filter_params.get("include_cancelled")
     if not (include_cancelled and str(include_cancelled).lower() in ["true", "1"]):
@@ -121,7 +124,9 @@ def apply_date_and_status_filters(
     end_date_str = filter_params.get("end_date")
     preset_filter = filter_params.get("filter")
 
-    today = timezone.localtime(timezone.now()).date()
+    now_local = timezone.localtime(timezone.now())
+    today = now_local.date()
+    tz = timezone.get_current_timezone()
 
     if date_str:
         try:
@@ -157,7 +162,9 @@ def apply_date_and_status_filters(
     elif preset_filter:
         val = str(preset_filter).lower().strip()
         if val == "today":
-            queryset = queryset.filter(Q(date=today) | Q(created_at__date=today))
+            start_dt = timezone.make_aware(datetime.combine(today, time(0, 0, 0)), tz)
+            end_dt = timezone.make_aware(datetime.combine(today, time(12, 0, 0)), tz)
+            queryset = queryset.filter(created_at__gte=start_dt, created_at__lte=end_dt)
         elif val == "yesterday":
             yesterday = today - timedelta(days=1)
             queryset = queryset.filter(
@@ -186,6 +193,13 @@ def apply_date_and_status_filters(
                     created_at__date__lte=last_day_last_month,
                 )
             )
+        elif val in ["all", "all_time"]:
+            pass
+    else:
+        # DEFAULT: Today's report from 12:00 AM (00:00:00) to 12:00 PM (12:00:00) in local timezone
+        start_dt = timezone.make_aware(datetime.combine(today, time(0, 0, 0)), tz)
+        end_dt = timezone.make_aware(datetime.combine(today, time(12, 0, 0)), tz)
+        queryset = queryset.filter(created_at__gte=start_dt, created_at__lte=end_dt)
 
     return queryset
 
@@ -224,7 +238,9 @@ def get_franchise_sales_report(
 
     # Filter franchises belonging to user.factory (e.g. Yachu)
     if getattr(user, "factory", None):
-        franchises_qs = Franchise.objects.filter(distributor__factory=user.factory).order_by("name")
+        franchises_qs = Franchise.objects.filter(
+            distributor__factory=user.factory
+        ).order_by("name")
     else:
         franchises_qs = Franchise.objects.all().order_by("name")
 
