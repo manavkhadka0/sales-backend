@@ -26,7 +26,7 @@ FINISHED_PRODUCTS = [
 # Canonical category mapping (matching report specifications)
 PRODUCT_TO_CATEGORY_MAP = {
     "Shampoo Sachet": "Sachet shampoo",
-    "Shampoo Bottle": "B. Shampoo",
+    "Shampoo Bottle": "Shampoo Bottle",
     "Hair Oil Sachet": "Sachet oil",
     "Baldness Oil Bottle": "Hair Oil",
     "Hairfall Oil Bottle": "Hair Oil",
