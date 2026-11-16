@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
-from .models import Report
 from account.serializers import UserSerializer
+from .models import Report
 
 
 class ReportSerializer(serializers.ModelSerializer):
@@ -12,7 +12,7 @@ class ReportSerializer(serializers.ModelSerializer):
 
 class ReportListSerializer(serializers.ModelSerializer):
     franchise_name = serializers.CharField(source="franchise.name", read_only=True)
-    reported_by=UserSerializer()
+    reported_by = UserSerializer()
 
     class Meta:
         model = Report
@@ -34,3 +34,15 @@ class ReportListSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+# Streamlined Franchise Sales & Product Report Serializer
+
+
+class FranchiseReportItemSerializer(serializers.Serializer):
+    franchise_id = serializers.IntegerField(required=False, allow_null=True)
+    franchise_name = serializers.CharField()
+    total_sales = serializers.IntegerField()
+    online_sales = serializers.IntegerField()
+    office_sale = serializers.IntegerField()
+    product_breakdown = serializers.DictField(child=serializers.IntegerField())

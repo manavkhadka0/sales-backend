@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     BulkOrdersView,
     DashboardStatsView,
+    FranchiseSalesReportView,
     LatestOrdersView,
     ReportDetailView,
     ReportView,
@@ -19,6 +20,11 @@ from .views import (
 urlpatterns = [
     path("reports/", ReportView.as_view(), name="reports"),
     path("reports/<int:pk>/", ReportDetailView.as_view(), name="report-detail"),
+    path(
+        "franchise-sales-report/",
+        FranchiseSalesReportView.as_view(),
+        name="franchise-sales-report",
+    ),
     path("latest-orders/", LatestOrdersView.as_view(), name="latest-orders"),
     path("statistics/", SalesStatisticsView.as_view(), name="sales-statistics"),
     path("top-salespersons/", TopSalespersonView.as_view(), name="top-salespersons"),

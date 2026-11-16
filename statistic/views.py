@@ -4,7 +4,6 @@ from django.db import models
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncMonth, TruncWeek, TruncYear
 from django.utils import timezone
-from django_filters import rest_framework as django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
@@ -22,34 +21,15 @@ from sales.serializers import (
 )
 from sales.views import CustomPagination
 
+from .filters import FranchiseSalesReportFilter, ReportFilter
 from .models import Report
-from .serializers import ReportListSerializer, ReportSerializer
-
-
-class ReportFilter(django_filters.FilterSet):
-    franchise = django_filters.CharFilter(
-        field_name="franchise__id", lookup_expr="exact"
-    )
-    start_date = django_filters.DateFilter(method="filter_start_date")
-    end_date = django_filters.DateFilter(method="filter_end_date")
-    date = django_filters.DateFilter(field_name="date", lookup_expr="exact")
-
-    class Meta:
-        model = Report
-        fields = ["franchise", "start_date", "end_date", "date"]
-
-    def filter_start_date(self, queryset, name, value):
-        if not value:
-            return queryset
-        start_date = timezone.make_aware(datetime.combine(value, datetime.min.time()))
-        return queryset.filter(date__gte=start_date)
-
-    def filter_end_date(self, queryset, name, value):
-        if not value:
-            return queryset
-        end_date = timezone.make_aware(datetime.combine(value, datetime.max.time()))
-        return queryset.filter(date__lte=end_date)
-
+from .permissions import IsSuperAdmin
+from .selectors.franchise_report_selector import get_franchise_sales_report
+from .serializers import (
+    FranchiseReportItemSerializer,
+    ReportListSerializer,
+    ReportSerializer,
+)
 
 # Create your views here.
 
@@ -1713,3 +1693,22 @@ class BulkOrdersView(generics.ListAPIView):
             if keyword in product_name_lower:
                 return True
         return False
+
+
+class FranchiseSalesReportView(generics.GenericAPIView):
+    """
+    API View to generate Franchise Sales and Product Breakdown Report.
+    Access restricted to SuperAdmin users only.
+    """
+
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = FranchiseSalesReportFilter
+
+    def get(self, request, *args, **kwargs):
+        report_data = get_franchise_sales_report(
+            user=request.user,
+            filter_params=request.query_params.dict(),
+        )
+        serializer = FranchiseReportItemSerializer(report_data, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
