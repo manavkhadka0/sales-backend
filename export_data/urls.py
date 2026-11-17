@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    BulkOilOrdersExcelExportView,
     OrderCSVExportView,
     OrderExportWithoutOfficeVisitView,
     OrderSelectedExportView,
@@ -51,5 +52,10 @@ urlpatterns = [
         "export-orders-without-officevisit/",
         OrderExportWithoutOfficeVisitView.as_view(),
         name="export-orders-without-office-visit",
+    ),
+    path(
+        "export-bulk-oil-orders/",
+        BulkOilOrdersExcelExportView.as_view(),
+        name="export-bulk-oil-orders",
     ),
 ]

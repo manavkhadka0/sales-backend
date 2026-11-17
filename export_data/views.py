@@ -19,8 +19,9 @@ from account.models import CustomUser, Franchise
 from sales.models import Order, OrderProduct
 
 from .filters import OrderCSVExportFilter
+from .selectors import get_bulk_oil_orders
 from .serializers import OrderSelectedExportSerializer
-from .services import OrderExportService
+from .services import BulkOilExportService, OrderExportService
 
 # Create your views here.
 
@@ -2474,3 +2475,40 @@ class OrderExportWithoutOfficeVisitView(APIView):
 
     def post(self, request, *args, **kwargs):
         return self._export(request, request.data)
+
+
+class BulkOilOrdersExcelExportView(APIView):
+    """
+    Exports bulk oil orders (>= 3 oil bottles) between Oct 4 and Nov 16 (or custom date range).
+    Generates a multi-sheet Excel file (.xlsx) with an overview sheet, an all-orders sheet,
+    and individual dedicated sheets for each franchise.
+    """
+
+    permission_classes = [AllowAny]
+
+    def _export(self, request, params):
+        orders, start_date, end_date = get_bulk_oil_orders(params)
+
+        if not orders:
+            return Response(
+                {
+                    "error": (
+                        f"No bulk orders with 3 or more oil bottles found "
+                        f"between {start_date.strftime('%Y-%m-%d')} and {end_date.strftime('%Y-%m-%d')}."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return BulkOilExportService.export_to_excel_response(
+            orders=orders,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    def get(self, request, *args, **kwargs):
+        return self._export(request, request.query_params)
+
+    def post(self, request, *args, **kwargs):
+        return self._export(request, request.data)
+
